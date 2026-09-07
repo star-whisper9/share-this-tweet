@@ -85,9 +85,9 @@ textarea { resize: vertical; min-height: 140px; }
 .sample-hill-back { background: #759aad; transform: rotate(-21deg); left: 19%; bottom: -48%; }
 .sample-hill-front { background: #3e6d86; transform: rotate(20deg); left: -16%; bottom: -60%; }
 .art-caption { position: absolute; top: 15%; left: 9%; font-family: Georgia, serif; font-size: clamp(16px,2.3vw,26px); line-height: 1.12; color: #2b5269; letter-spacing: -.5px; }
-.print-caption { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 49px; padding: 12px 7px; }
-.print-caption strong { font-size: 12px; white-space: pre-wrap; font-weight: 600; overflow-wrap: anywhere; }
-.print-caption>span { color: #758590; }
+.print-caption { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 49px; padding: 12px 7px; }
+.print-caption strong { min-width: 0; font-size: 12px; white-space: pre-wrap; font-weight: 600; overflow-wrap: anywhere; }
+.print-source { display: grid; flex: 0 0 auto; gap: 2px; color: #758590; font-size: 9px; line-height: 1.35; text-align: right; }
 .preview-description { color: var(--muted); font-size: 11px; line-height: 1.8; text-align: center; margin: 24px 0 0; }
 .file-card { display: flex; align-items: center; gap: 15px; padding: 20px; border: 1px solid var(--border); background: var(--surface); border-radius: 14px; margin-top: 24px; box-shadow: var(--shadow); }
 .file-art { width: 50px; height: 60px; flex-shrink: 0; display: grid; place-items: center; color: var(--accent); background: var(--tint); border-radius: 9px; }

@@ -28,7 +28,7 @@
       <header class="page-heading">
         <p class="eyebrow">为每次分享，留一份出处</p>
         <h1>按你喜欢的方式分享<span class="heading-dot">。</span></h1>
-        <p class="page-description">设置一次，之后保存和复制都按你的习惯来。</p>
+        <p class="page-description">画框左侧文字可以自定义；右侧 Tweet ID 和 @handle 会固定保留，作为来源溯源信息。</p>
       </header>
       <form data-settings-form novalidate>
         <div class="load-error" data-load-error hidden role="alert">
@@ -98,7 +98,7 @@
                   <p>在照片底部加一行署名，发出去就不必另作说明。</p>
                 </div>
               </div>
-              <p class="field-label" id="frame-presets-label">来源栏怎么写</p>
+              <p class="field-label" id="frame-presets-label">画框左侧怎么写</p>
               <div
                 class="preset-grid"
                 data-presets="frameTemplate"
@@ -117,7 +117,7 @@
                 </summary>
                 <div class="template-editor-body">
                   <label for="frame-template"
-                    >来源栏模板 <span>画框左侧</span></label
+                    >画框左侧模板 <span>右侧溯源信息固定保留</span></label
                   >
                   <input
                     id="frame-template"
@@ -128,7 +128,7 @@
                     aria-describedby="frame-help frame-error"
                   />
                   <p class="field-help" id="frame-help">
-                    普通文字直接写。点下方变量，可以插入作者等信息。
+                    这里只编辑画框左侧文字。右侧的 Tweet ID 和 @handle 不提供修改，始终用于保留出处。
                   </p>
                   <div
                     class="token-list"
@@ -145,7 +145,7 @@
               </details>
               <div class="quiet-note">
                 <span aria-hidden="true">↗</span>
-                <p>画框是照片的另一份副本。保存原图时，不会添加画框。</p>
+                <p>画框是照片的另一份副本。左侧内容可改，右侧 Tweet ID 和 @handle 会固定添加；保存原图时不会添加画框。</p>
               </div>
             </div>
             <aside
@@ -167,12 +167,15 @@
                   ><span class="art-caption">A LITTLE<br />INSPIRATION.</span>
                 </div>
                 <div class="print-caption">
-                  <strong data-preview="frame"></strong
-                  ><span aria-hidden="true">↗</span>
+                  <strong data-preview="frame"></strong>
+                  <span class="print-source" aria-label="固定溯源信息">
+                    <span>tweet id: 1234567890</span>
+                    <span>@example</span>
+                  </span>
                 </div>
               </div>
               <p class="preview-description">
-                文案实时预览，画框排版仅供示意。
+                左侧为模板预览；右侧 Tweet ID 和 @handle 为固定溯源信息，画框排版仅供示意。
               </p>
             </aside>
           </section>
@@ -351,7 +354,7 @@
                 <pre data-preview="text"></pre>
               </div>
               <p class="preview-description">
-                以下为虚构示例内容，不会读取你的聊天。
+                以上为示例内容，不会读取你的标签页和聊天。
               </p>
             </aside>
           </section>

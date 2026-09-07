@@ -38,9 +38,9 @@ const sampleMedia: MediaRecord = {
 };
 const presets: Record<SettingKey, Preset[]> = {
   frameTemplate: [
-    { label: '经典署名', description: '沿用默认样式', value: DEFAULT_SETTINGS.frameTemplate },
-    { label: '标记出处', description: '来源 + 推主账号', value: '来源：{author.handle}' },
-    { label: '仅账号', description: '更简洁的署名', value: '{author.handle}' }
+    { label: '经典署名', description: '左侧显示作者名称', value: DEFAULT_SETTINGS.frameTemplate },
+    { label: '标记出处', description: '左侧显示来源文字和账号', value: '来源：{author.handle}' },
+    { label: '仅账号', description: '左侧显示推主账号', value: '{author.handle}' }
   ],
   filenameTemplate: [
     { label: '完整信息', description: '使用默认规则', value: DEFAULT_SETTINGS.filenameTemplate },
