@@ -2,8 +2,10 @@ import { buildFrameFilename, buildMediaFilename } from '../core/filename.js';
 import { downloadBlob, downloadMedia as downloadMediaFile } from '../core/download.js';
 import { FRAME_ORIENTATIONS, renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
 import { copyTweetText } from '../core/text-export.js';
+import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
+import type { OutputRecordInput } from '../shared/storage-model.js';
 import { DEFAULT_SETTINGS, loadSettings, type ExtensionSettings } from '../shared/settings.js';
 import { TweetSource } from './tweet-source.js';
 
@@ -785,9 +787,22 @@ export class ShareEnhancerController {
         this.currentRecord?.tweetId !== tweetId
       )
         return;
+      const storageWarning = await this.persistOutput(record, {
+        tweetId: record.tweetId,
+        outputType: 'copied-text',
+      });
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.textActionState = 'success';
       this.renderActions(this.currentRecord ?? record);
-      this.setSheetStatus('ready', '已复制，可直接粘贴到聊天中。');
+      this.setSheetStatus(
+        storageWarning ? 'error' : 'ready',
+        storageWarning ?? '已复制，可直接粘贴到聊天中。',
+      );
     } catch (error) {
       if (
         epoch !== this.recordRequestId ||
@@ -800,6 +815,21 @@ export class ShareEnhancerController {
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('error', '这次没能复制，请查看详情后重试。');
       console.error('分享有据 · Share This Tweet: failed to copy tweet text', error);
+    }
+  }
+
+  private async persistOutput(
+    record: TweetRecord,
+    output: OutputRecordInput,
+  ): Promise<string | undefined> {
+    try {
+      await saveTweetRecord(record);
+      await recordOutput(output);
+      return undefined;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('分享有据 · Share This Tweet: failed to persist source record', error);
+      return `当前操作已完成，但来源记录保存失败：${message}`;
     }
   }
 
@@ -990,9 +1020,24 @@ export class ShareEnhancerController {
         this.currentRecord?.tweetId !== tweetId
       )
         return;
+      const storageWarning = await this.persistOutput(record, {
+        tweetId: record.tweetId,
+        outputType: 'original-media',
+        filename,
+        mediaIndex: media.index,
+      });
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.mediaActionStates.set(mediaIndex, 'success');
       this.renderActions(this.currentRecord ?? record);
-      this.setSheetStatus('ready', '已交给浏览器保存，可在下载列表中查看。');
+      this.setSheetStatus(
+        storageWarning ? 'error' : 'ready',
+        storageWarning ?? '已交给浏览器保存，可在下载列表中查看。',
+      );
     } catch (error) {
       if (
         epoch !== this.recordRequestId ||
@@ -1031,6 +1076,7 @@ export class ShareEnhancerController {
     const tweetId = record.tweetId;
     const epoch = this.recordRequestId;
     const failures: string[] = [];
+    const storageWarnings: string[] = [];
     this.batchDownloadMode = mode;
     if (mode === 'original') {
       this.batchOriginalState = 'loading';
@@ -1058,12 +1104,26 @@ export class ShareEnhancerController {
             frameOrientation,
           );
           downloadBlob(blob, filename);
+          const storageWarning = await this.persistOutput(record, {
+            tweetId: record.tweetId,
+            outputType: 'framed-image',
+            filename,
+            mediaIndex: media.index,
+          });
+          if (storageWarning) storageWarnings.push(`第 ${media.index} 项：${storageWarning}`);
           const actionKey = this.frameActionKey(media.index, frameOrientation);
           this.frameActionStates.set(actionKey, 'success');
           this.frameActionErrors.delete(actionKey);
         } else {
           const filename = buildMediaFilename(record, media, this.settings.filenameTemplate);
           await downloadMediaFile(media, filename);
+          const storageWarning = await this.persistOutput(record, {
+            tweetId: record.tweetId,
+            outputType: 'original-media',
+            filename,
+            mediaIndex: media.index,
+          });
+          if (storageWarning) storageWarnings.push(`第 ${media.index} 项：${storageWarning}`);
           this.mediaActionStates.set(media.index, 'success');
           this.mediaActionErrors.delete(media.index);
         }
@@ -1113,11 +1173,15 @@ export class ShareEnhancerController {
     if (mode === 'original') this.batchOriginalState = 'success';
     else this.batchFrameStates[frameOrientation] = 'success';
     this.renderActions(record);
-    this.setSheetStatus(
-      'ready',
+    const successMessage =
       mode === 'framed'
         ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${FRAME_ORIENTATION_LABELS[frameOrientation]}画框，视频和 GIF 原样保存。`
-        : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`,
+        : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
+    this.setSheetStatus(
+      storageWarnings.length > 0 ? 'error' : 'ready',
+      storageWarnings.length > 0
+        ? `${successMessage}但部分来源记录保存失败：${storageWarnings.join('；')}`
+        : successMessage,
     );
   }
 
@@ -1164,9 +1228,24 @@ export class ShareEnhancerController {
       )
         return;
       downloadBlob(blob, filename);
+      const storageWarning = await this.persistOutput(record, {
+        tweetId: record.tweetId,
+        outputType: 'framed-image',
+        filename,
+        mediaIndex: media.index,
+      });
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.frameActionStates.set(actionKey, 'success');
       this.renderActions(this.currentRecord ?? record);
-      this.setSheetStatus('ready', '带来源的图片已生成，并交给浏览器保存。');
+      this.setSheetStatus(
+        storageWarning ? 'error' : 'ready',
+        storageWarning ?? '带来源的图片已生成，并交给浏览器保存。',
+      );
     } catch (error) {
       if (
         epoch !== this.recordRequestId ||
