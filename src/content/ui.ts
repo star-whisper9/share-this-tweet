@@ -1,10 +1,14 @@
+import { buildMediaFilename } from '../core/filename.js';
+import { downloadMedia as downloadMediaFile } from '../core/download.js';
 import { getTweetIdFromPath } from '../shared/model.js';
-import type { TweetRecord } from '../shared/model.js';
+import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { TweetSource } from './tweet-source.js';
 
 const ROUTE_CHANGE_EVENT = 'share-this-tweet:route-change';
 const ACTION_HOST_ATTRIBUTE = 'data-stt-action-host';
 const SHEET_ID = 'stt-bottom-sheet';
+
+type MediaActionState = 'idle' | 'loading' | 'success' | 'error';
 
 export class ShareEnhancerController {
   private started = false;
@@ -19,6 +23,9 @@ export class ShareEnhancerController {
   private restoreHistory?: () => void;
   private closeTimer?: number;
   private recordRequestId = 0;
+  private currentRecord?: TweetRecord;
+  private readonly mediaActionStates = new Map<number, MediaActionState>();
+  private readonly mediaActionErrors = new Map<number, string>();
   private unsubscribeTweetSource?: () => void;
 
   constructor(private readonly tweetSource: TweetSource) {}
@@ -148,6 +155,7 @@ export class ShareEnhancerController {
   }
 
   private applyTweetRecord(record: TweetRecord): void {
+    this.currentRecord = record;
     const summary = this.sheet?.querySelector<HTMLElement>('.stt-tweet-summary');
     if (!summary) return;
     const author = summary.querySelector<HTMLElement>('[data-stt-author]');
@@ -156,7 +164,11 @@ export class ShareEnhancerController {
     if (author) author.textContent = record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '@未知作者';
     if (id) id.textContent = `Tweet ID: ${record.tweetId}`;
     if (text) text.textContent = record.text || '（无正文）';
-    this.setSheetStatus('ready', '已获取当前推文数据；具体操作将在后续阶段接入。');
+    this.renderActions(record);
+    this.setSheetStatus(
+      'ready',
+      record.media.length > 0 ? '已获取当前推文数据；请选择要保存的媒体。' : '当前推文没有可保存的媒体。'
+    );
   }
 
   private setSheetStatus(state: 'loading' | 'ready' | 'error', message: string): void {
@@ -274,6 +286,16 @@ export class ShareEnhancerController {
 
     const actions = document.createElement('div');
     actions.className = 'stt-sheet-actions';
+    actions.addEventListener('click', (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>('button[data-stt-media-index]')
+        : null;
+      if (!target || !actions.contains(target)) return;
+      const mediaIndex = Number(target.dataset.sttMediaIndex);
+      if (!Number.isInteger(mediaIndex)) return;
+      event.preventDefault();
+      void this.saveMedia(mediaIndex);
+    });
     actions.append(
       this.createDisabledAction('保存媒体', '媒体下载将在后续阶段接入。'),
       this.createDisabledAction('生成画框图片', '画框生成将在后续阶段接入。'),
@@ -284,6 +306,100 @@ export class ShareEnhancerController {
     backdrop.append(dialog);
     root.append(backdrop);
     return root;
+  }
+
+  private renderActions(record: TweetRecord): void {
+    const actions = this.sheet?.querySelector<HTMLElement>('.stt-sheet-actions');
+    if (!actions) return;
+
+    actions.replaceChildren();
+    if (record.media.length === 0) {
+      actions.append(this.createDisabledAction('保存媒体', '当前推文没有可保存的照片或视频。'));
+    } else {
+      for (const media of record.media) actions.append(this.createMediaAction(record, media));
+    }
+    actions.append(
+      this.createDisabledAction('生成画框图片', '画框生成将在后续阶段接入。'),
+      this.createDisabledAction('复制推文文本', '文本导出将在后续阶段接入。')
+    );
+  }
+
+  private createMediaAction(record: TweetRecord, media: MediaRecord): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'stt-sheet-action stt-media-action';
+    const state = this.mediaActionStates.get(media.index) ?? 'idle';
+    wrapper.dataset.state = state;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.sttAction = 'download-media';
+    button.dataset.sttMediaIndex = String(media.index);
+    button.disabled = state === 'loading' || state === 'success';
+
+    const mediaLabel = media.type === 'photo'
+      ? '照片原图'
+      : media.type === 'animated_gif' ? 'GIF 视频（MP4）' : '视频（MP4）';
+    button.textContent = state === 'loading'
+      ? '保存中…'
+      : state === 'success'
+        ? '已保存'
+        : state === 'error' ? '重试保存' : `保存第 ${media.index} 项${mediaLabel}`;
+
+    const detail = document.createElement('span');
+    try {
+      detail.textContent = `文件名：${buildMediaFilename(record, media)}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      button.disabled = true;
+      detail.textContent = `无法生成文件名：${message}`;
+    }
+    const errorMessage = this.mediaActionErrors.get(media.index);
+    if (state === 'error' && errorMessage) detail.textContent = `保存失败：${errorMessage}`;
+
+    wrapper.append(button, detail);
+    return wrapper;
+  }
+
+  private async saveMedia(mediaIndex: number): Promise<void> {
+    const record = this.currentRecord;
+    const media = record?.media.find((candidate) => candidate.index === mediaIndex);
+    if (!record || !media) return;
+    const state = this.mediaActionStates.get(mediaIndex) ?? 'idle';
+    if (state === 'loading' || state === 'success') return;
+
+    let filename: string;
+    try {
+      filename = buildMediaFilename(record, media);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.mediaActionStates.set(mediaIndex, 'error');
+      this.mediaActionErrors.set(mediaIndex, message);
+      this.renderActions(record);
+      this.setSheetStatus('error', `媒体保存失败：${message}`);
+      return;
+    }
+
+    const tweetId = record.tweetId;
+    this.mediaActionStates.set(mediaIndex, 'loading');
+    this.mediaActionErrors.delete(mediaIndex);
+    this.renderActions(record);
+    this.setSheetStatus('loading', `正在保存第 ${media.index} 项媒体…`);
+
+    try {
+      await downloadMediaFile(media, filename);
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      this.mediaActionStates.set(mediaIndex, 'success');
+      this.renderActions(record);
+      this.setSheetStatus('ready', `已保存：${filename}`);
+    } catch (error) {
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.mediaActionStates.set(mediaIndex, 'error');
+      this.mediaActionErrors.set(mediaIndex, message);
+      this.renderActions(record);
+      this.setSheetStatus('error', `媒体保存失败：${message}`);
+      console.error('Share This Tweet: failed to download media', error);
+    }
   }
 
   private createCloseIcon(): SVGSVGElement {
@@ -372,6 +488,9 @@ export class ShareEnhancerController {
     this.sheet = undefined;
     this.actionHost = undefined;
     this.trigger = undefined;
+    this.currentRecord = undefined;
+    this.mediaActionStates.clear();
+    this.mediaActionErrors.clear();
     this.currentTweetId = undefined;
     this.currentArticle = undefined;
   }

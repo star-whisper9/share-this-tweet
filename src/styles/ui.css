@@ -166,8 +166,26 @@
   color: var(--stt-text);
   background: var(--stt-surface-raised);
   text-align: start;
+  cursor: pointer;
+}
+
+.stt-sheet-action button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
+}
+
+.stt-sheet-action button:not(:disabled):hover,
+.stt-sheet-action button:not(:disabled):focus-visible {
+  border-color: var(--stt-accent);
+  color: var(--stt-accent);
+}
+
+.stt-media-action[data-state="success"] button {
+  border-color: var(--stt-accent);
+}
+
+.stt-media-action span {
+  overflow-wrap: anywhere;
 }
 
 .stt-sheet button:focus-visible {
