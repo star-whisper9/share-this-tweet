@@ -65,6 +65,20 @@
               <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></svg
             >复制文字
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-records"
+            aria-controls="panel-records"
+            aria-selected="false"
+            tabindex="-1"
+            data-settings-tab="records"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5h16M4 12h16M4 19h10" />
+              <circle cx="18" cy="19" r="2" /></svg
+            >来源记录
+          </button>
         </div>
         <fieldset class="settings-body" data-editable disabled>
           <legend class="sr-only">分享偏好</legend>
@@ -306,6 +320,76 @@
             </aside>
           </section>
         </fieldset>
+        <section
+          class="settings-panel records-panel"
+          id="panel-records"
+          role="tabpanel"
+          aria-labelledby="tab-records"
+          data-panel="records"
+          hidden
+        >
+          <div class="settings-editor records-editor">
+            <div class="section-heading">
+              <span class="step-number">04</span>
+              <div>
+                <h2>查找你保存过的来源</h2>
+                <p>推文来源只保存在本机。可以按 Tweet ID、作者或文件名查找。</p>
+              </div>
+            </div>
+            <div class="records-toolbar">
+              <label class="sr-only" for="record-search">搜索来源记录</label>
+              <input
+                id="record-search"
+                data-record-search
+                type="search"
+                placeholder="搜索 Tweet ID、作者或文件名"
+              />
+              <button type="button" class="button button-secondary" data-record-refresh>
+                刷新
+              </button>
+            </div>
+            <div class="records-actions">
+              <button type="button" class="button button-secondary" data-record-export>
+                导出 JSON
+              </button>
+              <button type="button" class="button button-secondary" data-record-import-button>
+                导入 JSON
+              </button>
+              <button type="button" class="button button-danger" data-record-clear>清空记录</button>
+              <input type="file" data-record-import accept="application/json" hidden />
+              <output data-record-status role="status" aria-live="polite"></output>
+            </div>
+            <p class="records-summary" data-record-summary>正在读取来源记录…</p>
+            <div class="records-list" data-record-list role="list"></div>
+            <p class="records-empty" data-record-empty hidden>还没有找到来源记录。</p>
+          </div>
+          <aside class="settings-preview records-preview" aria-label="来源记录详情">
+            <div class="preview-heading">
+              <span>记录详情</span><span class="preview-tag">本机</span>
+            </div>
+            <div class="record-detail" data-record-detail hidden>
+              <div class="record-detail-author">
+                <strong data-record-author></strong>
+                <span data-record-handle></span>
+              </div>
+              <dl class="record-meta">
+                <dt>Tweet ID</dt>
+                <dd data-record-tweet-id></dd>
+                <dt>保存时间</dt>
+                <dd data-record-saved-at></dd>
+                <dt>原文链接</dt>
+                <dd><a data-record-link target="_blank" rel="noopener noreferrer">打开原推</a></dd>
+              </dl>
+              <pre class="record-text" data-record-text></pre>
+              <p class="record-output-summary" data-record-output-summary></p>
+              <div class="record-output-list" data-record-output-list></div>
+              <button type="button" class="button button-danger" data-record-delete>
+                删除这条记录
+              </button>
+            </div>
+            <p class="records-detail-empty" data-record-detail-empty>选择一条记录查看详情。</p>
+          </aside>
+        </section>
         <div class="reset-confirm" data-reset-confirm hidden>
           <div>
             <strong>恢复三项默认设置？</strong>

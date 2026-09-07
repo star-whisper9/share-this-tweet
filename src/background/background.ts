@@ -1,5 +1,15 @@
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
-import { getTweetRecord, recordOutput, StorageError, upsertTweetRecord } from '../core/storage.js';
+import {
+  clearStorageRecords,
+  deleteTweetRecord,
+  exportStorageRecords,
+  getTweetRecord,
+  importStorageRecords,
+  listStorageRecords,
+  recordOutput,
+  StorageError,
+  upsertTweetRecord,
+} from '../core/storage.js';
 
 browser.runtime.onMessage.addListener((message: unknown) => {
   if (!isExtensionMessage(message)) return;
@@ -7,6 +17,11 @@ browser.runtime.onMessage.addListener((message: unknown) => {
   if (message.type === 'save-tweet-record') return saveTweetRecord(message.record);
   if (message.type === 'record-output') return saveOutputRecord(message.output);
   if (message.type === 'get-tweet-record') return readTweetRecord(message.tweetId);
+  if (message.type === 'list-storage-records') return readStorageRecords();
+  if (message.type === 'delete-tweet-record') return removeTweetRecord(message.tweetId);
+  if (message.type === 'clear-storage-records') return clearRecords();
+  if (message.type === 'export-storage-records') return exportRecords();
+  if (message.type === 'import-storage-records') return importRecords(message.archive);
 });
 
 function isExtensionMessage(message: unknown): message is ExtensionMessage {
@@ -18,6 +33,7 @@ function isExtensionMessage(message: unknown): message is ExtensionMessage {
     tweetId?: unknown;
     record?: unknown;
     output?: unknown;
+    archive?: unknown;
   };
   if (candidate.type === 'download-media')
     return typeof candidate.url === 'string' && typeof candidate.filename === 'string';
@@ -25,6 +41,13 @@ function isExtensionMessage(message: unknown): message is ExtensionMessage {
     return typeof candidate.tweetId === 'string' && candidate.tweetId.length > 0;
   if (candidate.type === 'save-tweet-record') return isTweetRecord(candidate.record);
   if (candidate.type === 'record-output') return isOutputRecordInput(candidate.output);
+  if (candidate.type === 'delete-tweet-record')
+    return typeof candidate.tweetId === 'string' && candidate.tweetId.length > 0;
+  if (candidate.type === 'clear-storage-records') return true;
+  if (candidate.type === 'import-storage-records')
+    return typeof candidate.archive === 'object' && candidate.archive !== null;
+  if (candidate.type === 'list-storage-records' || candidate.type === 'export-storage-records')
+    return true;
   return false;
 }
 
@@ -88,6 +111,66 @@ async function saveOutputRecord(
 async function readTweetRecord(tweetId: string) {
   try {
     return { ok: true as const, record: await getTweetRecord(tweetId) };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof StorageError ? error.message : String(error),
+    };
+  }
+}
+
+async function readStorageRecords() {
+  try {
+    return { ok: true as const, ...(await listStorageRecords()) };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof StorageError ? error.message : String(error),
+    };
+  }
+}
+
+async function removeTweetRecord(tweetId: string) {
+  try {
+    await deleteTweetRecord(tweetId);
+    return { ok: true as const };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof StorageError ? error.message : String(error),
+    };
+  }
+}
+
+async function clearRecords() {
+  try {
+    await clearStorageRecords();
+    return { ok: true as const };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof StorageError ? error.message : String(error),
+    };
+  }
+}
+
+async function exportRecords() {
+  try {
+    return { ok: true as const, archive: await exportStorageRecords() };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof StorageError ? error.message : String(error),
+    };
+  }
+}
+
+async function importRecords(
+  archive: Extract<ExtensionMessage, { type: 'import-storage-records' }>['archive'],
+) {
+  try {
+    await importStorageRecords(archive);
+    return { ok: true as const };
   } catch (error) {
     return {
       ok: false as const,

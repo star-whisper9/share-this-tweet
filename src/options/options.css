@@ -326,6 +326,161 @@ h2 {
 .text-presets {
   grid-template-columns: 1fr 1fr;
 }
+form[data-active-tab='records'] .save-bar {
+  display: none;
+}
+.records-panel {
+  min-height: 520px;
+}
+.records-editor {
+  min-width: 0;
+}
+.records-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.records-toolbar input {
+  min-width: 0;
+}
+.records-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+}
+.records-actions output {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.records-summary {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0 0 9px;
+}
+.records-list {
+  display: grid;
+  gap: 7px;
+  max-height: 340px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.record-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+}
+.record-item:hover,
+.record-item[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+.record-item strong,
+.record-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.record-item strong {
+  font-size: 12px;
+}
+.record-item span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.records-empty,
+.records-detail-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 12px 0 0;
+}
+.records-preview {
+  gap: 0;
+}
+.record-detail-author {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 18px;
+}
+.record-detail-author strong {
+  font-size: 16px;
+}
+.record-detail-author span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.record-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0 0 15px;
+  font-size: 11px;
+}
+.record-meta dt {
+  color: var(--muted);
+}
+.record-meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.record-meta a {
+  color: var(--accent);
+}
+.record-text {
+  max-height: 210px;
+  margin: 0 0 14px;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.record-output-summary {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  margin: 0 0 15px;
+}
+.record-output-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 15px;
+}
+.record-output-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.record-output-item strong {
+  font-size: 10px;
+}
+.record-output-item span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .template-editor {
   margin-top: 21px;
   border-top: 1px solid var(--border);

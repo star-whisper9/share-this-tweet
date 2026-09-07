@@ -19,3 +19,10 @@ export interface OutputRecord {
 export type OutputRecordInput = Omit<OutputRecord, 'id' | 'createdAt'> & {
   createdAt?: string;
 };
+
+export interface StorageArchive {
+  schemaVersion: 1;
+  exportedAt: string;
+  tweetRecords: StoredTweetRecord[];
+  outputRecords: OutputRecord[];
+}

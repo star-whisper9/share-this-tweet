@@ -1,8 +1,16 @@
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
 import { buildTweetText } from '../core/text-export.js';
+import {
+  clearStoredRecords,
+  deleteStoredTweetRecord,
+  exportStorageRecords,
+  importStorageRecords,
+  listStorageRecords,
+} from '../core/storage-client.js';
 import type { FrameOrientation } from '../core/frame.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
+import type { OutputRecord, StorageArchive, StoredTweetRecord } from '../shared/storage-model.js';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -13,14 +21,15 @@ import {
 // Intentionally keeps the existing settings shape and template engine.
 // Text variables are discovered from DEFAULT_SETTINGS, not an assumed grammar.
 type SettingKey = 'filenameTemplate' | 'frameTemplate' | 'textTemplate';
-type Tab = 'frame' | 'filename' | 'text';
+type Tab = 'frame' | 'filename' | 'text' | 'records';
+type SettingsTab = Exclude<Tab, 'records'>;
 interface Preset {
   label: string;
   description: string;
   value?: string;
 }
 const keys: SettingKey[] = ['frameTemplate', 'filenameTemplate', 'textTemplate'];
-const fieldTabs: Record<SettingKey, Tab> = {
+const fieldTabs: Record<SettingKey, SettingsTab> = {
   frameTemplate: 'frame',
   filenameTemplate: 'filename',
   textTemplate: 'text',
@@ -42,6 +51,18 @@ const previews = {
   frame: document.querySelector<HTMLElement>('[data-preview="frame"]'),
   text: document.querySelector<HTMLElement>('[data-preview="text"]'),
 };
+const recordSearch = document.querySelector<HTMLInputElement>('[data-record-search]');
+const recordList = document.querySelector<HTMLElement>('[data-record-list]');
+const recordSummary = document.querySelector<HTMLElement>('[data-record-summary]');
+const recordEmpty = document.querySelector<HTMLElement>('[data-record-empty]');
+const recordStatus = document.querySelector<HTMLOutputElement>('[data-record-status]');
+const recordDetail = document.querySelector<HTMLElement>('[data-record-detail]');
+const recordDetailEmpty = document.querySelector<HTMLElement>('[data-record-detail-empty]');
+const recordImport = document.querySelector<HTMLInputElement>('[data-record-import]');
+let storedTweetRecords: StoredTweetRecord[] = [];
+let storedOutputRecords: OutputRecord[] = [];
+let selectedRecordId = '';
+let recordsLoading = false;
 const sampleRecord: TweetRecord = {
   tweetId: '1234567890',
   url: 'https://x.com/example/status/1234567890',
@@ -110,6 +131,7 @@ function setFrameOrientation(orientation: FrameOrientation): void {
   }
 }
 function activateTab(tab: Tab, focus = false): void {
+  if (form) form.dataset.activeTab = tab;
   for (const button of Array.from(
     document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'),
   )) {
@@ -221,6 +243,200 @@ function tokenLabel(token: string): string {
   };
   return labels[token] ?? token;
 }
+
+function setRecordStatus(message: string): void {
+  if (recordStatus) recordStatus.textContent = message;
+}
+
+function formatRecordDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
+}
+
+function getRecordOutputs(tweetId: string): OutputRecord[] {
+  return storedOutputRecords.filter((output) => output.tweetId === tweetId);
+}
+
+function recordMatches(record: StoredTweetRecord, query: string): boolean {
+  if (!query) return true;
+  const outputs = getRecordOutputs(record.tweetId);
+  const haystack = [
+    record.tweetId,
+    record.url,
+    record.text,
+    record.author.handle,
+    record.author.name,
+    ...outputs.map((output) => output.filename ?? ''),
+  ]
+    .join('\n')
+    .toLocaleLowerCase();
+  return haystack.includes(query.toLocaleLowerCase());
+}
+
+function renderRecordDetail(): void {
+  const record = storedTweetRecords.find((item) => item.tweetId === selectedRecordId);
+  if (!record) {
+    if (recordDetail) recordDetail.hidden = true;
+    if (recordDetailEmpty) recordDetailEmpty.hidden = false;
+    return;
+  }
+  if (recordDetail) recordDetail.hidden = false;
+  if (recordDetailEmpty) recordDetailEmpty.hidden = true;
+  const update = (selector: string, value: string): void => {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) element.textContent = value;
+  };
+  update('[data-record-author]', record.author.name || record.author.handle || '未知作者');
+  update(
+    '[data-record-handle]',
+    record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '',
+  );
+  update('[data-record-tweet-id]', record.tweetId);
+  update('[data-record-saved-at]', formatRecordDate(record.savedAt));
+  const link = document.querySelector<HTMLAnchorElement>('[data-record-link]');
+  if (link) link.href = record.url;
+  update('[data-record-text]', record.text || '这条推文没有正文。');
+  const outputs = getRecordOutputs(record.tweetId);
+  const outputLabels: Record<string, string> = {
+    'original-media': '原始媒体',
+    'framed-image': '来源画框',
+    'tweet-card': '推文卡片',
+    'shared-text': '分享文本',
+    'shared-image': '分享图像',
+    'copied-text': '复制文本',
+  };
+  update(
+    '[data-record-output-summary]',
+    outputs.length === 0
+      ? '尚无输出记录。'
+      : `已记录 ${outputs.length} 次输出：${outputs.map((output) => outputLabels[output.outputType] ?? output.outputType).join('、')}`,
+  );
+  const outputList = document.querySelector<HTMLElement>('[data-record-output-list]');
+  outputList?.replaceChildren();
+  for (const output of outputs) {
+    const item = document.createElement('div');
+    item.className = 'record-output-item';
+    const label = document.createElement('strong');
+    label.textContent = outputLabels[output.outputType] ?? output.outputType;
+    const detail = document.createElement('span');
+    detail.textContent = [output.filename, formatRecordDate(output.createdAt)]
+      .filter(Boolean)
+      .join(' · ');
+    item.append(label, detail);
+    outputList?.append(item);
+  }
+}
+
+function renderRecords(): void {
+  const query = recordSearch?.value.trim() ?? '';
+  const filtered = storedTweetRecords.filter((record) => recordMatches(record, query));
+  if (recordSummary) {
+    recordSummary.textContent = recordsLoading
+      ? '正在读取来源记录…'
+      : `共 ${storedTweetRecords.length} 条推文记录，当前显示 ${filtered.length} 条`;
+  }
+  if (recordList) recordList.replaceChildren();
+  if (filtered.length === 0) {
+    if (recordEmpty) recordEmpty.hidden = false;
+  } else {
+    if (recordEmpty) recordEmpty.hidden = true;
+    if (!filtered.some((record) => record.tweetId === selectedRecordId)) {
+      selectedRecordId = filtered[0]!.tweetId;
+    }
+    for (const record of filtered) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'record-item';
+      button.setAttribute('role', 'listitem');
+      button.setAttribute('aria-pressed', String(record.tweetId === selectedRecordId));
+      const title = document.createElement('strong');
+      title.textContent = `${record.author.name || '未知作者'} · ${record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '未知账号'}`;
+      const meta = document.createElement('span');
+      meta.textContent = `${record.tweetId} · ${formatRecordDate(record.savedAt)} · ${getRecordOutputs(record.tweetId).length} 条输出`;
+      button.append(title, meta);
+      button.addEventListener('click', () => {
+        selectedRecordId = record.tweetId;
+        renderRecords();
+      });
+      recordList?.append(button);
+    }
+  }
+  renderRecordDetail();
+}
+
+async function loadRecords(): Promise<void> {
+  recordsLoading = true;
+  renderRecords();
+  try {
+    const records = await listStorageRecords();
+    storedTweetRecords = records.tweetRecords;
+    storedOutputRecords = records.outputRecords;
+    setRecordStatus('');
+  } catch (error) {
+    storedTweetRecords = [];
+    storedOutputRecords = [];
+    setRecordStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    recordsLoading = false;
+    renderRecords();
+  }
+}
+
+function downloadJsonArchive(archive: StorageArchive): void {
+  const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `share-this-tweet-records-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportRecords(): Promise<void> {
+  try {
+    downloadJsonArchive(await exportStorageRecords());
+    setRecordStatus('来源记录已导出。');
+  } catch (error) {
+    setRecordStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function importRecords(file: File): Promise<void> {
+  try {
+    const archive = JSON.parse(await file.text()) as StorageArchive;
+    await importStorageRecords(archive);
+    selectedRecordId = '';
+    setRecordStatus('来源记录已导入。');
+    await loadRecords();
+  } catch (error) {
+    setRecordStatus(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function deleteSelectedRecord(): Promise<void> {
+  if (!selectedRecordId || !window.confirm('删除这条来源记录及其输出记录？')) return;
+  try {
+    await deleteStoredTweetRecord(selectedRecordId);
+    selectedRecordId = '';
+    setRecordStatus('来源记录已删除。');
+    await loadRecords();
+  } catch (error) {
+    setRecordStatus(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function clearRecords(): Promise<void> {
+  if (!window.confirm('清空全部来源记录和输出记录？已保存到设备的媒体文件不会被删除。')) return;
+  try {
+    await clearStoredRecords();
+    selectedRecordId = '';
+    setRecordStatus('来源记录已清空。');
+    await loadRecords();
+  } catch (error) {
+    setRecordStatus(`清空失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function buildControls(): void {
   for (const name of keys) {
     const container = document.querySelector(`[data-presets="${name}"]`);
@@ -290,7 +506,7 @@ function buildControls(): void {
 for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {
   tab.addEventListener('click', () => activateTab(tab.dataset.settingsTab as Tab));
   tab.addEventListener('keydown', (event: KeyboardEvent) => {
-    const order: Tab[] = ['frame', 'filename', 'text'];
+    const order: Tab[] = ['frame', 'filename', 'text', 'records'];
     let index = order.indexOf(tab.dataset.settingsTab as Tab);
     if (event.key === 'ArrowRight') index = (index + 1) % order.length;
     else if (event.key === 'ArrowLeft') index = (index + order.length - 1) % order.length;
@@ -312,6 +528,27 @@ for (const button of Array.from(
   });
 }
 for (const input of Object.values(inputs)) input?.addEventListener('input', () => updateDraft());
+recordSearch?.addEventListener('input', () => renderRecords());
+document.querySelector('[data-record-refresh]')?.addEventListener('click', () => {
+  void loadRecords();
+});
+document.querySelector('[data-record-export]')?.addEventListener('click', () => {
+  void exportRecords();
+});
+document.querySelector('[data-record-import-button]')?.addEventListener('click', () => {
+  recordImport?.click();
+});
+recordImport?.addEventListener('change', () => {
+  const file = recordImport.files?.[0];
+  recordImport.value = '';
+  if (file) void importRecords(file);
+});
+document.querySelector('[data-record-delete]')?.addEventListener('click', () => {
+  void deleteSelectedRecord();
+});
+document.querySelector('[data-record-clear]')?.addEventListener('click', () => {
+  void clearRecords();
+});
 resetButton?.addEventListener('click', () => {
   if (!ready || saving || !confirmation) return;
   confirmation.hidden = false;
@@ -330,6 +567,7 @@ document.querySelector('[data-reset-confirm-button]')?.addEventListener('click',
 });
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (form.dataset.activeTab === 'records') return;
   if (!ready || saving || !dirty) return;
   const settings = readSettings();
   if (!validateAndPreview(settings)) {
@@ -398,7 +636,9 @@ async function initialize(): Promise<void> {
 }
 buildControls();
 writeSettings({ ...DEFAULT_SETTINGS });
+renderRecords();
 document.querySelector('[data-retry-load]')?.addEventListener('click', () => {
   void initialize();
 });
 void initialize();
+void loadRecords();

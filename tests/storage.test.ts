@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createOutputRecord } from '../src/core/storage.js';
+import { createOutputRecord, validateStorageArchive } from '../src/core/storage.js';
 
 describe('storage record models', () => {
   it('creates an output record without changing the supplied output metadata', () => {
@@ -22,5 +22,23 @@ describe('storage record models', () => {
       mediaIndex: 1,
       createdAt: '2026-09-07T10:00:00.000Z',
     });
+  });
+
+  it('rejects archives with unsupported output types', () => {
+    expect(() =>
+      validateStorageArchive({
+        schemaVersion: 1,
+        exportedAt: '2026-09-07T10:00:00.000Z',
+        tweetRecords: [],
+        outputRecords: [
+          {
+            id: 'output-1',
+            tweetId: '42',
+            outputType: 'unknown',
+            createdAt: '2026-09-07T10:00:00.000Z',
+          },
+        ],
+      }),
+    ).toThrow('来源记录归档包含无效输出记录');
   });
 });
