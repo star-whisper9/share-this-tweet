@@ -539,6 +539,9 @@
 .stt-frame-direction-grid + .stt-command {
   margin-top: 9px;
 }
+.stt-card-action {
+  margin-top: 9px;
+}
 .stt-frame-direction-grid .stt-command-copy strong {
   font-size: 11px;
 }

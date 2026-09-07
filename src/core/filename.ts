@@ -51,3 +51,16 @@ export function buildFrameFilename(
   });
   return forceExtension(`${sanitizeFilename(rendered)}_framed`, 'png');
 }
+
+export function buildCardFilename(
+  record: TweetRecord,
+  media: MediaRecord,
+  template = DEFAULT_FILENAME_TEMPLATE,
+): string {
+  const rendered = renderTemplate(template, {
+    tweet: record,
+    media,
+    extension: 'png',
+  });
+  return forceExtension(`${sanitizeFilename(rendered)}_card`, 'png');
+}
