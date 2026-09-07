@@ -1,8 +1,19 @@
 import { buildCardFilename, buildFrameFilename, buildMediaFilename } from '../core/filename.js';
 import { renderTweetCard } from '../core/card.js';
-import { downloadBlob, downloadMedia as downloadMediaFile } from '../core/download.js';
+import {
+  downloadBlob,
+  downloadMedia as downloadMediaFile,
+  isAndroidUserAgent,
+} from '../core/download.js';
 import { FRAME_ORIENTATIONS, renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
-import { copyTweetText } from '../core/text-export.js';
+import { buildTweetText, copyTweetText } from '../core/text-export.js';
+import {
+  canShareFile,
+  ShareCancelledError,
+  ShareFailedError,
+  shareImage,
+  shareText,
+} from '../core/share.js';
 import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
@@ -115,8 +126,13 @@ export class ShareEnhancerController {
   private readonly frameActionErrors = new Map<string, string>();
   private textActionState: MediaActionState = 'idle';
   private textActionError = '';
-  private cardActionState: MediaActionState = 'idle';
-  private cardActionError = '';
+  private textShareState: MediaActionState = 'idle';
+  private textShareError = '';
+  private imageShareState: MediaActionState = 'idle';
+  private imageShareError = '';
+  private generatedCardFile?: File;
+  private cardSaveState: MediaActionState = 'idle';
+  private cardSaveError = '';
   private selectedMediaIndex?: number;
   private readonly selectedMediaIndexes = new Set<number>();
   private mediaSelectionInitialized = false;
@@ -520,8 +536,16 @@ export class ShareEnhancerController {
         void this.copyText();
         return;
       }
-      if (action === 'save-card') {
-        void this.saveTweetCard();
+      if (action === 'share-text') {
+        void this.shareTweetText();
+        return;
+      }
+      if (action === 'share-image') {
+        void this.shareTweetImage();
+        return;
+      }
+      if (action === 'save-card-fallback') {
+        void this.saveGeneratedCard();
         return;
       }
       if (action === 'download-selected') {
@@ -629,6 +653,7 @@ export class ShareEnhancerController {
         record.media.find((media) => media.index === this.selectedMediaIndex) ?? record.media[0];
       if (selected) actions.append(this.createMediaAction(record, selected));
     }
+    if (isAndroidUserAgent(navigator.userAgent)) actions.append(this.createShareActions(record));
     actions.append(this.createTextAction(record.media.length === 0));
     const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details');
     if (details) details.open = filenameOpen;
@@ -671,7 +696,8 @@ export class ShareEnhancerController {
     const glyph = node('span', 'stt-command-icon');
     glyph.append(icon(state === 'success' ? 'check' : image));
     const copy = node('span', 'stt-command-copy');
-    copy.append(node('strong', '', label), node('span', '', description));
+    copy.append(node('strong', '', label));
+    if (description) copy.append(node('span', '', description));
     const end = node('span', 'stt-command-end');
     end.append(icon(state === 'loading' ? 'download' : 'arrow'));
     button.append(glyph, copy, end);
@@ -758,8 +784,6 @@ export class ShareEnhancerController {
       this.selectedMediaIndex = mediaIndex;
     }
     this.resetBatchDownloadStates();
-    this.cardActionState = 'idle';
-    this.cardActionError = '';
     this.renderActions(record);
   }
 
@@ -777,87 +801,224 @@ export class ShareEnhancerController {
     this.batchFrameErrors.bottom = '';
   }
 
-  private createCardAction(): HTMLElement {
-    const wrapper = node('div', 'stt-card-action');
-    const state = this.cardActionState;
-    const button = this.actionButton(
-      'save-card',
-      'save-card',
-      state === 'loading'
-        ? '正在生成推文卡片…'
-        : state === 'success'
-          ? '再次保存推文卡片'
-          : state === 'error'
-            ? '重试保存推文卡片'
-            : '保存推文卡片',
-      '将当前选中的照片生成 1～4 图 PNG',
-      'frame',
-      state,
+  private createShareActions(record: TweetRecord): HTMLElement {
+    const wrapper = node('div', 'stt-share-actions');
+    const photos = record.media.filter((media) => media.type === 'photo');
+    const textButton = this.actionButton(
+      'share-text',
+      'share-text',
+      this.textShareState === 'loading'
+        ? '正在分享文本…'
+        : this.textShareState === 'success'
+          ? '再次分享文本'
+          : this.textShareState === 'error'
+            ? '重试分享文本'
+            : '分享文本',
+      '',
+      'share',
+      this.textShareState,
       false,
     );
-    button.disabled = button.disabled || this.isBatchDownloading();
-    wrapper.append(button);
-    if (state === 'error') {
-      wrapper.append(this.errorDetails('推文卡片生成失败，请重试。', this.cardActionError));
+    const imageButton = this.actionButton(
+      'share-image',
+      'share-image',
+      this.imageShareState === 'loading'
+        ? '正在分享推文卡片…'
+        : this.imageShareState === 'success'
+          ? '再次分享推文卡片'
+          : this.imageShareState === 'error'
+            ? '重试分享推文卡片'
+            : '分享推文卡片',
+      '',
+      'share',
+      this.imageShareState,
+      false,
+    );
+    const imageShareSupported = photos.length > 0 && this.canShareImageFile();
+    imageButton.disabled = imageButton.disabled || photos.length === 0;
+    wrapper.append(textButton);
+    if (imageShareSupported || photos.length === 0) wrapper.append(imageButton);
+    else wrapper.append(this.createCardSaveButton('当前环境不支持图片文件分享'));
+    if (this.textShareState === 'error') {
+      wrapper.append(
+        this.errorDetails('文本分享失败，请重试或改用复制文本。', this.textShareError),
+      );
+    }
+    if (this.imageShareState === 'error') {
+      wrapper.append(this.errorDetails('推文卡片分享失败，请重试。', this.imageShareError));
+      if (this.generatedCardFile) {
+        wrapper.append(this.createCardSaveButton('卡片已经生成，只是原生分享没有成功'));
+      }
+    }
+    if (this.cardSaveState === 'error') {
+      wrapper.append(this.errorDetails('卡片保存失败，请重试。', this.cardSaveError));
     }
     return wrapper;
   }
 
-  private async saveTweetCard(): Promise<void> {
-    const record = this.currentRecord;
-    const photos =
-      record?.media.filter(
-        (media) => this.selectedMediaIndexes.has(media.index) && media.type === 'photo',
-      ) ?? [];
-    if (!record || photos.length === 0 || this.cardActionState === 'loading') return;
+  private canShareImageFile(): boolean {
+    try {
+      return canShareFile(
+        new File(['share-this-tweet'], 'share-this-tweet-card.png', { type: 'image/png' }),
+      );
+    } catch {
+      return false;
+    }
+  }
 
+  private createCardSaveButton(description: string): HTMLButtonElement {
+    const button = this.actionButton(
+      'save-card-fallback',
+      'save-card-fallback',
+      this.cardSaveState === 'loading'
+        ? '正在保存推文卡片…'
+        : this.cardSaveState === 'success'
+          ? '再次保存推文卡片'
+          : '保存推文卡片',
+      description,
+      'download',
+      this.cardSaveState,
+      false,
+    );
+    button.classList.add('stt-share-fallback');
+    return button;
+  }
+
+  private async createCardFile(record: TweetRecord, photos: MediaRecord[]): Promise<File> {
+    const result = await renderTweetCard(record, photos);
+    const filename = buildCardFilename(record, photos[0]!, this.settings.filenameTemplate);
+    return new File([result.blob], filename, { type: 'image/png' });
+  }
+
+  private async shareTweetText(): Promise<void> {
+    const record = this.currentRecord;
+    if (!record || this.textShareState === 'loading') return;
     const tweetId = record.tweetId;
     const epoch = this.recordRequestId;
-    this.cardActionState = 'loading';
-    this.cardActionError = '';
+    this.textShareState = 'loading';
+    this.textShareError = '';
     this.renderActions(record);
-    this.setSheetStatus('loading', `正在生成 ${photos.length} 图推文卡片…`);
-
+    this.setSheetStatus('loading', '正在打开文本分享…');
     try {
-      const result = await renderTweetCard(record, photos);
+      await shareText(buildTweetText(record, this.settings.textTemplate));
       if (
         epoch !== this.recordRequestId ||
         this.currentTweetId !== tweetId ||
         this.currentRecord?.tweetId !== tweetId
       )
         return;
-      const filename = buildCardFilename(record, photos[0]!, this.settings.filenameTemplate);
-      downloadBlob(result.blob, filename);
       const storageWarning = await this.persistOutput(record, {
-        tweetId: record.tweetId,
-        outputType: 'tweet-card',
-        filename,
+        tweetId,
+        outputType: 'shared-text',
+      });
+      this.textShareState = 'success';
+      this.renderActions(record);
+      this.setSheetStatus(storageWarning ? 'error' : 'ready', storageWarning ?? '文本分享已完成。');
+    } catch (error) {
+      if (error instanceof ShareCancelledError) {
+        this.textShareState = 'idle';
+        this.renderActions(record);
+        this.setSheetStatus('ready', '已取消文本分享。');
+        return;
+      }
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
+      this.textShareState = 'error';
+      this.textShareError = error instanceof Error ? error.message : String(error);
+      this.renderActions(record);
+      this.setSheetStatus('error', '');
+    }
+  }
+
+  private async shareTweetImage(): Promise<void> {
+    const record = this.currentRecord;
+    const photos = record?.media.filter((media) => media.type === 'photo') ?? [];
+    if (!record || photos.length === 0 || this.imageShareState === 'loading') return;
+    const tweetId = record.tweetId;
+    const epoch = this.recordRequestId;
+    this.imageShareState = 'loading';
+    this.imageShareError = '';
+    this.renderActions(record);
+    this.setSheetStatus('loading', '正在生成并打开推文卡片分享…');
+    try {
+      if (!this.generatedCardFile) {
+        this.generatedCardFile = await this.createCardFile(record, photos);
+      }
+      await shareImage(this.generatedCardFile);
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
+      const storageWarning = await this.persistOutput(record, {
+        tweetId,
+        outputType: 'shared-image',
+        filename: this.generatedCardFile.name,
         mediaIndex: photos[0]!.index,
       });
-      if (
-        epoch !== this.recordRequestId ||
-        this.currentTweetId !== tweetId ||
-        this.currentRecord?.tweetId !== tweetId
-      )
-        return;
-      this.cardActionState = 'success';
+      this.imageShareState = 'success';
       this.renderActions(record);
       this.setSheetStatus(
         storageWarning ? 'error' : 'ready',
-        storageWarning ?? '推文卡片已生成，并交给浏览器保存。',
+        storageWarning ?? '推文卡片分享已完成。',
       );
     } catch (error) {
+      if (error instanceof ShareCancelledError) {
+        this.imageShareState = 'idle';
+        this.renderActions(record);
+        this.setSheetStatus('ready', '已取消图片分享。');
+        return;
+      }
       if (
         epoch !== this.recordRequestId ||
         this.currentTweetId !== tweetId ||
         this.currentRecord?.tweetId !== tweetId
       )
         return;
-      this.cardActionState = 'error';
-      this.cardActionError = error instanceof Error ? error.message : String(error);
+      this.imageShareState = 'error';
+      this.imageShareError = error instanceof Error ? error.message : String(error);
+      if (error instanceof ShareFailedError && error.file) this.generatedCardFile = error.file;
       this.renderActions(record);
-      this.setSheetStatus('error', '这次没能生成推文卡片，请查看详情后重试。');
-      console.error('分享有据 · Share This Tweet: failed to render tweet card', error);
+      this.setSheetStatus('error', '');
+    }
+  }
+
+  private async saveGeneratedCard(): Promise<void> {
+    const record = this.currentRecord;
+    const file = this.generatedCardFile;
+    const photo = record?.media.find((media) => media.type === 'photo');
+    if (!record || !photo || this.cardSaveState === 'loading') return;
+    this.cardSaveState = 'loading';
+    this.cardSaveError = '';
+    this.renderActions(record);
+    try {
+      const cardFile =
+        file ??
+        (await this.createCardFile(
+          record,
+          record.media.filter((media) => media.type === 'photo'),
+        ));
+      this.generatedCardFile = cardFile;
+      downloadBlob(cardFile, cardFile.name);
+      const storageWarning = await this.persistOutput(record, {
+        tweetId: record.tweetId,
+        outputType: 'tweet-card',
+        filename: cardFile.name,
+        mediaIndex: photo.index,
+      });
+      this.cardSaveState = 'success';
+      this.renderActions(record);
+      this.setSheetStatus(storageWarning ? 'error' : 'ready', storageWarning ?? '推文卡片已保存。');
+    } catch (error) {
+      this.cardSaveState = 'error';
+      this.cardSaveError = error instanceof Error ? error.message : String(error);
+      this.renderActions(record);
+      this.setSheetStatus('error', '推文卡片保存失败，请查看详情后重试。');
     }
   }
 
@@ -1001,7 +1162,6 @@ export class ShareEnhancerController {
           ),
         );
     }
-    if (selectedPhotos.length > 0) wrapper.append(this.createCardAction());
     const state = batch ? this.batchOriginalState : singleState;
     const mediaLabel = photo ? '原图' : media.type === 'animated_gif' ? 'GIF 视频' : '视频';
     const label = batch
@@ -1448,8 +1608,13 @@ export class ShareEnhancerController {
     this.frameActionErrors.clear();
     this.textActionState = 'idle';
     this.textActionError = '';
-    this.cardActionState = 'idle';
-    this.cardActionError = '';
+    this.textShareState = 'idle';
+    this.textShareError = '';
+    this.imageShareState = 'idle';
+    this.imageShareError = '';
+    this.generatedCardFile = undefined;
+    this.cardSaveState = 'idle';
+    this.cardSaveError = '';
     this.currentTweetId = undefined;
     this.currentArticle = undefined;
   }
