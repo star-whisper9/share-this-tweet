@@ -1,6 +1,6 @@
 import { buildFrameFilename, buildMediaFilename } from '../core/filename.js';
 import { downloadBlob, downloadMedia as downloadMediaFile } from '../core/download.js';
-import { renderPhotoFrame } from '../core/frame.js';
+import { FRAME_ORIENTATIONS, renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
 import { copyTweetText } from '../core/text-export.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
@@ -13,6 +13,7 @@ const SHEET_ID = 'stt-bottom-sheet';
 
 type MediaActionState = 'idle' | 'loading' | 'success' | 'error';
 type IconName = 'share' | 'close' | 'frame' | 'download' | 'copy' | 'photo' | 'video' | 'check' | 'arrow';
+const FRAME_ORIENTATION_LABELS: Record<FrameOrientation, string> = { top: '上方', bottom: '下方', left: '左侧', right: '右侧' };
 const ICON_PATHS: Record<IconName, string> = {
   share: 'M13 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M4 16h16M15 3h6v6M21 3l-8 8',
   close: 'M6 6l12 12M18 6L6 18', frame: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16h18M7 12l3-3 4 4 3-3 4 4',
@@ -80,8 +81,8 @@ export class ShareEnhancerController {
   private currentRecord?: TweetRecord;
   private readonly mediaActionStates = new Map<number, MediaActionState>();
   private readonly mediaActionErrors = new Map<number, string>();
-  private readonly frameActionStates = new Map<number, MediaActionState>();
-  private readonly frameActionErrors = new Map<number, string>();
+  private readonly frameActionStates = new Map<string, MediaActionState>();
+  private readonly frameActionErrors = new Map<string, string>();
   private textActionState: MediaActionState = 'idle';
   private textActionError = '';
   private selectedMediaIndex?: number;
@@ -392,7 +393,12 @@ export class ShareEnhancerController {
       if (!Number.isInteger(index)) return;
       if (action === 'select-media') { this.selectedMediaIndex = index; if (this.currentRecord) this.renderActions(this.currentRecord); }
       else if (action === 'download-media') void this.saveMedia(index);
-      else if (action === 'frame-media') void this.generateFrame(index);
+      else if (action === 'frame-media') {
+        const orientation = target.dataset.sttOrientation;
+        if (orientation === 'top' || orientation === 'bottom' || orientation === 'left' || orientation === 'right') {
+          void this.generateFrame(index, orientation);
+        }
+      }
     });
     const skeleton = node('div', 'stt-action-skeleton', '正在准备分享选项…'); skeleton.setAttribute('aria-hidden', 'true'); actions.append(skeleton);
     scroll.append(summary, actions);
@@ -511,14 +517,32 @@ export class ShareEnhancerController {
   private createMediaAction(record: TweetRecord, media: MediaRecord): HTMLElement {
     const wrapper = node('div', 'stt-media-action');
     const state = this.mediaActionStates.get(media.index) ?? 'idle';
-    const frameState = this.frameActionStates.get(media.index) ?? 'idle';
     wrapper.dataset.state = state;
     const photo = media.type === 'photo';
     if (photo) {
-      const label = frameState === 'loading' ? '正在制作来源画框…' : frameState === 'success' ? '再保存一张带来源的图片' : frameState === 'error' ? '重试保存带来源图片' : '保存带来源的图片';
-      const frame = this.actionButton('frame-media', `frame-${media.index}`, label, '照片 + 署名画框 · PNG', 'frame', frameState, true);
-      frame.classList.add('stt-media-frame-button'); frame.dataset.sttMediaIndex = String(media.index); wrapper.append(frame);
-      if (frameState === 'error') wrapper.append(this.errorDetails('这张画框没能生成，请重试。', this.frameActionErrors.get(media.index) ?? ''));
+      const frameActions = node('div', 'stt-frame-direction-grid');
+      for (const orientation of FRAME_ORIENTATIONS) {
+        const state = this.frameActionStates.get(this.frameActionKey(media.index, orientation)) ?? 'idle';
+        const preferred = orientation === this.settings.frameOrientation;
+        const label = state === 'loading'
+          ? `正在制作${FRAME_ORIENTATION_LABELS[orientation]}画框…`
+          : state === 'success'
+            ? `再保存一张${FRAME_ORIENTATION_LABELS[orientation]}画框`
+            : state === 'error'
+              ? `重试${FRAME_ORIENTATION_LABELS[orientation]}画框`
+              : `保存${FRAME_ORIENTATION_LABELS[orientation]}画框`;
+        const frame = this.actionButton('frame-media', `frame-${media.index}-${orientation}`, label,
+          preferred ? '默认方向 · 一键保存' : '本次直接覆盖默认方向', 'frame', state, preferred);
+        frame.classList.add('stt-media-frame-button');
+        frame.dataset.sttMediaIndex = String(media.index);
+        frame.dataset.sttOrientation = orientation;
+        frameActions.append(frame);
+      }
+      wrapper.append(frameActions);
+      const frameError = FRAME_ORIENTATIONS
+        .map(orientation => this.frameActionErrors.get(this.frameActionKey(media.index, orientation)))
+        .find(message => message);
+      if (frameError) wrapper.append(this.errorDetails('这次画框没能生成，请重试。', frameError));
     }
     const mediaLabel = photo ? '原图' : media.type === 'animated_gif' ? 'GIF 视频' : '视频';
     const label = state === 'loading' ? '正在保存…' : state === 'success' ? `再次保存${mediaLabel}` : state === 'error' ? `重试保存${mediaLabel}` : `保存${mediaLabel}`;
@@ -589,11 +613,16 @@ export class ShareEnhancerController {
     }
   }
 
-  private async generateFrame(mediaIndex: number): Promise<void> {
+  private frameActionKey(mediaIndex: number, orientation: FrameOrientation): string {
+    return `${mediaIndex}:${orientation}`;
+  }
+
+  private async generateFrame(mediaIndex: number, orientation = this.settings.frameOrientation): Promise<void> {
     const record = this.currentRecord;
     const media = record?.media.find((candidate) => candidate.index === mediaIndex);
     if (!record || !media || media.type !== 'photo') return;
-    const state = this.frameActionStates.get(mediaIndex) ?? 'idle';
+    const actionKey = this.frameActionKey(mediaIndex, orientation);
+    const state = this.frameActionStates.get(actionKey) ?? 'idle';
     if (state === 'loading') return;
 
     let filename: string;
@@ -601,8 +630,8 @@ export class ShareEnhancerController {
       filename = buildFrameFilename(record, media, this.settings.filenameTemplate);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.frameActionStates.set(mediaIndex, 'error');
-      this.frameActionErrors.set(mediaIndex, message);
+      this.frameActionStates.set(actionKey, 'error');
+      this.frameActionErrors.set(actionKey, message);
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('error', '这次没能生成画框，请查看详情后重试。');
       return;
@@ -610,23 +639,23 @@ export class ShareEnhancerController {
 
     const tweetId = record.tweetId;
     const epoch = this.recordRequestId;
-    this.frameActionStates.set(mediaIndex, 'loading');
-    this.frameActionErrors.delete(mediaIndex);
+    this.frameActionStates.set(actionKey, 'loading');
+    this.frameActionErrors.delete(actionKey);
     this.renderActions(this.currentRecord ?? record);
     this.setSheetStatus('loading', `正在生成第 ${media.index} 项画框…`);
 
     try {
-      const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate);
+      const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate, orientation);
       if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
       downloadBlob(blob, filename);
-      this.frameActionStates.set(mediaIndex, 'success');
+      this.frameActionStates.set(actionKey, 'success');
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('ready', '带来源的图片已生成，并交给浏览器保存。');
     } catch (error) {
       if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
       const message = error instanceof Error ? error.message : String(error);
-      this.frameActionStates.set(mediaIndex, 'error');
-      this.frameActionErrors.set(mediaIndex, message);
+      this.frameActionStates.set(actionKey, 'error');
+      this.frameActionErrors.set(actionKey, message);
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('error', '这次没能生成画框，请查看详情后重试。');
       console.error('分享有据 · Share This Tweet: failed to render photo frame', error);

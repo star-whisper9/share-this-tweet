@@ -1,6 +1,7 @@
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
 import { buildTweetText } from '../core/text-export.js';
+import type { FrameOrientation } from '../core/frame.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type ExtensionSettings } from '../shared/settings.js';
 
@@ -11,6 +12,7 @@ type Tab = 'frame' | 'filename' | 'text';
 interface Preset { label: string; description: string; value?: string }
 const keys: SettingKey[] = ['frameTemplate', 'filenameTemplate', 'textTemplate'];
 const fieldTabs: Record<SettingKey, Tab> = { frameTemplate: 'frame', filenameTemplate: 'filename', textTemplate: 'text' };
+const frameOrientations: FrameOrientation[] = ['top', 'bottom', 'left', 'right'];
 const form = document.querySelector<HTMLFormElement>('[data-settings-form]');
 const status = document.querySelector<HTMLOutputElement>('[data-status]');
 const editable = document.querySelector<HTMLFieldSetElement>('[data-editable]');
@@ -63,11 +65,20 @@ function setStatus(state: string, message: string): void {
   if (status) status.textContent = message;
 }
 function readSettings(): ExtensionSettings {
+  const selectedOrientation = document.querySelector<HTMLButtonElement>('[data-frame-orientation][aria-pressed="true"]')?.dataset.frameOrientation;
   return {
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
     frameTemplate: inputs.frameTemplate?.value ?? DEFAULT_SETTINGS.frameTemplate,
+    frameOrientation: frameOrientations.includes(selectedOrientation as FrameOrientation)
+      ? selectedOrientation as FrameOrientation
+      : DEFAULT_SETTINGS.frameOrientation,
     textTemplate: inputs.textTemplate?.value ?? DEFAULT_SETTINGS.textTemplate
   };
+}
+function setFrameOrientation(orientation: FrameOrientation): void {
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-frame-orientation]'))) {
+    button.setAttribute('aria-pressed', String(button.dataset.frameOrientation === orientation));
+  }
 }
 function activateTab(tab: Tab, focus = false): void {
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {
@@ -129,7 +140,7 @@ function updatePresetSelection(settings: ExtensionSettings): void {
 function updateDraft(announce = true): void {
   const settings = readSettings();
   const valid = validateAndPreview(settings);
-  dirty = keys.some(key => settings[key] !== baseline[key]);
+  dirty = keys.some(key => settings[key] !== baseline[key]) || settings.frameOrientation !== baseline.frameOrientation;
   updatePresetSelection(settings);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
   // first invalid field even if it is currently in another tab.
@@ -142,6 +153,7 @@ function updateDraft(announce = true): void {
 }
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
+  setFrameOrientation(settings.frameOrientation);
   updateDraft();
 }
 function openEditor(name: SettingKey, focus = true): void {
@@ -216,6 +228,14 @@ for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data
     else if (event.key === 'End') index = order.length - 1;
     else return;
     event.preventDefault(); activateTab(order[index]!, true);
+  });
+}
+for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-frame-orientation]'))) {
+  button.addEventListener('click', () => {
+    const orientation = button.dataset.frameOrientation;
+    if (!ready || saving || !frameOrientations.includes(orientation as FrameOrientation)) return;
+    setFrameOrientation(orientation as FrameOrientation);
+    updateDraft();
   });
 }
 for (const input of Object.values(inputs)) input?.addEventListener('input', () => updateDraft());

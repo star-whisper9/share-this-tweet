@@ -105,6 +105,14 @@
                 role="group"
                 aria-labelledby="frame-presets-label"
               ></div>
+              <p class="field-label frame-orientation-label" id="frame-orientation-label">默认画框方向</p>
+              <div class="frame-orientation-grid" data-frame-orientation-options role="group" aria-labelledby="frame-orientation-label">
+                <button type="button" data-frame-orientation="top" aria-pressed="false"><span aria-hidden="true">↑</span><strong>上</strong></button>
+                <button type="button" data-frame-orientation="bottom" aria-pressed="true"><span aria-hidden="true">↓</span><strong>下</strong></button>
+                <button type="button" data-frame-orientation="left" aria-pressed="false"><span aria-hidden="true">←</span><strong>左</strong></button>
+                <button type="button" data-frame-orientation="right" aria-pressed="false"><span aria-hidden="true">→</span><strong>右</strong></button>
+              </div>
+              <p class="field-help orientation-help">设置默认方向。保存单张照片时，也可以在操作区直接点击其他方向覆盖本次选择。</p>
               <details class="template-editor" data-editor="frameTemplate">
                 <summary>
                   <span>自定义文字与变量</span

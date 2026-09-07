@@ -7,6 +7,10 @@ function shorten(value: string, maxLength = 42): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
+function orientationLabel(value: string): string {
+  return ({ top: '上', bottom: '下', left: '左', right: '右' } as Record<string, string>)[value] ?? '下';
+}
+
 function showError(message: string): void {
   if (!error) return;
   error.hidden = false;
@@ -23,6 +27,7 @@ void loadSettings()
   .then((settings) => {
     const values = {
       frame: settings.frameTemplate,
+      orientation: orientationLabel(settings.frameOrientation),
       filename: settings.filenameTemplate,
       text: settings.textTemplate
     };

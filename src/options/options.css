@@ -50,6 +50,13 @@ h2 { margin: 0; font-size: 20px; font-weight: 740; letter-spacing: -.5px; line-h
 .preset-check { display: block; width: 15px; height: 15px; border: 1.4px solid var(--border); border-radius: 50%; margin-bottom: 12px; }
 .preset[aria-pressed="true"] .preset-check { background: var(--accent); border-color: var(--accent); }
 .preset[aria-pressed="true"] .preset-check::after { content: ''; display: block; width: 6px; height: 3px; transform: rotate(-45deg); border-left: 1.5px solid white; border-bottom: 1.5px solid white; margin: 4px 0 0 3px; }
+.frame-orientation-label { margin-top: 23px; }
+.frame-orientation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.frame-orientation-grid button { display: grid; justify-items: center; gap: 3px; min-height: 58px; padding: 8px 5px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); background: var(--surface); }
+.frame-orientation-grid button span { font-size: 20px; line-height: 1; }
+.frame-orientation-grid button strong { font-size: 11px; }
+.frame-orientation-grid button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--tint); box-shadow: inset 0 0 0 .5px var(--accent); }
+.orientation-help { margin-top: 8px; }
 .preset strong { display: block; font-size: 12px; font-weight: 700; }
 .preset small { display: block; color: var(--muted); margin-top: 3px; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .text-presets { grid-template-columns: 1fr 1fr; }
