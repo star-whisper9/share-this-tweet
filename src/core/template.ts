@@ -2,8 +2,8 @@ import type { MediaRecord, TweetRecord } from '../shared/model.js';
 
 export interface TemplateContext {
   tweet: TweetRecord;
-  media: MediaRecord;
-  extension: string;
+  media?: MediaRecord;
+  extension?: string;
 }
 
 export class TemplateError extends Error {
@@ -43,11 +43,13 @@ function getTemplateValue(field: string, context: TemplateContext): string {
     case 'author.name':
       return context.tweet.author.name;
     case 'media.index':
+      if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
       return String(context.media.index);
     case 'media.type':
+      if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
       return context.media.type;
     case 'extension':
-      return context.extension;
+      return context.extension ?? '';
     default:
       throw new TemplateError(`未知模板字段：{${field}}`);
   }
@@ -56,7 +58,6 @@ function getTemplateValue(field: string, context: TemplateContext): string {
 function formatTemplateValue(field: string, format: string | undefined, context: TemplateContext): string {
   const value = getTemplateValue(field, context);
   if (!format) {
-    if (value.length === 0) throw new TemplateError(`模板字段没有可用值：{${field}}`);
     return value;
   }
 

@@ -184,6 +184,10 @@
   border-color: var(--stt-accent);
 }
 
+.stt-text-action[data-state="success"] button {
+  border-color: var(--stt-accent);
+}
+
 .stt-media-action span {
   overflow-wrap: anywhere;
 }

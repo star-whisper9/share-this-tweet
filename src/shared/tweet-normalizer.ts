@@ -79,6 +79,24 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
   };
 }
 
+function removeMediaEntityUrls(text: string, legacy: JsonObject): string {
+  const entityGroups = [getObject(legacy, 'entities'), getObject(legacy, 'extended_entities')];
+  const mediaUrls = entityGroups
+    .flatMap((group) => getArray(group, 'media') ?? [])
+    .map((item) => getString(item, 'url'))
+    .filter((url): url is string => url !== undefined);
+
+  let normalized = text;
+  for (const url of mediaUrls) {
+    const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    normalized = normalized.replace(new RegExp(`[ \\t]*${escapedUrl}[ \\t]*`, 'g'), ' ');
+  }
+  return normalized
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .trim();
+}
+
 function unwrapTweet(value: JsonObject): JsonObject {
   if (value.__typename === 'TweetWithVisibilityResults') {
     return getObject(value, 'tweet') ?? value;
@@ -127,7 +145,10 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
     ?? [])
     .map((item, index) => normalizeMedia(item, index + 1))
     .filter((item): item is MediaRecord => item !== undefined);
-  const text = getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '';
+  const text = removeMediaEntityUrls(
+    getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
+    legacy
+  );
   const urlHandle = handle.replace(/^@+/, '');
 
   return {

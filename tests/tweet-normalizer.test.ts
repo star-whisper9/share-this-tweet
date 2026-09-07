@@ -53,4 +53,28 @@ describe('normalizeTweetCandidate', () => {
     expect(record?.author.handle).toBe('@bob');
     expect(normalizeTweetCandidate({ __typename: 'User', rest_id: '8' })).toBeUndefined();
   });
+
+  it('removes only the media entity short link from visible tweet text', () => {
+    const record = normalizeTweetCandidate({
+      __typename: 'Tweet',
+      rest_id: '100',
+      legacy: {
+        full_text: 'caption https://t.co/media123 https://t.co/real-link',
+        entities: {
+          urls: [{ url: 'https://t.co/real-link', expanded_url: 'https://example.com' }],
+          media: [{ url: 'https://t.co/media123', media_url_https: 'https://pbs.twimg.com/media/photo.jpg', type: 'photo' }]
+        },
+        extended_entities: {
+          media: [{ url: 'https://t.co/media123', media_url_https: 'https://pbs.twimg.com/media/photo.jpg', type: 'photo' }]
+        }
+      },
+      core: {
+        user_results: {
+          result: { rest_id: '8', legacy: { screen_name: 'alice', name: 'Alice' } }
+        }
+      }
+    });
+
+    expect(record?.text).toBe('caption https://t.co/real-link');
+  });
 });

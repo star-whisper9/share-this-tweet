@@ -1,5 +1,6 @@
 import { buildMediaFilename } from '../core/filename.js';
 import { downloadMedia as downloadMediaFile } from '../core/download.js';
+import { copyTweetText } from '../core/text-export.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { TweetSource } from './tweet-source.js';
@@ -26,6 +27,8 @@ export class ShareEnhancerController {
   private currentRecord?: TweetRecord;
   private readonly mediaActionStates = new Map<number, MediaActionState>();
   private readonly mediaActionErrors = new Map<number, string>();
+  private textActionState: MediaActionState = 'idle';
+  private textActionError = '';
   private unsubscribeTweetSource?: () => void;
 
   constructor(private readonly tweetSource: TweetSource) {}
@@ -288,13 +291,18 @@ export class ShareEnhancerController {
     actions.className = 'stt-sheet-actions';
     actions.addEventListener('click', (event) => {
       const target = event.target instanceof Element
-        ? event.target.closest<HTMLButtonElement>('button[data-stt-media-index]')
+        ? event.target.closest<HTMLButtonElement>('button[data-stt-action]')
         : null;
       if (!target || !actions.contains(target)) return;
-      const mediaIndex = Number(target.dataset.sttMediaIndex);
-      if (!Number.isInteger(mediaIndex)) return;
       event.preventDefault();
-      void this.saveMedia(mediaIndex);
+      if (target.dataset.sttAction === 'copy-text') {
+        void this.copyText();
+        return;
+      }
+      if (target.dataset.sttAction === 'download-media') {
+        const mediaIndex = Number(target.dataset.sttMediaIndex);
+        if (Number.isInteger(mediaIndex)) void this.saveMedia(mediaIndex);
+      }
     });
     actions.append(
       this.createDisabledAction('保存媒体', '媒体下载将在后续阶段接入。'),
@@ -320,8 +328,57 @@ export class ShareEnhancerController {
     }
     actions.append(
       this.createDisabledAction('生成画框图片', '画框生成将在后续阶段接入。'),
-      this.createDisabledAction('复制推文文本', '文本导出将在后续阶段接入。')
+      this.createTextAction()
     );
+  }
+
+  private createTextAction(): HTMLElement {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'stt-sheet-action stt-text-action';
+    wrapper.dataset.state = this.textActionState;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.sttAction = 'copy-text';
+    button.disabled = this.textActionState === 'loading';
+    button.textContent = this.textActionState === 'loading'
+      ? '复制中…'
+      : this.textActionState === 'success'
+        ? '再次复制'
+        : this.textActionState === 'error' ? '重试复制' : '复制推文文本';
+
+    const detail = document.createElement('span');
+    detail.textContent = this.textActionState === 'error'
+      ? `复制失败：${this.textActionError}`
+      : '复制正文、作者、原文链接和 Tweet ID。';
+    wrapper.append(button, detail);
+    return wrapper;
+  }
+
+  private async copyText(): Promise<void> {
+    const record = this.currentRecord;
+    if (!record || this.textActionState === 'loading') return;
+
+    const tweetId = record.tweetId;
+    this.textActionState = 'loading';
+    this.textActionError = '';
+    this.renderActions(record);
+    this.setSheetStatus('loading', '正在复制推文文本…');
+
+    try {
+      await copyTweetText(record);
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      this.textActionState = 'success';
+      this.renderActions(record);
+      this.setSheetStatus('ready', '推文文本已复制到剪贴板。');
+    } catch (error) {
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      this.textActionState = 'error';
+      this.textActionError = error instanceof Error ? error.message : String(error);
+      this.renderActions(record);
+      this.setSheetStatus('error', `文本复制失败：${this.textActionError}`);
+      console.error('Share This Tweet: failed to copy tweet text', error);
+    }
   }
 
   private createMediaAction(record: TweetRecord, media: MediaRecord): HTMLElement {
@@ -334,7 +391,7 @@ export class ShareEnhancerController {
     button.type = 'button';
     button.dataset.sttAction = 'download-media';
     button.dataset.sttMediaIndex = String(media.index);
-    button.disabled = state === 'loading' || state === 'success';
+    button.disabled = state === 'loading';
 
     const mediaLabel = media.type === 'photo'
       ? '照片原图'
@@ -342,7 +399,7 @@ export class ShareEnhancerController {
     button.textContent = state === 'loading'
       ? '保存中…'
       : state === 'success'
-        ? '已保存'
+        ? `再次保存第 ${media.index} 项${mediaLabel}`
         : state === 'error' ? '重试保存' : `保存第 ${media.index} 项${mediaLabel}`;
 
     const detail = document.createElement('span');
@@ -365,7 +422,7 @@ export class ShareEnhancerController {
     const media = record?.media.find((candidate) => candidate.index === mediaIndex);
     if (!record || !media) return;
     const state = this.mediaActionStates.get(mediaIndex) ?? 'idle';
-    if (state === 'loading' || state === 'success') return;
+    if (state === 'loading') return;
 
     let filename: string;
     try {
@@ -491,6 +548,8 @@ export class ShareEnhancerController {
     this.currentRecord = undefined;
     this.mediaActionStates.clear();
     this.mediaActionErrors.clear();
+    this.textActionState = 'idle';
+    this.textActionError = '';
     this.currentTweetId = undefined;
     this.currentArticle = undefined;
   }
