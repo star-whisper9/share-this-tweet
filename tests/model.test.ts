@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getTweetIdFromPath, normalizeHandle } from '../src/shared/model.js';
+import { getTweetIdFromPath, mergeTweetRecords, normalizeHandle } from '../src/shared/model.js';
 
 describe('normalizeHandle', () => {
   it('keeps exactly one @ prefix', () => {
@@ -17,5 +17,28 @@ describe('getTweetIdFromPath', () => {
   it('rejects routes that are not tweet detail routes', () => {
     expect(getTweetIdFromPath('/home')).toBeUndefined();
     expect(getTweetIdFromPath('/example/status/not-a-number')).toBeUndefined();
+  });
+});
+
+describe('mergeTweetRecords', () => {
+  it('does not let a partial later record erase the author', () => {
+    const complete = {
+      tweetId: '42',
+      url: 'https://x.com/alice/status/42',
+      text: 'complete text',
+      author: { id: '7', handle: 'alice', name: 'Alice' },
+      media: []
+    };
+    const partial = {
+      tweetId: '42',
+      url: 'https://x.com/i/status/42',
+      text: 'complete text',
+      author: { id: '7', handle: '', name: '' },
+      media: []
+    };
+
+    const merged = mergeTweetRecords(complete, partial);
+    expect(merged.author.handle).toBe('alice');
+    expect(merged.url).toBe('https://x.com/alice/status/42');
   });
 });

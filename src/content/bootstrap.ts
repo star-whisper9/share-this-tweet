@@ -1,4 +1,17 @@
 import { ShareEnhancerController } from './ui.js';
+import { TWEET_DATA_EVENT, TweetSource } from './tweet-source.js';
+
+const tweetSource = new TweetSource();
+
+window.addEventListener(TWEET_DATA_EVENT, (event) => {
+  const detail = (event as CustomEvent<string>).detail;
+  if (typeof detail !== 'string') return;
+  try {
+    tweetSource.ingestSerialized(detail);
+  } catch (error) {
+    console.error('Share This Tweet: failed to ingest tweet data', error);
+  }
+});
 
 function injectPageInterceptor(): void {
   const script = document.createElement('script');
@@ -10,5 +23,5 @@ function injectPageInterceptor(): void {
 
 if (location.hostname === 'x.com') {
   injectPageInterceptor();
-  new ShareEnhancerController().start();
+  new ShareEnhancerController(tweetSource).start();
 }

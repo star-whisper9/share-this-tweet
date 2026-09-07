@@ -1,4 +1,6 @@
 import { getTweetIdFromPath } from '../shared/model.js';
+import type { TweetRecord } from '../shared/model.js';
+import { TweetSource } from './tweet-source.js';
 
 const ROUTE_CHANGE_EVENT = 'share-this-tweet:route-change';
 const ACTION_HOST_ATTRIBUTE = 'data-stt-action-host';
@@ -16,6 +18,10 @@ export class ShareEnhancerController {
   private observer?: MutationObserver;
   private restoreHistory?: () => void;
   private closeTimer?: number;
+  private recordRequestId = 0;
+  private unsubscribeTweetSource?: () => void;
+
+  constructor(private readonly tweetSource: TweetSource) {}
 
   private readonly onRouteChange = (): void => {
     this.scheduleSync();
@@ -30,6 +36,9 @@ export class ShareEnhancerController {
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.unsubscribeTweetSource = this.tweetSource.subscribe((record) => {
+      if (record.tweetId === this.currentTweetId) this.applyTweetRecord(record);
+    });
 
     this.installRouteListeners();
     this.observer = new MutationObserver(() => this.scheduleSync());
@@ -44,6 +53,8 @@ export class ShareEnhancerController {
   stop(): void {
     if (!this.started) return;
     this.started = false;
+    this.unsubscribeTweetSource?.();
+    this.unsubscribeTweetSource = undefined;
     this.restoreHistory?.();
     this.restoreHistory = undefined;
     this.observer?.disconnect();
@@ -110,6 +121,49 @@ export class ShareEnhancerController {
     this.currentTweetId = tweetId;
     this.currentArticle = article;
     this.mountEntry(article, tweetId);
+    void this.resolveTweetRecord(tweetId);
+  }
+
+  private async resolveTweetRecord(tweetId: string): Promise<void> {
+    const requestId = ++this.recordRequestId;
+    const existing = this.tweetSource.get(tweetId);
+    if (existing) {
+      this.applyTweetRecord(existing);
+      return;
+    }
+
+    this.setSheetStatus('loading', '正在读取当前推文数据…');
+    this.trigger?.setAttribute('aria-busy', 'true');
+    try {
+      const record = await this.tweetSource.waitFor(tweetId);
+      if (requestId !== this.recordRequestId || this.currentTweetId !== tweetId) return;
+      this.applyTweetRecord(record);
+    } catch (error) {
+      if (requestId !== this.recordRequestId || this.currentTweetId !== tweetId) return;
+      this.setSheetStatus('error', '无法获取当前推文数据，请刷新页面后重试。');
+      console.error('Share This Tweet: failed to resolve tweet record', error);
+    } finally {
+      if (requestId === this.recordRequestId) this.trigger?.removeAttribute('aria-busy');
+    }
+  }
+
+  private applyTweetRecord(record: TweetRecord): void {
+    const summary = this.sheet?.querySelector<HTMLElement>('.stt-tweet-summary');
+    if (!summary) return;
+    const author = summary.querySelector<HTMLElement>('[data-stt-author]');
+    const id = summary.querySelector<HTMLElement>('[data-stt-tweet-id]');
+    const text = summary.querySelector<HTMLElement>('[data-stt-text]');
+    if (author) author.textContent = record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '@未知作者';
+    if (id) id.textContent = `Tweet ID: ${record.tweetId}`;
+    if (text) text.textContent = record.text || '（无正文）';
+    this.setSheetStatus('ready', '已获取当前推文数据；具体操作将在后续阶段接入。');
+  }
+
+  private setSheetStatus(state: 'loading' | 'ready' | 'error', message: string): void {
+    if (!this.sheet) return;
+    this.sheet.dataset.dataState = state;
+    const status = this.sheet.querySelector<HTMLElement>('.stt-sheet-status');
+    if (status) status.textContent = message;
   }
 
   private findPrimaryArticle(tweetId: string): HTMLElement | undefined {
@@ -203,10 +257,16 @@ export class ShareEnhancerController {
     const summaryTitle = document.createElement('strong');
     summaryTitle.textContent = '当前推文';
     const summaryId = document.createElement('span');
+    summaryId.dataset.sttTweetId = '';
     summaryId.textContent = `Tweet ID: ${tweetId}`;
     const summaryAuthor = document.createElement('span');
+    summaryAuthor.dataset.sttAuthor = '';
     summaryAuthor.textContent = '@待获取';
-    summary.append(summaryTitle, summaryId, summaryAuthor);
+    const summaryText = document.createElement('span');
+    summaryText.dataset.sttText = '';
+    summaryText.className = 'stt-tweet-text';
+    summaryText.textContent = '正文将在数据接入后显示。';
+    summary.append(summaryTitle, summaryId, summaryAuthor, summaryText);
 
     const status = document.createElement('p');
     status.className = 'stt-sheet-status';
