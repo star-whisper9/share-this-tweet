@@ -69,6 +69,7 @@
 .stt-media-choice[aria-pressed="true"] .stt-media-label { color: var(--stt-accent); font-weight: 650; }
 .stt-command { width: 100%; display: flex; align-items: center; gap: 13px; min-height: 67px; padding: 13px 15px; text-align: start; border: 1px solid var(--stt-border); border-radius: 13px; background: var(--stt-surface); color: var(--stt-text); }
 .stt-command:not(:disabled):hover { border-color: var(--stt-tint-border); background: var(--stt-surface-raised); }
+.stt-command:disabled { opacity: .5; cursor: not-allowed; }
 .stt-command+.stt-command { margin-top: 9px; }
 .stt-command-icon { flex: 0 0 auto; display: grid; place-items: center; color: var(--stt-accent); width: 25px; }
 .stt-command-copy { display: grid; gap: 3px; min-width: 0; flex: 1; }

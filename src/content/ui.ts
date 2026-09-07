@@ -12,6 +12,7 @@ const ACTION_HOST_ATTRIBUTE = 'data-stt-action-host';
 const SHEET_ID = 'stt-bottom-sheet';
 
 type MediaActionState = 'idle' | 'loading' | 'success' | 'error';
+type BatchDownloadMode = 'original' | 'framed';
 type IconName = 'share' | 'close' | 'frame' | 'download' | 'copy' | 'photo' | 'video' | 'check' | 'arrow';
 const FRAME_ORIENTATION_LABELS: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
 const ICON_PATHS: Record<IconName, string> = {
@@ -86,6 +87,13 @@ export class ShareEnhancerController {
   private textActionState: MediaActionState = 'idle';
   private textActionError = '';
   private selectedMediaIndex?: number;
+  private readonly selectedMediaIndexes = new Set<number>();
+  private mediaSelectionInitialized = false;
+  private batchDownloadMode?: BatchDownloadMode;
+  private batchOriginalState: MediaActionState = 'idle';
+  private batchOriginalError = '';
+  private readonly batchFrameStates: Record<FrameOrientation, MediaActionState> = { top: 'idle', bottom: 'idle' };
+  private readonly batchFrameErrors: Record<FrameOrientation, string> = { top: '', bottom: '' };
   private restoreOverlay?: () => void;
   private settingsRequestId = 0;
   private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
@@ -254,7 +262,7 @@ export class ShareEnhancerController {
   private applyTweetRecord(record: TweetRecord): void {
     const firstRecord = !this.currentRecord;
     this.currentRecord = record;
-    if (!record.media.some(media => media.index === this.selectedMediaIndex)) this.selectedMediaIndex = record.media[0]?.index;
+    this.reconcileMediaSelection(record);
     const summary = this.sheet?.querySelector<HTMLElement>('.stt-tweet-summary');
     if (!summary) return;
     const update = (selector: string, value: string): void => { const item = summary.querySelector<HTMLElement>(selector); if (item) item.textContent = value; };
@@ -389,14 +397,20 @@ export class ShareEnhancerController {
       event.preventDefault();
       const action = target.dataset.sttAction;
       if (action === 'copy-text') { void this.copyText(); return; }
+      if (action === 'download-selected') {
+        const mode = target.dataset.sttBatchMode;
+        if (mode === 'original' || mode === 'framed') void this.saveSelectedMedia(mode);
+        return;
+      }
       const index = Number(target.dataset.sttMediaIndex);
       if (!Number.isInteger(index)) return;
-      if (action === 'select-media') { this.selectedMediaIndex = index; if (this.currentRecord) this.renderActions(this.currentRecord); }
+      if (action === 'select-media') { this.toggleMediaSelection(index); }
       else if (action === 'download-media') void this.saveMedia(index);
       else if (action === 'frame-media') {
         const orientation = target.dataset.sttOrientation;
         if (orientation === 'top' || orientation === 'bottom') {
-          void this.generateFrame(index, orientation);
+          if (target.dataset.sttBatchMode === 'framed') void this.saveSelectedMedia('framed', orientation);
+          else void this.generateFrame(index, orientation);
         }
       }
     });
@@ -410,6 +424,7 @@ export class ShareEnhancerController {
   private renderActions(record: TweetRecord): void {
     const actions = this.sheet?.querySelector<HTMLElement>('.stt-sheet-actions');
     if (!actions) return;
+    this.reconcileMediaSelection(record);
     const active = document.activeElement instanceof HTMLElement && actions.contains(document.activeElement) ? document.activeElement : undefined;
     const focusKey = active?.dataset.sttFocusKey;
     const filenameOpen = actions.querySelector<HTMLDetailsElement>('.stt-file-details')?.open ?? false;
@@ -418,19 +433,19 @@ export class ShareEnhancerController {
     const stripScroll = actions.querySelector<HTMLElement>('.stt-media-strip')?.scrollLeft ?? 0;
     actions.replaceChildren();
     if (record.media.length > 0) {
-      if (!record.media.some(media => media.index === this.selectedMediaIndex)) this.selectedMediaIndex = record.media[0]?.index;
       const selectionHeading = node('div', 'stt-section-label');
-      const position = record.media.findIndex(media => media.index === this.selectedMediaIndex) + 1;
-      selectionHeading.append(node('span', '', record.media.length > 1 ? '选择要分享的内容' : '这条推文的内容'), node('span', 'stt-selection-count', `${position} / ${record.media.length}`));
+      const position = this.selectedMediaIndex === undefined ? 0 : record.media.findIndex(media => media.index === this.selectedMediaIndex) + 1;
+      selectionHeading.append(node('span', '', record.media.length > 1 ? '选择要保存的媒体' : '这条推文的内容'), node('span', 'stt-selection-count', record.media.length > 1 ? `已选 ${this.selectedMediaIndexes.size} / ${record.media.length}` : `${position} / ${record.media.length}`));
       actions.append(selectionHeading);
       const strip = node('div', 'stt-media-strip'); strip.setAttribute('role', 'group'); strip.setAttribute('aria-label', '选择媒体');
       record.media.forEach(media => {
-        const selected = media.index === this.selectedMediaIndex;
+        const selected = this.selectedMediaIndexes.has(media.index);
         const choice = node('button', 'stt-media-choice'); choice.type = 'button'; choice.dataset.sttAction = 'select-media';
         choice.dataset.sttMediaIndex = String(media.index); choice.dataset.sttFocusKey = `select-${media.index}`;
+        choice.disabled = this.batchDownloadMode !== undefined;
         choice.setAttribute('aria-pressed', String(selected));
         const label = media.type === 'photo' ? '照片' : media.type === 'animated_gif' ? 'GIF' : '视频';
-        choice.setAttribute('aria-label', `${label} ${media.index}`);
+        choice.setAttribute('aria-label', `${label} ${media.index}${selected ? '，已选中' : ''}`);
         const thumb = node('span', 'stt-media-thumb');
         thumb.append(icon(media.type === 'photo' ? 'photo' : 'video'));
         const url = thumbnailURL(media);
@@ -442,7 +457,7 @@ export class ShareEnhancerController {
         choice.append(thumb, node('span', 'stt-media-label', `${label} ${media.index}`)); strip.append(choice);
       });
       actions.append(strip);
-      const selected = record.media.find(media => media.index === this.selectedMediaIndex);
+      const selected = record.media.find(media => media.index === this.selectedMediaIndex) ?? record.media[0];
       if (selected) actions.append(this.createMediaAction(record, selected));
     }
     actions.append(this.createTextAction(record.media.length === 0));
@@ -487,6 +502,57 @@ export class ShareEnhancerController {
     return wrapper;
   }
 
+  private reconcileMediaSelection(record: TweetRecord): void {
+    const available = new Set(record.media.map(media => media.index));
+    for (const index of this.selectedMediaIndexes) {
+      if (!available.has(index)) this.selectedMediaIndexes.delete(index);
+    }
+    if (this.selectedMediaIndex !== undefined && !available.has(this.selectedMediaIndex)) {
+      this.selectedMediaIndex = undefined;
+    }
+    if (this.selectedMediaIndex === undefined && this.selectedMediaIndexes.size > 0) {
+      this.selectedMediaIndex = this.selectedMediaIndexes.values().next().value;
+    }
+    if (!this.mediaSelectionInitialized && record.media.length > 0) {
+      this.mediaSelectionInitialized = true;
+      this.selectedMediaIndex = this.selectedMediaIndex ?? record.media[0]?.index;
+      if (this.selectedMediaIndex !== undefined) this.selectedMediaIndexes.add(this.selectedMediaIndex);
+    }
+  }
+
+  private toggleMediaSelection(mediaIndex: number): void {
+    const record = this.currentRecord;
+    if (this.batchDownloadMode !== undefined || !record || !record.media.some(media => media.index === mediaIndex)) return;
+    if (this.selectedMediaIndexes.has(mediaIndex)) {
+      if (this.selectedMediaIndexes.size > 1) {
+        this.selectedMediaIndexes.delete(mediaIndex);
+        this.selectedMediaIndex = this.selectedMediaIndexes.values().next().value;
+      } else {
+        this.selectedMediaIndexes.delete(mediaIndex);
+        this.selectedMediaIndex = undefined;
+      }
+    } else {
+      this.selectedMediaIndexes.add(mediaIndex);
+      this.selectedMediaIndex = mediaIndex;
+    }
+    this.resetBatchDownloadStates();
+    this.renderActions(record);
+  }
+
+  private isBatchDownloading(): boolean {
+    return this.batchDownloadMode !== undefined;
+  }
+
+  private resetBatchDownloadStates(): void {
+    this.batchDownloadMode = undefined;
+    this.batchOriginalState = 'idle';
+    this.batchOriginalError = '';
+    this.batchFrameStates.top = 'idle';
+    this.batchFrameStates.bottom = 'idle';
+    this.batchFrameErrors.top = '';
+    this.batchFrameErrors.bottom = '';
+  }
+
   private async copyText(): Promise<void> {
     const record = this.currentRecord;
     if (!record || this.textActionState === 'loading') return;
@@ -516,48 +582,94 @@ export class ShareEnhancerController {
 
   private createMediaAction(record: TweetRecord, media: MediaRecord): HTMLElement {
     const wrapper = node('div', 'stt-media-action');
-    const state = this.mediaActionStates.get(media.index) ?? 'idle';
-    wrapper.dataset.state = state;
+    const noSelection = this.selectedMediaIndexes.size === 0;
+    const singleState = noSelection ? 'idle' : this.mediaActionStates.get(media.index) ?? 'idle';
+    const batch = this.selectedMediaIndexes.size > 1;
+    const selectedPhotos = record.media.some(candidate => this.selectedMediaIndexes.has(candidate.index) && candidate.type === 'photo');
+    const showFrameActions = noSelection || media.type === 'photo' || (batch && selectedPhotos);
+    wrapper.dataset.state = singleState;
     const photo = media.type === 'photo';
-    if (photo) {
+    if (showFrameActions) {
       const frameActions = node('div', 'stt-frame-direction-grid');
       for (const orientation of FRAME_ORIENTATIONS) {
-        const state = this.frameActionStates.get(this.frameActionKey(media.index, orientation)) ?? 'idle';
+        const state = noSelection
+          ? 'idle'
+          : batch
+          ? this.batchFrameStates[orientation]
+          : this.frameActionStates.get(this.frameActionKey(media.index, orientation)) ?? 'idle';
         const preferred = orientation === this.settings.frameOrientation;
-        const label = state === 'loading'
-          ? `正在制作${FRAME_ORIENTATION_LABELS[orientation]}画框…`
-          : state === 'success'
-            ? `再保存一张${FRAME_ORIENTATION_LABELS[orientation]}画框`
-            : state === 'error'
-              ? `重试${FRAME_ORIENTATION_LABELS[orientation]}画框`
-              : `保存${FRAME_ORIENTATION_LABELS[orientation]}画框`;
+        const direction = FRAME_ORIENTATION_LABELS[orientation];
+        const label = batch
+          ? state === 'loading'
+            ? '正在保存已选媒体…'
+            : state === 'success'
+              ? `再次保存已选媒体（带${direction}画框）`
+              : state === 'error'
+                ? `重试保存已选媒体（带${direction}画框）`
+                : `保存已选媒体（带${direction}画框）`
+          : state === 'loading'
+            ? `正在制作${direction}画框…`
+            : state === 'success'
+              ? `再保存一张${direction}画框`
+              : state === 'error'
+                ? `重试${direction}画框`
+                : `保存${direction}画框`;
         const frame = this.actionButton('frame-media', `frame-${media.index}-${orientation}`, label,
-          preferred ? '默认方向 · 一键保存' : '本次直接覆盖默认方向', 'frame', state, preferred);
+          batch ? '照片添加画框，视频和 GIF 原样保存' : preferred ? '默认方向 · 一键保存' : '本次直接覆盖默认方向',
+          'frame', state, preferred);
         frame.classList.add('stt-media-frame-button');
         frame.dataset.sttMediaIndex = String(media.index);
         frame.dataset.sttOrientation = orientation;
+        if (batch) frame.dataset.sttBatchMode = 'framed';
+        frame.disabled = frame.disabled || this.isBatchDownloading() || noSelection;
         frameActions.append(frame);
       }
       wrapper.append(frameActions);
-      const frameError = FRAME_ORIENTATIONS
-        .map(orientation => this.frameActionErrors.get(this.frameActionKey(media.index, orientation)))
-        .find(message => message);
-      if (frameError) wrapper.append(this.errorDetails('这次画框没能生成，请重试。', frameError));
+      const frameError = noSelection
+        ? undefined
+        : batch
+        ? FRAME_ORIENTATIONS.map(orientation => this.batchFrameErrors[orientation]).find(message => message)
+        : FRAME_ORIENTATIONS.map(orientation => this.frameActionErrors.get(this.frameActionKey(media.index, orientation))).find(message => message);
+      if (frameError) wrapper.append(this.errorDetails(batch ? '部分带画框媒体保存失败，请重试。' : '这次画框没能生成，请重试。', frameError));
     }
+    const state = batch ? this.batchOriginalState : singleState;
     const mediaLabel = photo ? '原图' : media.type === 'animated_gif' ? 'GIF 视频' : '视频';
-    const label = state === 'loading' ? '正在保存…' : state === 'success' ? `再次保存${mediaLabel}` : state === 'error' ? `重试保存${mediaLabel}` : `保存${mediaLabel}`;
-    const button = this.actionButton('download-media', `download-${media.index}`, label,
-      photo ? '不加画框，保留原始图片' : media.type === 'animated_gif' ? '以 MP4 格式保存，不转换成 .gif' : '以 MP4 格式保存',
-      'download', state, !photo);
-    button.dataset.sttMediaIndex = String(media.index);
+    const label = batch
+      ? state === 'loading'
+        ? '正在保存已选媒体…'
+        : state === 'success'
+          ? `再次保存已选媒体（${this.selectedMediaIndexes.size}）`
+          : state === 'error'
+            ? '重试保存已选媒体'
+            : `保存已选媒体（${this.selectedMediaIndexes.size}）`
+      : state === 'loading' ? '正在保存…' : state === 'success' ? `再次保存${mediaLabel}` : state === 'error' ? `重试保存${mediaLabel}` : `保存${mediaLabel}`;
+    const button = this.actionButton(
+      batch ? 'download-selected' : 'download-media',
+      batch ? 'download-selected-original' : `download-${media.index}`,
+      label,
+      batch ? '照片、视频和 GIF 均按原始媒体保存' : photo ? '不加画框，保留原始图片' : media.type === 'animated_gif' ? '以 MP4 格式保存，不转换成 .gif' : '以 MP4 格式保存',
+      'download',
+      state,
+      batch || !photo
+    );
+    button.disabled = button.disabled || this.isBatchDownloading() || noSelection;
+    if (batch) button.dataset.sttBatchMode = 'original';
+    else button.dataset.sttMediaIndex = String(media.index);
     let filename = '';
-    try { filename = buildMediaFilename(record, media, this.settings.filenameTemplate); }
-    catch (error) {
-      button.disabled = true;
-      wrapper.append(this.errorDetails('请先检查设置中的文件名模板。', error instanceof Error ? error.message : String(error)));
+    if (!noSelection) {
+      try { filename = buildMediaFilename(record, media, this.settings.filenameTemplate); }
+      catch (error) {
+        button.disabled = true;
+        wrapper.append(this.errorDetails('请先检查设置中的文件名模板。', error instanceof Error ? error.message : String(error)));
+      }
     }
     wrapper.append(button);
-    if (state === 'error') wrapper.append(this.errorDetails('没能保存，请检查网络后重试。', this.mediaActionErrors.get(media.index) ?? ''));
+    if (state === 'error') {
+      wrapper.append(this.errorDetails(
+        batch ? '部分原始媒体保存失败，请重试。' : '没能保存，请检查网络后重试。',
+        batch ? this.batchOriginalError : this.mediaActionErrors.get(media.index) ?? ''
+      ));
+    }
     if (filename) {
       const details = node('details', 'stt-file-details'); details.append(node('summary', '', '查看保存文件名'));
       const list = node('dl', ''); list.append(node('dt', '', photo ? '原图' : '视频'), node('dd', '', filename));
@@ -611,6 +723,83 @@ export class ShareEnhancerController {
       this.setSheetStatus('error', '这次没能保存，请在下方查看详情后重试。');
       console.error('分享有据 · Share This Tweet: failed to download media', error);
     }
+  }
+
+  private async saveSelectedMedia(mode: BatchDownloadMode, orientation?: FrameOrientation): Promise<void> {
+    const record = this.currentRecord;
+    const selected = record?.media.filter(media => this.selectedMediaIndexes.has(media.index)) ?? [];
+    if (mode === 'framed' && !orientation) return;
+    const frameOrientation = orientation ?? this.settings.frameOrientation;
+    const state = mode === 'original' ? this.batchOriginalState : this.batchFrameStates[frameOrientation];
+    if (!record || selected.length < 2 || this.batchDownloadMode !== undefined || state === 'loading') return;
+
+    const tweetId = record.tweetId;
+    const epoch = this.recordRequestId;
+    const failures: string[] = [];
+    this.batchDownloadMode = mode;
+    if (mode === 'original') {
+      this.batchOriginalState = 'loading';
+      this.batchOriginalError = '';
+    } else {
+      this.batchFrameStates[frameOrientation] = 'loading';
+      this.batchFrameErrors[frameOrientation] = '';
+    }
+    this.renderActions(record);
+
+    for (const [index, media] of selected.entries()) {
+      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      try {
+        if (mode === 'framed' && media.type === 'photo') {
+          const filename = buildFrameFilename(record, media, this.settings.filenameTemplate);
+          const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate, frameOrientation);
+          downloadBlob(blob, filename);
+          const actionKey = this.frameActionKey(media.index, frameOrientation);
+          this.frameActionStates.set(actionKey, 'success');
+          this.frameActionErrors.delete(actionKey);
+        } else {
+          const filename = buildMediaFilename(record, media, this.settings.filenameTemplate);
+          await downloadMediaFile(media, filename);
+          this.mediaActionStates.set(media.index, 'success');
+          this.mediaActionErrors.delete(media.index);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`第 ${media.index} 项：${message}`);
+        if (mode === 'framed' && media.type === 'photo') {
+          const actionKey = this.frameActionKey(media.index, frameOrientation);
+          this.frameActionStates.set(actionKey, 'error');
+          this.frameActionErrors.set(actionKey, message);
+        } else {
+          this.mediaActionStates.set(media.index, 'error');
+          this.mediaActionErrors.set(media.index, message);
+        }
+      }
+      this.renderActions(record);
+      this.setSheetStatus('loading', `正在保存${mode === 'framed' ? '带画框的' : ''}已选媒体（${index + 1}/${selected.length}）…`);
+    }
+
+    if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+    this.batchDownloadMode = undefined;
+    if (failures.length > 0) {
+      if (mode === 'original') {
+        this.batchOriginalState = 'error';
+        this.batchOriginalError = failures.join('；');
+      } else {
+        this.batchFrameStates[frameOrientation] = 'error';
+        this.batchFrameErrors[frameOrientation] = failures.join('；');
+      }
+      this.renderActions(record);
+      this.setSheetStatus('error', `${failures.length} 项媒体保存失败，请查看详情后重试。`);
+      console.error(`分享有据 · Share This Tweet: failed to download selected ${mode} media`, failures);
+      return;
+    }
+
+    if (mode === 'original') this.batchOriginalState = 'success';
+    else this.batchFrameStates[frameOrientation] = 'success';
+    this.renderActions(record);
+    this.setSheetStatus('ready', mode === 'framed'
+      ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${FRAME_ORIENTATION_LABELS[frameOrientation]}画框，视频和 GIF 原样保存。`
+      : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`);
   }
 
   private frameActionKey(mediaIndex: number, orientation: FrameOrientation): string {
@@ -719,6 +908,9 @@ export class ShareEnhancerController {
     this.trigger = undefined;
     this.currentRecord = undefined;
     this.selectedMediaIndex = undefined;
+    this.selectedMediaIndexes.clear();
+    this.mediaSelectionInitialized = false;
+    this.resetBatchDownloadStates();
     this.recordRequestId += 1;
     this.mediaActionStates.clear();
     this.mediaActionErrors.clear();
