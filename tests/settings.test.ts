@@ -1,0 +1,21 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, normalizeSettings } from '../src/shared/settings.js';
+
+describe('normalizeSettings', () => {
+  it('keeps valid templates and fills missing values with defaults', () => {
+    const settings = normalizeSettings({
+      [SETTINGS_STORAGE_KEY]: { filenameTemplate: 'photo_{tweet.id}.png' }
+    });
+
+    expect(settings.filenameTemplate).toBe('photo_{tweet.id}.png');
+    expect(settings.frameTemplate).toBe(DEFAULT_SETTINGS.frameTemplate);
+    expect(settings.textTemplate).toBe(DEFAULT_SETTINGS.textTemplate);
+  });
+
+  it('rejects empty and malformed stored settings without breaking defaults', () => {
+    expect(normalizeSettings({
+      [SETTINGS_STORAGE_KEY]: { filenameTemplate: '', frameTemplate: 42 }
+    })).toEqual(DEFAULT_SETTINGS);
+    expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS);
+  });
+});

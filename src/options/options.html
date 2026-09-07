@@ -10,7 +10,41 @@
     <main>
       <h1>Share This Tweet</h1>
       <form data-settings-form>
-        <p>v0.1 设置界面将在模板功能实现时加入。</p>
+        <p class="intro">设置文件名、画框左栏和复制文本使用的模板。普通文字可以直接填写，占位符使用花括号。</p>
+
+        <label>
+          文件名模板
+          <input name="filenameTemplate" data-setting="filenameTemplate" spellcheck="false">
+          <span class="field-help">示例：X_{author.handle}_t{tweet.id}_m{media.index}.{extension}</span>
+          <span class="field-error" data-error="filenameTemplate"></span>
+        </label>
+
+        <label>
+          画框左栏模板
+          <input name="frameTemplate" data-setting="frameTemplate" spellcheck="false">
+          <span class="field-help">支持普通文字；默认使用作者显示名称。</span>
+          <span class="field-error" data-error="frameTemplate"></span>
+        </label>
+
+        <label>
+          复制文本模板
+          <textarea name="textTemplate" data-setting="textTemplate" rows="5" spellcheck="false"></textarea>
+          <span class="field-help">支持换行；默认包含正文、作者、原文链接和 Tweet ID。</span>
+          <span class="field-error" data-error="textTemplate"></span>
+        </label>
+
+        <section class="preview" aria-labelledby="preview-title">
+          <h2 id="preview-title">示例预览</h2>
+          <p><strong>文件名：</strong><code data-preview="filename"></code></p>
+          <p><strong>画框左栏：</strong><code data-preview="frame"></code></p>
+          <pre data-preview="text"></pre>
+        </section>
+
+        <div class="actions">
+          <button type="submit">保存设置</button>
+          <button type="button" data-reset>恢复默认值</button>
+          <output data-status role="status"></output>
+        </div>
       </form>
     </main>
     <script src="./options.js"></script>

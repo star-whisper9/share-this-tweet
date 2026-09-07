@@ -4,6 +4,7 @@ import { renderPhotoFrame } from '../core/frame.js';
 import { copyTweetText } from '../core/text-export.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
+import { DEFAULT_SETTINGS, loadSettings, type ExtensionSettings } from '../shared/settings.js';
 import { TweetSource } from './tweet-source.js';
 
 const ROUTE_CHANGE_EVENT = 'share-this-tweet:route-change';
@@ -32,6 +33,7 @@ export class ShareEnhancerController {
   private readonly frameActionErrors = new Map<number, string>();
   private textActionState: MediaActionState = 'idle';
   private textActionError = '';
+  private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
   private unsubscribeTweetSource?: () => void;
 
   constructor(private readonly tweetSource: TweetSource) {}
@@ -61,6 +63,17 @@ export class ShareEnhancerController {
     });
     document.addEventListener('keydown', this.onKeyDown);
     this.sync();
+    void this.loadSettings();
+  }
+
+  private async loadSettings(): Promise<void> {
+    try {
+      this.settings = await loadSettings();
+      if (this.currentRecord) this.renderActions(this.currentRecord);
+    } catch (error) {
+      console.error('Share This Tweet: failed to load settings', error);
+      this.setSheetStatus('error', '设置读取失败，当前使用默认模板。');
+    }
   }
 
   stop(): void {
@@ -377,7 +390,7 @@ export class ShareEnhancerController {
     this.setSheetStatus('loading', '正在复制推文文本…');
 
     try {
-      await copyTweetText(record);
+      await copyTweetText(record, this.settings.textTemplate);
       if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
       this.textActionState = 'success';
       this.renderActions(record);
@@ -415,7 +428,7 @@ export class ShareEnhancerController {
 
     const detail = document.createElement('span');
     try {
-      detail.textContent = `文件名：${buildMediaFilename(record, media)}`;
+      detail.textContent = `文件名：${buildMediaFilename(record, media, this.settings.filenameTemplate)}`;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       button.disabled = true;
@@ -455,7 +468,7 @@ export class ShareEnhancerController {
 
     let filename: string;
     try {
-      filename = buildMediaFilename(record, media);
+      filename = buildMediaFilename(record, media, this.settings.filenameTemplate);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.mediaActionStates.set(mediaIndex, 'error');
@@ -497,7 +510,7 @@ export class ShareEnhancerController {
 
     let filename: string;
     try {
-      filename = buildFrameFilename(record, media);
+      filename = buildFrameFilename(record, media, this.settings.filenameTemplate);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.frameActionStates.set(mediaIndex, 'error');
@@ -514,7 +527,7 @@ export class ShareEnhancerController {
     this.setSheetStatus('loading', `正在生成第 ${media.index} 项画框…`);
 
     try {
-      const blob = await renderPhotoFrame(record, media);
+      const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate);
       downloadBlob(blob, filename);
       if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
       this.frameActionStates.set(mediaIndex, 'success');

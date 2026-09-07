@@ -1,6 +1,9 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+  --border: color-mix(in srgb, CanvasText 20%, transparent);
+  --muted: color-mix(in srgb, CanvasText 65%, transparent);
+  --surface: color-mix(in srgb, Canvas 94%, CanvasText 6%);
 }
 
 body {
@@ -13,4 +16,98 @@ body {
 main {
   max-width: 48rem;
   margin: 0 auto;
+}
+
+.intro,
+.field-help,
+.field-error,
+output {
+  color: var(--muted);
+}
+
+form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+label {
+  display: grid;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: CanvasText;
+  background: Canvas;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.field-help,
+.field-error {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.field-error {
+  min-height: 1.25rem;
+  color: #b42318;
+}
+
+.preview {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.preview h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.preview p {
+  overflow-wrap: anywhere;
+}
+
+.preview pre {
+  padding: 0.75rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: Canvas;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: CanvasText;
+  background: ButtonFace;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
