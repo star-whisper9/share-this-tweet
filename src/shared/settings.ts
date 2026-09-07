@@ -29,7 +29,7 @@ function readTemplate(value: unknown, fallback: string): string {
 }
 
 function readOrientation(value: unknown): FrameOrientation {
-  return value === 'top' || value === 'bottom' || value === 'left' || value === 'right'
+  return value === 'top' || value === 'bottom'
     ? value
     : DEFAULT_SETTINGS.frameOrientation;
 }

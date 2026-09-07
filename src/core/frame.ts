@@ -3,9 +3,9 @@ import { normalizeHandle } from '../shared/model.js';
 import { parseTemplate, renderTemplate } from './template.js';
 
 export const DEFAULT_FRAME_TEMPLATE = '{author.name}';
-export type FrameOrientation = 'top' | 'bottom' | 'left' | 'right';
+export type FrameOrientation = 'top' | 'bottom';
 export const DEFAULT_FRAME_ORIENTATION: FrameOrientation = 'bottom';
-export const FRAME_ORIENTATIONS: FrameOrientation[] = ['top', 'bottom', 'left', 'right'];
+export const FRAME_ORIENTATIONS: FrameOrientation[] = ['top', 'bottom'];
 const FRAME_AVATAR_MARKER = '\uE000';
 const FRAME_FONT_FAMILY = '"SF Pro Display", "Helvetica Neue", system-ui, sans-serif';
 const FRAME_BACKGROUND = '#fbfaf7';
@@ -17,7 +17,6 @@ export interface FrameTextMeasurement {
 
 export interface FrameLayoutInput extends FrameTextMeasurement {
   width: number;
-  height?: number;
   userText: string;
   sourceLines: string[];
   fontSize?: number;
@@ -38,11 +37,6 @@ export interface FrameLayout {
   leftLines: string[];
   rightLines: string[];
   barHeight: number;
-  frameWidth: number;
-  frameHeight: number;
-  userColumns: string[];
-  sourceColumns: string[];
-  columnWidth: number;
 }
 
 export function wrapFrameText(
@@ -71,22 +65,6 @@ export function wrapFrameText(
   return lines;
 }
 
-export function wrapVerticalText(text: string, maxHeight: number, lineHeight: number): string[] {
-  const maxCharacters = Math.max(1, Math.floor(maxHeight / lineHeight));
-  const columns: string[] = [];
-  for (const paragraph of text.split(/\r?\n/)) {
-    if (paragraph.length === 0) {
-      columns.push('');
-      continue;
-    }
-    const characters = [...paragraph];
-    for (let index = 0; index < characters.length; index += maxCharacters) {
-      columns.push(characters.slice(index, index + maxCharacters).join(''));
-    }
-  }
-  return columns;
-}
-
 function getMaxTextWidth(lines: string[], measureText: FrameTextMeasurement['measureText']): number {
   return Math.max(0, ...lines.map((line) => measureText(line).width));
 }
@@ -98,36 +76,6 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
   const paddingX = Math.max(16, Math.round(input.width * 0.04));
   const paddingY = Math.max(12, Math.round(fontSize * 0.55));
   const gap = Math.max(16, Math.round(input.width * 0.03));
-
-  if (orientation === 'left' || orientation === 'right') {
-    const height = input.height ?? input.width;
-    const verticalTextHeight = Math.max(1, height - paddingY * 2);
-    const userColumns = wrapVerticalText(input.userText, verticalTextHeight, lineHeight);
-    const sourceColumns = input.sourceLines.flatMap((line) => wrapVerticalText(line, verticalTextHeight, lineHeight));
-    const columnWidth = Math.max(fontSize * 1.4, lineHeight);
-    const columnGap = sourceColumns.length > 0 ? gap : 0;
-    const frameWidth = paddingX * 2 + (userColumns.length + sourceColumns.length) * columnWidth + columnGap;
-    return {
-      orientation,
-      mode: 'single',
-      width: input.width,
-      fontSize,
-      lineHeight,
-      paddingX,
-      paddingY,
-      gap,
-      leftWidth: 0,
-      rightWidth: 0,
-      leftLines: [],
-      rightLines: [],
-      barHeight: 0,
-      frameWidth,
-      frameHeight: height,
-      userColumns,
-      sourceColumns,
-      columnWidth
-    };
-  }
 
   const availableWidth = Math.max(1, input.width - paddingX * 2);
   const sourceWidth = getMaxTextWidth(input.sourceLines, input.measureText);
@@ -151,12 +99,7 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
       rightWidth: sourceWidth,
       leftLines,
       rightLines,
-      barHeight: paddingY * 2 + lineHeight * Math.max(leftLines.length, rightLines.length),
-      frameWidth: input.width,
-      frameHeight: paddingY * 2 + lineHeight * Math.max(leftLines.length, rightLines.length),
-      userColumns: [],
-      sourceColumns: [],
-      columnWidth: 0
+      barHeight: paddingY * 2 + lineHeight * Math.max(leftLines.length, rightLines.length)
     };
   }
 
@@ -177,12 +120,7 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
     rightWidth: 0,
     leftLines,
     rightLines: [],
-    barHeight: paddingY * 2 + lineHeight * leftLines.length,
-    frameWidth: input.width,
-    frameHeight: paddingY * 2 + lineHeight * leftLines.length,
-    userColumns: [],
-    sourceColumns: [],
-    columnWidth: 0
+    barHeight: paddingY * 2 + lineHeight * leftLines.length
   };
 }
 
@@ -298,29 +236,6 @@ function drawHorizontalTextLine(
   }
 }
 
-function drawVerticalColumn(
-  context: CanvasRenderingContext2D,
-  column: string,
-  x: number,
-  top: number,
-  lineHeight: number,
-  fontSize: number,
-  avatarImage?: HTMLImageElement
-): void {
-  [...column].forEach((character, index) => {
-    const y = top + (index + 0.5) * lineHeight;
-    if (character === FRAME_AVATAR_MARKER) {
-      const size = fontSize * 1.25;
-      const left = x - size / 2;
-      const avatarTop = y - size / 2;
-      if (avatarImage) context.drawImage(avatarImage, left, avatarTop, size, size);
-      else drawAvatarFallback(context, left, avatarTop, size);
-    } else {
-      context.fillText(character, x, y);
-    }
-  });
-}
-
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -353,7 +268,6 @@ export async function renderPhotoFrame(
   context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
   const layout = calculateFrameLayout({
     width: image.naturalWidth,
-    height: image.naturalHeight,
     userText,
     sourceLines,
     fontSize,
@@ -361,18 +275,12 @@ export async function renderPhotoFrame(
     measureText: createFrameTextMeasurer(context, fontSize)
   });
 
-  const horizontal = orientation === 'top' || orientation === 'bottom';
-  canvas.width = horizontal ? image.naturalWidth : image.naturalWidth + layout.frameWidth;
-  canvas.height = horizontal ? image.naturalHeight + layout.barHeight : image.naturalHeight;
-  const imageX = orientation === 'left' ? layout.frameWidth : 0;
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight + layout.barHeight;
   const imageY = orientation === 'top' ? layout.barHeight : 0;
-  context.drawImage(image, imageX, imageY, image.naturalWidth, image.naturalHeight);
+  context.drawImage(image, 0, imageY, image.naturalWidth, image.naturalHeight);
   context.fillStyle = FRAME_BACKGROUND;
-  if (horizontal) {
-    context.fillRect(0, orientation === 'top' ? 0 : image.naturalHeight, canvas.width, layout.barHeight);
-  } else {
-    context.fillRect(orientation === 'left' ? 0 : image.naturalWidth, 0, layout.frameWidth, canvas.height);
-  }
+  context.fillRect(0, orientation === 'top' ? 0 : image.naturalHeight, canvas.width, layout.barHeight);
   context.fillStyle = '#1f2933';
   context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
   // Each line occupies a fixed-height cell. Centering the glyph in that cell
@@ -380,15 +288,7 @@ export async function renderPhotoFrame(
   // of the font's ascent/descent metrics.
   context.textBaseline = 'middle';
 
-  if (!horizontal) {
-    const frameX = orientation === 'left' ? 0 : image.naturalWidth;
-    const columns = [...layout.userColumns, ...layout.sourceColumns];
-    context.textAlign = 'center';
-    columns.forEach((column, columnIndex) => {
-      const x = frameX + layout.paddingX + columnIndex * layout.columnWidth + layout.columnWidth / 2;
-      drawVerticalColumn(context, column, x, layout.paddingY, layout.lineHeight, layout.fontSize, avatarImage);
-    });
-  } else if (layout.mode === 'double') {
+  if (layout.mode === 'double') {
     const frameY = orientation === 'top' ? 0 : image.naturalHeight;
     context.textAlign = 'left';
     layout.leftLines.forEach((line, index) => {
@@ -412,13 +312,8 @@ export async function renderPhotoFrame(
   context.globalAlpha = 1;
   context.strokeStyle = FRAME_BORDER;
   context.lineWidth = 1;
-  if (horizontal) {
-    const frameY = orientation === 'top' ? 0 : image.naturalHeight;
-    context.strokeRect(0.5, frameY + 0.5, canvas.width - 1, layout.barHeight - 1);
-  } else {
-    const frameX = orientation === 'left' ? 0 : image.naturalWidth;
-    context.strokeRect(frameX + 0.5, 0.5, layout.frameWidth - 1, canvas.height - 1);
-  }
+  const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+  context.strokeRect(0.5, frameY + 0.5, canvas.width - 1, layout.barHeight - 1);
 
   const result = await canvasToBlob(canvas);
   image.remove();

@@ -13,7 +13,7 @@ const SHEET_ID = 'stt-bottom-sheet';
 
 type MediaActionState = 'idle' | 'loading' | 'success' | 'error';
 type IconName = 'share' | 'close' | 'frame' | 'download' | 'copy' | 'photo' | 'video' | 'check' | 'arrow';
-const FRAME_ORIENTATION_LABELS: Record<FrameOrientation, string> = { top: '上方', bottom: '下方', left: '左侧', right: '右侧' };
+const FRAME_ORIENTATION_LABELS: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
 const ICON_PATHS: Record<IconName, string> = {
   share: 'M13 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M4 16h16M15 3h6v6M21 3l-8 8',
   close: 'M6 6l12 12M18 6L6 18', frame: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16h18M7 12l3-3 4 4 3-3 4 4',
@@ -395,7 +395,7 @@ export class ShareEnhancerController {
       else if (action === 'download-media') void this.saveMedia(index);
       else if (action === 'frame-media') {
         const orientation = target.dataset.sttOrientation;
-        if (orientation === 'top' || orientation === 'bottom' || orientation === 'left' || orientation === 'right') {
+        if (orientation === 'top' || orientation === 'bottom') {
           void this.generateFrame(index, orientation);
         }
       }

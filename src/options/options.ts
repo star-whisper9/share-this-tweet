@@ -12,7 +12,7 @@ type Tab = 'frame' | 'filename' | 'text';
 interface Preset { label: string; description: string; value?: string }
 const keys: SettingKey[] = ['frameTemplate', 'filenameTemplate', 'textTemplate'];
 const fieldTabs: Record<SettingKey, Tab> = { frameTemplate: 'frame', filenameTemplate: 'filename', textTemplate: 'text' };
-const frameOrientations: FrameOrientation[] = ['top', 'bottom', 'left', 'right'];
+const frameOrientations: FrameOrientation[] = ['top', 'bottom'];
 const form = document.querySelector<HTMLFormElement>('[data-settings-form]');
 const status = document.querySelector<HTMLOutputElement>('[data-status]');
 const editable = document.querySelector<HTMLFieldSetElement>('[data-editable]');

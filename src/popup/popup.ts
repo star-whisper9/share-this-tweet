@@ -8,7 +8,7 @@ function shorten(value: string, maxLength = 42): string {
 }
 
 function orientationLabel(value: string): string {
-  return ({ top: '上', bottom: '下', left: '左', right: '右' } as Record<string, string>)[value] ?? '下';
+  return ({ top: '上', bottom: '下' } as Record<string, string>)[value] ?? '下';
 }
 
 function showError(message: string): void {

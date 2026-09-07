@@ -22,13 +22,10 @@
         /></span>
         <span>分享有据 · Share This Tweet</span>
       </a>
-      <span class="header-label">分享偏好</span>
     </header>
     <main>
       <header class="page-heading">
-        <p class="eyebrow">为每次分享，留一份出处</p>
         <h1>按你喜欢的方式分享<span class="heading-dot">。</span></h1>
-        <p class="page-description">画框左侧文字可以自定义；右侧 Tweet ID 和 @handle 会固定保留，作为来源溯源信息。</p>
       </header>
       <form data-settings-form novalidate>
         <div class="load-error" data-load-error hidden role="alert">
@@ -95,7 +92,7 @@
                 <span class="step-number">01</span>
                 <div>
                   <h2>让照片自带出处</h2>
-                  <p>在照片底部加一行署名，发出去就不必另作说明。</p>
+                  <p>在照片顶部或底部加一行署名，发出去就不必另作说明。</p>
                 </div>
               </div>
               <p class="field-label" id="frame-presets-label">画框左侧怎么写</p>
@@ -105,14 +102,33 @@
                 role="group"
                 aria-labelledby="frame-presets-label"
               ></div>
-              <p class="field-label frame-orientation-label" id="frame-orientation-label">默认画框方向</p>
-              <div class="frame-orientation-grid" data-frame-orientation-options role="group" aria-labelledby="frame-orientation-label">
-                <button type="button" data-frame-orientation="top" aria-pressed="false"><span aria-hidden="true">↑</span><strong>上</strong></button>
-                <button type="button" data-frame-orientation="bottom" aria-pressed="true"><span aria-hidden="true">↓</span><strong>下</strong></button>
-                <button type="button" data-frame-orientation="left" aria-pressed="false"><span aria-hidden="true">←</span><strong>左</strong></button>
-                <button type="button" data-frame-orientation="right" aria-pressed="false"><span aria-hidden="true">→</span><strong>右</strong></button>
+              <p
+                class="field-label frame-orientation-label"
+                id="frame-orientation-label"
+              >
+                默认画框方向
+              </p>
+              <div
+                class="frame-orientation-grid"
+                data-frame-orientation-options
+                role="group"
+                aria-labelledby="frame-orientation-label"
+              >
+                <button
+                  type="button"
+                  data-frame-orientation="top"
+                  aria-pressed="false"
+                >
+                  <span aria-hidden="true">↑</span><strong>上</strong>
+                </button>
+                <button
+                  type="button"
+                  data-frame-orientation="bottom"
+                  aria-pressed="true"
+                >
+                  <span aria-hidden="true">↓</span><strong>下</strong>
+                </button>
               </div>
-              <p class="field-help orientation-help">设置默认方向。保存单张照片时，也可以在操作区直接点击其他方向覆盖本次选择。</p>
               <details class="template-editor" data-editor="frameTemplate">
                 <summary>
                   <span>自定义文字与变量</span
@@ -124,9 +140,7 @@
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
                 <div class="template-editor-body">
-                  <label for="frame-template"
-                    >画框左侧模板 <span>右侧溯源信息固定保留</span></label
-                  >
+                  <label for="frame-template">画框左侧模板</label>
                   <input
                     id="frame-template"
                     name="frameTemplate"
@@ -136,7 +150,8 @@
                     aria-describedby="frame-help frame-error"
                   />
                   <p class="field-help" id="frame-help">
-                    这里只编辑画框左侧文字。右侧的 Tweet ID 和 @handle 不提供修改，始终用于保留出处。
+                    这里只编辑画框左侧文字。右侧的 Tweet ID 和 @handle
+                    不提供修改，始终用于保留出处。
                   </p>
                   <div
                     class="token-list"
@@ -151,10 +166,6 @@
                   ></p>
                 </div>
               </details>
-              <div class="quiet-note">
-                <span aria-hidden="true">↗</span>
-                <p>画框是照片的另一份副本。左侧内容可改，右侧 Tweet ID 和 @handle 会固定添加；保存原图时不会添加画框。</p>
-              </div>
             </div>
             <aside
               class="settings-preview frame-preview"
@@ -183,7 +194,8 @@
                 </div>
               </div>
               <p class="preview-description">
-                左侧为模板预览；右侧 Tweet ID 和 @handle 为固定溯源信息，画框排版仅供示意。
+                左侧为模板预览；右侧 Tweet ID 和 @handle
+                为固定溯源信息，画框排版仅供示意。
               </p>
             </aside>
           </section>
@@ -230,11 +242,8 @@
                     data-setting="filenameTemplate"
                     spellcheck="false"
                     autocomplete="off"
-                    aria-describedby="filename-help filename-error"
+                    aria-describedby="filename-error"
                   />
-                  <p class="field-help" id="filename-help">
-                    建议保留推文 ID，日后还能找到这条推文。
-                  </p>
                   <div
                     class="token-list"
                     data-tokens="filenameTemplate"
@@ -248,12 +257,6 @@
                   ></p>
                 </div>
               </details>
-              <div class="quiet-note">
-                <span aria-hidden="true">↗</span>
-                <p>
-                  文件名适合自己归档；分享给别人时，画框里的出处更容易看到。
-                </p>
-              </div>
             </div>
             <aside
               class="settings-preview file-preview"
@@ -325,11 +328,8 @@
                     data-setting="textTemplate"
                     rows="6"
                     spellcheck="false"
-                    aria-describedby="text-help text-error"
+                    aria-describedby="text-error"
                   ></textarea>
-                  <p class="field-help" id="text-help">
-                    支持换行。点下方变量插入正文或出处，按自己的习惯安排顺序。
-                  </p>
                   <div
                     class="token-list"
                     data-tokens="textTemplate"
@@ -343,12 +343,6 @@
                   ></p>
                 </div>
               </details>
-              <div class="quiet-note">
-                <span aria-hidden="true">↗</span>
-                <p>
-                  复制的内容由这里的模板决定。自定义时，记得留下一条来源线索。
-                </p>
-              </div>
             </div>
             <aside
               class="settings-preview text-preview"
