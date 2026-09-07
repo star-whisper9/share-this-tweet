@@ -1,5 +1,6 @@
-import { buildMediaFilename } from '../core/filename.js';
-import { downloadMedia as downloadMediaFile } from '../core/download.js';
+import { buildFrameFilename, buildMediaFilename } from '../core/filename.js';
+import { downloadBlob, downloadMedia as downloadMediaFile } from '../core/download.js';
+import { renderPhotoFrame } from '../core/frame.js';
 import { copyTweetText } from '../core/text-export.js';
 import { getTweetIdFromPath } from '../shared/model.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
@@ -27,6 +28,8 @@ export class ShareEnhancerController {
   private currentRecord?: TweetRecord;
   private readonly mediaActionStates = new Map<number, MediaActionState>();
   private readonly mediaActionErrors = new Map<number, string>();
+  private readonly frameActionStates = new Map<number, MediaActionState>();
+  private readonly frameActionErrors = new Map<number, string>();
   private textActionState: MediaActionState = 'idle';
   private textActionError = '';
   private unsubscribeTweetSource?: () => void;
@@ -302,6 +305,11 @@ export class ShareEnhancerController {
       if (target.dataset.sttAction === 'download-media') {
         const mediaIndex = Number(target.dataset.sttMediaIndex);
         if (Number.isInteger(mediaIndex)) void this.saveMedia(mediaIndex);
+        return;
+      }
+      if (target.dataset.sttAction === 'frame-media') {
+        const mediaIndex = Number(target.dataset.sttMediaIndex);
+        if (Number.isInteger(mediaIndex)) void this.generateFrame(mediaIndex);
       }
     });
     actions.append(
@@ -322,14 +330,17 @@ export class ShareEnhancerController {
 
     actions.replaceChildren();
     if (record.media.length === 0) {
-      actions.append(this.createDisabledAction('保存媒体', '当前推文没有可保存的照片或视频。'));
+      actions.append(
+        this.createDisabledAction('保存媒体', '当前推文没有可保存的照片或视频。'),
+        this.createDisabledAction('生成画框图片', '当前推文没有可生成画框的照片。')
+      );
     } else {
       for (const media of record.media) actions.append(this.createMediaAction(record, media));
+      if (!record.media.some((media) => media.type === 'photo')) {
+        actions.append(this.createDisabledAction('生成画框图片', '画框只支持照片。'));
+      }
     }
-    actions.append(
-      this.createDisabledAction('生成画框图片', '画框生成将在后续阶段接入。'),
-      this.createTextAction()
-    );
+    actions.append(this.createTextAction());
   }
 
   private createTextAction(): HTMLElement {
@@ -413,8 +424,26 @@ export class ShareEnhancerController {
     const errorMessage = this.mediaActionErrors.get(media.index);
     if (state === 'error' && errorMessage) detail.textContent = `保存失败：${errorMessage}`;
 
-    wrapper.append(button, detail);
+    const controls = document.createElement('div');
+    controls.className = 'stt-media-controls';
+    controls.append(button);
+    if (media.type === 'photo') controls.append(this.createFrameButton(media.index));
+    wrapper.append(controls, detail);
     return wrapper;
+  }
+
+  private createFrameButton(mediaIndex: number): HTMLButtonElement {
+    const state = this.frameActionStates.get(mediaIndex) ?? 'idle';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'stt-media-frame-button';
+    button.dataset.sttAction = 'frame-media';
+    button.dataset.sttMediaIndex = String(mediaIndex);
+    button.disabled = state === 'loading';
+    button.textContent = state === 'loading'
+      ? '生成中…'
+      : state === 'success' ? '再次画框' : state === 'error' ? '重试画框' : '生成画框';
+    return button;
   }
 
   private async saveMedia(mediaIndex: number): Promise<void> {
@@ -456,6 +485,49 @@ export class ShareEnhancerController {
       this.renderActions(record);
       this.setSheetStatus('error', `媒体保存失败：${message}`);
       console.error('Share This Tweet: failed to download media', error);
+    }
+  }
+
+  private async generateFrame(mediaIndex: number): Promise<void> {
+    const record = this.currentRecord;
+    const media = record?.media.find((candidate) => candidate.index === mediaIndex);
+    if (!record || !media || media.type !== 'photo') return;
+    const state = this.frameActionStates.get(mediaIndex) ?? 'idle';
+    if (state === 'loading') return;
+
+    let filename: string;
+    try {
+      filename = buildFrameFilename(record, media);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.frameActionStates.set(mediaIndex, 'error');
+      this.frameActionErrors.set(mediaIndex, message);
+      this.renderActions(record);
+      this.setSheetStatus('error', `画框生成失败：${message}`);
+      return;
+    }
+
+    const tweetId = record.tweetId;
+    this.frameActionStates.set(mediaIndex, 'loading');
+    this.frameActionErrors.delete(mediaIndex);
+    this.renderActions(record);
+    this.setSheetStatus('loading', `正在生成第 ${media.index} 项画框…`);
+
+    try {
+      const blob = await renderPhotoFrame(record, media);
+      downloadBlob(blob, filename);
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      this.frameActionStates.set(mediaIndex, 'success');
+      this.renderActions(record);
+      this.setSheetStatus('ready', `画框已生成：${filename}`);
+    } catch (error) {
+      if (this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.frameActionStates.set(mediaIndex, 'error');
+      this.frameActionErrors.set(mediaIndex, message);
+      this.renderActions(record);
+      this.setSheetStatus('error', `画框生成失败：${message}`);
+      console.error('Share This Tweet: failed to render photo frame', error);
     }
   }
 
@@ -548,6 +620,8 @@ export class ShareEnhancerController {
     this.currentRecord = undefined;
     this.mediaActionStates.clear();
     this.mediaActionErrors.clear();
+    this.frameActionStates.clear();
+    this.frameActionErrors.clear();
     this.textActionState = 'idle';
     this.textActionError = '';
     this.currentTweetId = undefined;

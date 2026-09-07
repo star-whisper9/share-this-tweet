@@ -36,6 +36,21 @@ async function downloadOnAndroid(url: string, filename: string): Promise<void> {
   }
 }
 
+export function downloadBlob(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = 'noreferrer';
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  window.setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  }, 1000);
+}
+
 export async function downloadMedia(media: MediaRecord, filename: string): Promise<void> {
   const { url } = getMediaDownloadTarget(media);
   if (isAndroidUserAgent(navigator.userAgent)) {

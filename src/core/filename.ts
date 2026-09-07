@@ -38,3 +38,16 @@ export function buildMediaFilename(
   });
   return forceExtension(sanitizeFilename(rendered), target.extension);
 }
+
+export function buildFrameFilename(
+  record: TweetRecord,
+  media: MediaRecord,
+  template = DEFAULT_FILENAME_TEMPLATE
+): string {
+  const rendered = renderTemplate(template, {
+    tweet: record,
+    media,
+    extension: 'png'
+  });
+  return forceExtension(`${sanitizeFilename(rendered)}_framed`, 'png');
+}

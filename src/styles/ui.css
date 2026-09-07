@@ -192,6 +192,16 @@
   overflow-wrap: anywhere;
 }
 
+.stt-media-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.stt-media-frame-button {
+  white-space: nowrap;
+}
+
 .stt-sheet button:focus-visible {
   outline: 3px solid var(--stt-accent);
   outline-offset: 2px;
