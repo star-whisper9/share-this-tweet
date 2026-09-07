@@ -1,0 +1,19 @@
+:host {
+  color-scheme: light dark;
+}
+
+/* UI tokens are isolated under the extension prefix before the sheet exists. */
+.stt-root {
+  --stt-surface: Canvas;
+  --stt-text: CanvasText;
+  --stt-border: color-mix(in srgb, CanvasText 22%, transparent);
+  --stt-accent: LinkText;
+  color: var(--stt-text);
+  background: var(--stt-surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  .stt-root {
+    --stt-border: color-mix(in srgb, CanvasText 36%, transparent);
+  }
+}

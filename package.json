@@ -1,0 +1,22 @@
+{
+  "name": "share-this-tweet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Firefox extension for exporting and sharing X posts with their source context.",
+  "type": "module",
+  "license": "GPL-3.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "manifest_version": 2,
+  "name": "Share This Tweet",
+  "version": "0.1.0",
+  "description": "Save and share X posts with their source context.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "share-this-tweet@example.invalid",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": [
+    "clipboardWrite",
+    "downloads",
+    "storage",
+    "https://x.com/*",
+    "https://pbs.twimg.com/*",
+    "https://video.twimg.com/*"
+  ],
+  "background": {
+    "scripts": ["/background/background.js"],
+    "persistent": false
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*"],
+      "js": ["/content/bootstrap.js"],
+      "css": ["/styles/ui.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "/options/options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": ["/page/interceptor.js"]
+}
