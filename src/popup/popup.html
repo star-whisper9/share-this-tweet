@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>分享有据 · Share This Tweet</title>
+    <link rel="stylesheet" href="./popup.css">
+  </head>
+  <body>
+    <main class="popup-card">
+      <header class="popup-header">
+        <img src="../icons/icon-48.png" alt="">
+        <div>
+          <h1>分享有据 · Share This Tweet</h1>
+          <p>X 分享增强</p>
+        </div>
+      </header>
+
+      <section class="popup-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong>分享增强已启用</strong>
+          <span>打开 X 推文详情页即可使用</span>
+        </div>
+      </section>
+
+      <section class="template-summary" aria-label="当前模板">
+        <div>
+          <span>来源画框</span>
+          <code data-template="frame">读取中…</code>
+        </div>
+        <div>
+          <span>文件命名</span>
+          <code data-template="filename">读取中…</code>
+        </div>
+        <div>
+          <span>复制文字</span>
+          <code data-template="text">读取中…</code>
+        </div>
+      </section>
+
+      <button class="settings-button" type="button" data-open-settings>
+        <span>打开设置</span>
+        <span aria-hidden="true">↗</span>
+      </button>
+      <p class="popup-error" data-error hidden></p>
+    </main>
+    <script src="./popup.js"></script>
+  </body>
+</html>

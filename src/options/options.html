@@ -1,51 +1,406 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Share This Tweet 设置</title>
-    <link rel="stylesheet" href="./options.css">
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>分享有据 · Share This Tweet</title>
+    <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
+    <header class="app-header">
+      <a
+        class="brand"
+        href="#"
+        aria-label="分享有据 · Share This Tweet 设置首页"
+      >
+        <span class="brand-mark" aria-hidden="true"
+          ><img src="../icons/icon-48.png" alt=""
+        /></span>
+        <span>分享有据 · Share This Tweet</span>
+      </a>
+      <span class="header-label">分享偏好</span>
+    </header>
     <main>
-      <h1>Share This Tweet</h1>
-      <form data-settings-form>
-        <p class="intro">设置文件名、画框左栏和复制文本使用的模板。普通文字可以直接填写，占位符使用花括号。</p>
-
-        <label>
-          文件名模板
-          <input name="filenameTemplate" data-setting="filenameTemplate" spellcheck="false">
-          <span class="field-help">示例：X_{author.handle}_t{tweet.id}_m{media.index}.{extension}</span>
-          <span class="field-error" data-error="filenameTemplate"></span>
-        </label>
-
-        <label>
-          画框左栏模板
-          <input name="frameTemplate" data-setting="frameTemplate" spellcheck="false">
-          <span class="field-help">支持普通文字；默认使用作者显示名称。</span>
-          <span class="field-error" data-error="frameTemplate"></span>
-        </label>
-
-        <label>
-          复制文本模板
-          <textarea name="textTemplate" data-setting="textTemplate" rows="5" spellcheck="false"></textarea>
-          <span class="field-help">支持换行；默认包含正文、作者、原文链接和 Tweet ID。</span>
-          <span class="field-error" data-error="textTemplate"></span>
-        </label>
-
-        <section class="preview" aria-labelledby="preview-title">
-          <h2 id="preview-title">示例预览</h2>
-          <p><strong>文件名：</strong><code data-preview="filename"></code></p>
-          <p><strong>画框左栏：</strong><code data-preview="frame"></code></p>
-          <pre data-preview="text"></pre>
-        </section>
-
-        <div class="actions">
-          <button type="submit">保存设置</button>
-          <button type="button" data-reset>恢复默认值</button>
-          <output data-status role="status"></output>
+      <header class="page-heading">
+        <p class="eyebrow">为每次分享，留一份出处</p>
+        <h1>按你喜欢的方式分享<span class="heading-dot">。</span></h1>
+        <p class="page-description">设置一次，之后保存和复制都按你的习惯来。</p>
+      </header>
+      <form data-settings-form novalidate>
+        <div class="load-error" data-load-error hidden role="alert">
+          <span data-load-message></span
+          ><button type="button" data-retry-load>重新读取</button>
         </div>
+        <div class="settings-tabs" role="tablist" aria-label="分享设置分类">
+          <button
+            type="button"
+            role="tab"
+            id="tab-frame"
+            aria-controls="panel-frame"
+            aria-selected="true"
+            data-settings-tab="frame"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <path d="M3 16h18M7 12l3-3 4 4 3-3 4 4" /></svg
+            >来源画框
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-filename"
+            aria-controls="panel-filename"
+            aria-selected="false"
+            tabindex="-1"
+            data-settings-tab="filename"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 14h8M8 17h5"
+              /></svg
+            >文件命名
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-text"
+            aria-controls="panel-text"
+            aria-selected="false"
+            tabindex="-1"
+            data-settings-tab="text"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="12" height="13" rx="2" />
+              <path
+                d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"
+              /></svg
+            >复制文字
+          </button>
+        </div>
+        <fieldset class="settings-body" data-editable disabled>
+          <legend class="sr-only">分享偏好</legend>
+          <section
+            class="settings-panel"
+            id="panel-frame"
+            role="tabpanel"
+            aria-labelledby="tab-frame"
+            data-panel="frame"
+          >
+            <div class="settings-editor">
+              <div class="section-heading">
+                <span class="step-number">01</span>
+                <div>
+                  <h2>让照片自带出处</h2>
+                  <p>在照片底部加一行署名，发出去就不必另作说明。</p>
+                </div>
+              </div>
+              <p class="field-label" id="frame-presets-label">来源栏怎么写</p>
+              <div
+                class="preset-grid"
+                data-presets="frameTemplate"
+                role="group"
+                aria-labelledby="frame-presets-label"
+              ></div>
+              <details class="template-editor" data-editor="frameTemplate">
+                <summary>
+                  <span>自定义文字与变量</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="frameTemplate"
+                    hidden
+                    >已自定义</span
+                  ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="template-editor-body">
+                  <label for="frame-template"
+                    >来源栏模板 <span>画框左侧</span></label
+                  >
+                  <input
+                    id="frame-template"
+                    name="frameTemplate"
+                    data-setting="frameTemplate"
+                    spellcheck="false"
+                    autocomplete="off"
+                    aria-describedby="frame-help frame-error"
+                  />
+                  <p class="field-help" id="frame-help">
+                    普通文字直接写。点下方变量，可以插入作者等信息。
+                  </p>
+                  <div
+                    class="token-list"
+                    data-tokens="frameTemplate"
+                    aria-label="插入来源栏变量"
+                  ></div>
+                  <p
+                    class="field-error"
+                    id="frame-error"
+                    data-error="frameTemplate"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </details>
+              <div class="quiet-note">
+                <span aria-hidden="true">↗</span>
+                <p>画框是照片的另一份副本。保存原图时，不会添加画框。</p>
+              </div>
+            </div>
+            <aside
+              class="settings-preview frame-preview"
+              aria-label="来源画框示意"
+            >
+              <div class="preview-heading">
+                <span>分享出去的样子</span><span class="preview-tag">示例</span>
+              </div>
+              <div class="photo-print">
+                <div
+                  class="sample-art"
+                  role="img"
+                  aria-label="蓝色抽象风景示意图"
+                >
+                  <span class="sample-sun"></span
+                  ><span class="sample-hill sample-hill-back"></span
+                  ><span class="sample-hill sample-hill-front"></span
+                  ><span class="art-caption">A LITTLE<br />INSPIRATION.</span>
+                </div>
+                <div class="print-caption">
+                  <strong data-preview="frame"></strong
+                  ><span aria-hidden="true">↗</span>
+                </div>
+              </div>
+              <p class="preview-description">
+                文案实时预览，画框排版仅供示意。
+              </p>
+            </aside>
+          </section>
+          <section
+            class="settings-panel"
+            id="panel-filename"
+            role="tabpanel"
+            aria-labelledby="tab-filename"
+            data-panel="filename"
+            hidden
+          >
+            <div class="settings-editor">
+              <div class="section-heading">
+                <span class="step-number">02</span>
+                <div>
+                  <h2>日后也找得到来源</h2>
+                  <p>把推主与推文编号留在文件名里，归档时更好找。</p>
+                </div>
+              </div>
+              <p class="field-label" id="filename-presets-label">
+                选一种命名方式
+              </p>
+              <div
+                class="preset-grid"
+                data-presets="filenameTemplate"
+                role="group"
+                aria-labelledby="filename-presets-label"
+              ></div>
+              <details class="template-editor" data-editor="filenameTemplate">
+                <summary>
+                  <span>自定义文件名</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="filenameTemplate"
+                    hidden
+                    >已自定义</span
+                  ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="template-editor-body">
+                  <label for="filename-template">文件名模板</label>
+                  <input
+                    id="filename-template"
+                    name="filenameTemplate"
+                    data-setting="filenameTemplate"
+                    spellcheck="false"
+                    autocomplete="off"
+                    aria-describedby="filename-help filename-error"
+                  />
+                  <p class="field-help" id="filename-help">
+                    建议保留推文 ID，日后还能找到这条推文。
+                  </p>
+                  <div
+                    class="token-list"
+                    data-tokens="filenameTemplate"
+                    aria-label="插入文件名变量"
+                  ></div>
+                  <p
+                    class="field-error"
+                    id="filename-error"
+                    data-error="filenameTemplate"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </details>
+              <div class="quiet-note">
+                <span aria-hidden="true">↗</span>
+                <p>
+                  文件名适合自己归档；分享给别人时，画框里的出处更容易看到。
+                </p>
+              </div>
+            </div>
+            <aside
+              class="settings-preview file-preview"
+              aria-label="文件名预览"
+            >
+              <div class="preview-heading">
+                <span>保存在设备上</span><span class="preview-tag">示例</span>
+              </div>
+              <div class="file-card">
+                <div class="file-art" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 15l2-2 4 4 2-2"
+                    />
+                  </svg>
+                </div>
+                <div class="file-card-copy">
+                  <span class="file-card-type">照片原图 · JPG</span
+                  ><code data-preview="filename"></code>
+                </div>
+              </div>
+              <div class="source-detail">
+                <span>示例来源</span><strong>@example</strong
+                ><span>第 1 张照片</span>
+              </div>
+              <p class="preview-description">
+                上方文件名由你当前的模板实时生成。
+              </p>
+            </aside>
+          </section>
+          <section
+            class="settings-panel"
+            id="panel-text"
+            role="tabpanel"
+            aria-labelledby="tab-text"
+            data-panel="text"
+            hidden
+          >
+            <div class="settings-editor">
+              <div class="section-heading">
+                <span class="step-number">03</span>
+                <div>
+                  <h2>不只分享一个链接</h2>
+                  <p>把文字和出处一起复制，直接粘贴到聊天中。</p>
+                </div>
+              </div>
+              <p class="field-label" id="text-presets-label">文字的分享方式</p>
+              <div
+                class="preset-grid text-presets"
+                data-presets="textTemplate"
+                role="group"
+                aria-labelledby="text-presets-label"
+              ></div>
+              <details class="template-editor" data-editor="textTemplate">
+                <summary>
+                  <span>自定义文字排版</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="textTemplate"
+                    hidden
+                    >已自定义</span
+                  ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="template-editor-body">
+                  <label for="text-template">复制文本模板</label>
+                  <textarea
+                    id="text-template"
+                    name="textTemplate"
+                    data-setting="textTemplate"
+                    rows="6"
+                    spellcheck="false"
+                    aria-describedby="text-help text-error"
+                  ></textarea>
+                  <p class="field-help" id="text-help">
+                    支持换行。点下方变量插入正文或出处，按自己的习惯安排顺序。
+                  </p>
+                  <div
+                    class="token-list"
+                    data-tokens="textTemplate"
+                    aria-label="插入文本变量"
+                  ></div>
+                  <p
+                    class="field-error"
+                    id="text-error"
+                    data-error="textTemplate"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </details>
+              <div class="quiet-note">
+                <span aria-hidden="true">↗</span>
+                <p>
+                  复制的内容由这里的模板决定。自定义时，记得留下一条来源线索。
+                </p>
+              </div>
+            </div>
+            <aside
+              class="settings-preview text-preview"
+              aria-label="复制文字预览"
+            >
+              <div class="preview-heading">
+                <span>粘贴到聊天中</span><span class="preview-tag">示例</span>
+              </div>
+              <div class="chat-preview">
+                <span class="chat-avatar" aria-hidden="true">你</span>
+                <pre data-preview="text"></pre>
+              </div>
+              <p class="preview-description">
+                以下为虚构示例内容，不会读取你的聊天。
+              </p>
+            </aside>
+          </section>
+        </fieldset>
+        <div class="reset-confirm" data-reset-confirm hidden>
+          <div>
+            <strong>恢复三项默认设置？</strong>
+            <p>这只会修改当前草稿，点击保存后才会生效。</p>
+          </div>
+          <div>
+            <button
+              type="button"
+              class="button button-secondary"
+              data-reset-cancel
+            >
+              取消</button
+            ><button
+              type="button"
+              class="button button-danger"
+              data-reset-confirm-button
+            >
+              恢复默认
+            </button>
+          </div>
+        </div>
+        <footer class="save-bar">
+          <div class="save-state">
+            <span class="state-dot" aria-hidden="true"></span
+            ><output data-status role="status" aria-live="polite"
+              >正在读取偏好…</output
+            >
+          </div>
+          <div class="save-actions">
+            <button
+              type="button"
+              class="button button-quiet"
+              data-reset
+              disabled
+            >
+              恢复默认</button
+            ><button type="submit" class="button button-primary" disabled>
+              保存偏好 <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+        </footer>
       </form>
+      <footer class="page-footer">
+        分享有据 · Share This Tweet <span>·</span> 分享喜欢，也留下出处。
+      </footer>
     </main>
     <script src="./options.js"></script>
   </body>

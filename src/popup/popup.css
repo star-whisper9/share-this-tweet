@@ -1,0 +1,142 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --popup-bg: #ffffff;
+  --popup-surface: #f5f8fc;
+  --popup-text: #182230;
+  --popup-muted: #687789;
+  --popup-border: rgba(24, 34, 48, 0.12);
+  --popup-accent: #1877f2;
+  --popup-accent-soft: #e9f2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 22rem;
+  margin: 0;
+  color: var(--popup-text);
+  background: var(--popup-bg);
+}
+
+.popup-card {
+  padding: 1rem;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.popup-header img {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+}
+
+.popup-header h1 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.popup-header p,
+.popup-status span,
+.template-summary span,
+.popup-error {
+  margin: 0;
+  color: var(--popup-muted);
+  font-size: 0.78rem;
+}
+
+.popup-status {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--popup-border);
+  border-radius: 0.8rem;
+  background: var(--popup-surface);
+}
+
+.popup-status div,
+.template-summary div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.popup-status strong {
+  font-size: 0.85rem;
+}
+
+.status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #22b573;
+  box-shadow: 0 0 0 0.22rem rgba(34, 181, 115, 0.14);
+}
+
+.template-summary {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+  padding: 0.8rem;
+  border: 1px solid var(--popup-border);
+  border-radius: 0.8rem;
+}
+
+.template-summary code {
+  overflow: hidden;
+  color: var(--popup-text);
+  font: 0.76rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-radius: 0.7rem;
+  color: #ffffff;
+  background: var(--popup-accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.settings-button:hover,
+.settings-button:focus-visible {
+  background: #0d67dc;
+}
+
+.settings-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--popup-accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.popup-error {
+  margin-top: 0.65rem;
+  color: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --popup-bg: #18212d;
+    --popup-surface: #202d3b;
+    --popup-text: #f3f6fa;
+    --popup-muted: #aab8c8;
+    --popup-border: rgba(243, 246, 250, 0.16);
+    --popup-accent-soft: #233e63;
+  }
+}

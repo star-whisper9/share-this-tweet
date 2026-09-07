@@ -8,6 +8,7 @@ interface BrowserStorageArea {
 interface BrowserRuntime {
   getURL(path: string): string;
   sendMessage(message: unknown): Promise<unknown>;
+  openOptionsPage(): Promise<void>;
   onMessage: {
     addListener(listener: (message: unknown, sender: unknown) => unknown): void;
   };

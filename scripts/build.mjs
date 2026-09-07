@@ -13,7 +13,8 @@ const entries = [
   ['src/background/background.ts', 'background/background.js'],
   ['src/content/bootstrap.ts', 'content/bootstrap.js'],
   ['src/page/interceptor.ts', 'page/interceptor.js'],
-  ['src/options/options.ts', 'options/options.js']
+  ['src/options/options.ts', 'options/options.js'],
+  ['src/popup/popup.ts', 'popup/popup.js']
 ];
 
 for (const [source, output] of entries) {
@@ -37,3 +38,5 @@ for (const icon of ['icon-16.png', 'icon-32.png', 'icon-48.png', 'icon-96.png', 
 await cp(resolve(root, 'src/styles'), resolve(dist, 'styles'), { recursive: true });
 await cp(resolve(root, 'src/options/options.html'), resolve(dist, 'options/options.html'));
 await cp(resolve(root, 'src/options/options.css'), resolve(dist, 'options/options.css'));
+await cp(resolve(root, 'src/popup/popup.html'), resolve(dist, 'popup/popup.html'));
+await cp(resolve(root, 'src/popup/popup.css'), resolve(dist, 'popup/popup.css'));

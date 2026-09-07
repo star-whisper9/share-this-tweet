@@ -9,7 +9,7 @@ window.addEventListener(TWEET_DATA_EVENT, (event) => {
   try {
     tweetSource.ingestSerialized(detail);
   } catch (error) {
-    console.error('Share This Tweet: failed to ingest tweet data', error);
+    console.error('分享有据 · Share This Tweet: failed to ingest tweet data', error);
   }
 });
 

@@ -1,4 +1,4 @@
-# Share This Tweet
+# 分享有据 · Share This Tweet
 
 面向 Firefox 的 X 推文分享增强扩展，当前 `v0.1.0` 功能实现已完成。
 
