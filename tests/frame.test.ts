@@ -9,7 +9,7 @@ describe('calculateFrameLayout', () => {
       width: 1200,
       userText: 'Alice',
       sourceLines: ['tweet id: 42', '@alice'],
-      measureText
+      measureText,
     });
 
     expect(layout.mode).toBe('double');
@@ -22,7 +22,7 @@ describe('calculateFrameLayout', () => {
       width: 220,
       userText: '这是一段需要换行的画框文字',
       sourceLines: ['tweet id: 42', '@alice'],
-      measureText
+      measureText,
     });
 
     expect(layout.mode).toBe('single');
@@ -36,7 +36,7 @@ describe('calculateFrameLayout', () => {
       orientation: 'top',
       userText: 'Alice',
       sourceLines: ['tweet id: 42', '@alice'],
-      measureText
+      measureText,
     });
 
     expect(layout.orientation).toBe('top');
@@ -48,5 +48,4 @@ describe('wrapFrameText', () => {
   it('preserves explicit line breaks', () => {
     expect(wrapFrameText('first\nsecond', 100, measureText)).toEqual(['first', 'second']);
   });
-
 });

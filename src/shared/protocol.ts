@@ -5,6 +5,4 @@ export type ExtensionMessage =
   | { type: 'get-tweet-record'; tweetId: string }
   | { type: 'download-media'; url: string; filename: string };
 
-export type DownloadMediaResponse =
-  | { ok: true; downloadId: number }
-  | { ok: false; error: string };
+export type DownloadMediaResponse = { ok: true; downloadId: number } | { ok: false; error: string };

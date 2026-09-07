@@ -13,36 +13,54 @@ const SHEET_ID = 'stt-bottom-sheet';
 
 type MediaActionState = 'idle' | 'loading' | 'success' | 'error';
 type BatchDownloadMode = 'original' | 'framed';
-type IconName = 'share' | 'close' | 'frame' | 'download' | 'copy' | 'photo' | 'video' | 'check' | 'arrow';
+type IconName =
+  'share' | 'close' | 'frame' | 'download' | 'copy' | 'photo' | 'video' | 'check' | 'arrow';
 const FRAME_ORIENTATION_LABELS: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
 const ICON_PATHS: Record<IconName, string> = {
   share: 'M13 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M4 16h16M15 3h6v6M21 3l-8 8',
-  close: 'M6 6l12 12M18 6L6 18', frame: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16h18M7 12l3-3 4 4 3-3 4 4',
+  close: 'M6 6l12 12M18 6L6 18',
+  frame:
+    'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16h18M7 12l3-3 4 4 3-3 4 4',
   download: 'M12 3v12m-5-5 5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
   copy: 'M10 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2ZM16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3',
-  photo: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16l6-6 6 6 3-3 3 3M15 7h.01',
+  photo:
+    'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM3 16l6-6 6 6 3-3 3 3M15 7h.01',
   video: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM10 8l6 4-6 4Z',
-  check: 'M5 12l4 4L19 6', arrow: 'M7 17 17 7M7 7h10v10'
+  check: 'M5 12l4 4L19 6',
+  arrow: 'M7 17 17 7M7 7h10v10',
 };
-function node<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tag); element.className = className;
+function node<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
 }
 function icon(name: IconName): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', ICON_PATHS[name]); path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor'); path.setAttribute('stroke-width', '1.8');
-  path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round');
-  svg.append(path); return svg;
+  path.setAttribute('d', ICON_PATHS[name]);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.8');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
 }
 
 function extensionIcon(size: 'small' | 'brand'): HTMLImageElement {
   const image = document.createElement('img');
   image.className = size === 'brand' ? 'stt-brand-icon' : 'stt-extension-icon';
-  image.src = browser.runtime.getURL(size === 'brand' ? '/icons/icon-48.png' : '/icons/icon-32.png');
+  image.src = browser.runtime.getURL(
+    size === 'brand' ? '/icons/icon-48.png' : '/icons/icon-32.png',
+  );
   image.alt = '';
   image.setAttribute('aria-hidden', 'true');
   return image;
@@ -54,17 +72,25 @@ function thumbnailURL(media: MediaRecord): string | undefined {
     const url = new URL(media.originalUrl, location.href);
     if (url.protocol === 'blob:' && url.origin === location.origin) return url.href;
     if (url.protocol !== 'https:' || url.hostname !== 'pbs.twimg.com') return undefined;
-    url.searchParams.set('name', 'small'); return url.href;
-  } catch { return undefined; }
+    url.searchParams.set('name', 'small');
+    return url.href;
+  } catch {
+    return undefined;
+  }
 }
 function sourceURL(record: TweetRecord): string {
   try {
     const url = new URL(record.url || '');
-    if (url.protocol === 'https:' && ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(url.hostname)) return url.href;
-  } catch { /* Fall back to the stable post identifier. */ }
+    if (
+      url.protocol === 'https:' &&
+      ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'].includes(url.hostname)
+    )
+      return url.href;
+  } catch {
+    /* Fall back to the stable post identifier. */
+  }
   return `https://x.com/i/status/${encodeURIComponent(record.tweetId)}`;
 }
-
 
 export class ShareEnhancerController {
   private started = false;
@@ -92,7 +118,10 @@ export class ShareEnhancerController {
   private batchDownloadMode?: BatchDownloadMode;
   private batchOriginalState: MediaActionState = 'idle';
   private batchOriginalError = '';
-  private readonly batchFrameStates: Record<FrameOrientation, MediaActionState> = { top: 'idle', bottom: 'idle' };
+  private readonly batchFrameStates: Record<FrameOrientation, MediaActionState> = {
+    top: 'idle',
+    bottom: 'idle',
+  };
   private readonly batchFrameErrors: Record<FrameOrientation, string> = { top: '', bottom: '' };
   private restoreOverlay?: () => void;
   private settingsRequestId = 0;
@@ -107,26 +136,54 @@ export class ShareEnhancerController {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.sheet || this.sheet.hidden || this.sheet.dataset.state === 'closing') return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.closeSheet(); return; }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeSheet();
+      return;
+    }
     if (event.key !== 'Tab') return;
     const focusable = this.focusableElements();
-    const first = focusable[0], last = focusable[focusable.length - 1];
-    if (!first || !last) { event.preventDefault(); this.sheet.querySelector<HTMLElement>('.stt-sheet')?.focus(); return; }
-    if (event.shiftKey && (document.activeElement === first || !this.sheet.contains(document.activeElement))) {
-      event.preventDefault(); last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !this.sheet.contains(document.activeElement))) {
-      event.preventDefault(); first.focus();
+    const first = focusable[0],
+      last = focusable[focusable.length - 1];
+    if (!first || !last) {
+      event.preventDefault();
+      this.sheet.querySelector<HTMLElement>('.stt-sheet')?.focus();
+      return;
+    }
+    if (
+      event.shiftKey &&
+      (document.activeElement === first || !this.sheet.contains(document.activeElement))
+    ) {
+      event.preventDefault();
+      last.focus();
+    } else if (
+      !event.shiftKey &&
+      (document.activeElement === last || !this.sheet.contains(document.activeElement))
+    ) {
+      event.preventDefault();
+      first.focus();
     }
   };
   private readonly onFocusIn = (event: FocusEvent): void => {
-    if (this.sheet && !this.sheet.hidden && this.sheet.dataset.state !== 'closing' &&
-        event.target instanceof Node && !this.sheet.contains(event.target)) {
-      this.sheet.querySelector<HTMLButtonElement>('[data-stt-close]')?.focus({ preventScroll: true });
+    if (
+      this.sheet &&
+      !this.sheet.hidden &&
+      this.sheet.dataset.state !== 'closing' &&
+      event.target instanceof Node &&
+      !this.sheet.contains(event.target)
+    ) {
+      this.sheet
+        .querySelector<HTMLButtonElement>('[data-stt-close]')
+        ?.focus({ preventScroll: true });
     }
   };
   private focusableElements(): HTMLElement[] {
-    return Array.from(this.sheet?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, [tabindex="0"]') ?? [])
-      .filter(item => item.getClientRects().length > 0 && !item.closest('[hidden]'));
+    return Array.from(
+      this.sheet?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), a[href], summary, [tabindex="0"]',
+      ) ?? [],
+    ).filter((item) => item.getClientRects().length > 0 && !item.closest('[hidden]'));
   }
 
   start(): void {
@@ -140,7 +197,7 @@ export class ShareEnhancerController {
     this.observer = new MutationObserver(() => this.scheduleSync());
     this.observer.observe(document.documentElement, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('focusin', this.onFocusIn);
@@ -265,8 +322,13 @@ export class ShareEnhancerController {
     this.reconcileMediaSelection(record);
     const summary = this.sheet?.querySelector<HTMLElement>('.stt-tweet-summary');
     if (!summary) return;
-    const update = (selector: string, value: string): void => { const item = summary.querySelector<HTMLElement>(selector); if (item) item.textContent = value; };
-    const handle = record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '账号未知';
+    const update = (selector: string, value: string): void => {
+      const item = summary.querySelector<HTMLElement>(selector);
+      if (item) item.textContent = value;
+    };
+    const handle = record.author.handle
+      ? `@${record.author.handle.replace(/^@+/, '')}`
+      : '账号未知';
     const name = record.author.name || handle;
     update('[data-stt-author]', name);
     update('[data-stt-handle]', handle);
@@ -274,13 +336,27 @@ export class ShareEnhancerController {
     update('[data-stt-tweet-id]', record.tweetId);
     update('[data-stt-text]', record.text || '这条推文没有正文。');
     const date = record.publishedAt ? new Date(record.publishedAt) : undefined;
-    update('[data-stt-date]', date && !Number.isNaN(date.getTime())
-      ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
-      : '发布时间暂不可用');
+    update(
+      '[data-stt-date]',
+      date && !Number.isNaN(date.getTime())
+        ? new Intl.DateTimeFormat('zh-CN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(date)
+        : '发布时间暂不可用',
+    );
     const link = summary.querySelector<HTMLAnchorElement>('[data-stt-source-link]');
-    if (link) { link.href = sourceURL(record); link.textContent = '查看原推'; }
+    if (link) {
+      link.href = sourceURL(record);
+      link.textContent = '查看原推';
+    }
     const expander = summary.querySelector<HTMLButtonElement>('[data-stt-expand-text]');
-    if (expander) expander.hidden = (record.text || '').length < 70 && (record.text || '').split('\n').length < 3;
+    if (expander)
+      expander.hidden =
+        (record.text || '').length < 70 && (record.text || '').split('\n').length < 3;
     this.trigger?.removeAttribute('aria-busy');
     this.renderActions(this.currentRecord ?? record);
     if (firstRecord) this.setSheetStatus('ready', '');
@@ -290,7 +366,10 @@ export class ShareEnhancerController {
     if (!this.sheet) return;
     this.sheet.dataset.dataState = state;
     const status = this.sheet.querySelector<HTMLElement>('.stt-sheet-status');
-    if (status) { status.textContent = message; status.hidden = !message; }
+    if (status) {
+      status.textContent = message;
+      status.hidden = !message;
+    }
   }
 
   private findPrimaryArticle(tweetId: string): HTMLElement | undefined {
@@ -312,7 +391,9 @@ export class ShareEnhancerController {
 
   private mountEntry(article: HTMLElement, tweetId: string): void {
     const target = article.querySelector<HTMLElement>('[role="group"]') ?? article;
-    const existingHosts = Array.from(article.querySelectorAll<HTMLElement>(`[${ACTION_HOST_ATTRIBUTE}]`));
+    const existingHosts = Array.from(
+      article.querySelectorAll<HTMLElement>(`[${ACTION_HOST_ATTRIBUTE}]`),
+    );
     const host = existingHosts[0] ?? document.createElement('span');
     for (const duplicate of existingHosts.slice(1)) duplicate.remove();
     host.className = 'stt-action-host';
@@ -322,7 +403,7 @@ export class ShareEnhancerController {
     // button removes stale listeners while keeping the DOM injection idempotent.
     const existingButton = host.querySelector<HTMLButtonElement>('button');
     const button = existingButton
-      ? existingButton.cloneNode(false) as HTMLButtonElement
+      ? (existingButton.cloneNode(false) as HTMLButtonElement)
       : document.createElement('button');
     button.type = 'button';
     button.className = 'stt-action-button';
@@ -348,55 +429,92 @@ export class ShareEnhancerController {
   }
 
   private createSheet(tweetId: string): HTMLElement {
-    const root = node('div', 'stt-sheet-root'); root.id = SHEET_ID; root.hidden = true;
+    const root = node('div', 'stt-sheet-root');
+    root.id = SHEET_ID;
+    root.hidden = true;
     const backdrop = node('div', 'stt-sheet-backdrop');
-    backdrop.addEventListener('click', event => { if (event.target === backdrop) this.closeSheet(); });
-    const dialog = node('section', 'stt-sheet'); dialog.tabIndex = -1;
-    dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) this.closeSheet();
+    });
+    const dialog = node('section', 'stt-sheet');
+    dialog.tabIndex = -1;
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', 'stt-sheet-title');
     const header = node('header', 'stt-sheet-header');
     const titleGroup = node('div', 'stt-title-group');
-    const brand = node('span', 'stt-brand-mark'); brand.append(extensionIcon('brand'));
+    const brand = node('span', 'stt-brand-mark');
+    brand.append(extensionIcon('brand'));
     const headings = node('div', 'stt-headings');
     headings.append(node('p', 'stt-brand-name', '分享有据 · Share This Tweet'));
-    const title = node('h2', '', '分享这条推文'); title.id = 'stt-sheet-title'; headings.append(title);
+    const title = node('h2', '', '分享这条推文');
+    title.id = 'stt-sheet-title';
+    headings.append(title);
     titleGroup.append(brand, headings);
-    const close = node('button', 'stt-sheet-close'); close.type = 'button'; close.dataset.sttClose = '';
-    close.setAttribute('aria-label', '关闭分享面板'); close.append(icon('close'));
-    close.addEventListener('click', () => this.closeSheet()); header.append(titleGroup, close);
+    const close = node('button', 'stt-sheet-close');
+    close.type = 'button';
+    close.dataset.sttClose = '';
+    close.setAttribute('aria-label', '关闭分享面板');
+    close.append(icon('close'));
+    close.addEventListener('click', () => this.closeSheet());
+    header.append(titleGroup, close);
     const scroll = node('div', 'stt-sheet-scroll');
     const summary = node('div', 'stt-tweet-summary');
     const authorRow = node('div', 'stt-author-row');
-    const avatar = node('span', 'stt-avatar'); avatar.dataset.sttAvatar = ''; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = 'X';
+    const avatar = node('span', 'stt-avatar');
+    avatar.dataset.sttAvatar = '';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = 'X';
     const authorNames = node('div', 'stt-author-names');
-    const author = node('strong', '', '正在读取推文'); author.dataset.sttAuthor = '';
-    const handle = node('span', 'stt-handle', ''); handle.dataset.sttHandle = '';
-    authorNames.append(author, handle); authorRow.append(avatar, authorNames, node('span', 'stt-source-badge', 'X'));
-    const text = node('p', 'stt-tweet-text', '内容准备好后，就可以保存或复制。'); text.dataset.sttText = ''; text.id = 'stt-summary-text';
-    const expander = node('button', 'stt-expand-text', '展开正文'); expander.type = 'button'; expander.dataset.sttExpandText = ''; expander.hidden = true;
-    expander.setAttribute('aria-expanded', 'false'); expander.setAttribute('aria-controls', text.id);
+    const author = node('strong', '', '正在读取推文');
+    author.dataset.sttAuthor = '';
+    const handle = node('span', 'stt-handle', '');
+    handle.dataset.sttHandle = '';
+    authorNames.append(author, handle);
+    authorRow.append(avatar, authorNames, node('span', 'stt-source-badge', 'X'));
+    const text = node('p', 'stt-tweet-text', '内容准备好后，就可以保存或复制。');
+    text.dataset.sttText = '';
+    text.id = 'stt-summary-text';
+    const expander = node('button', 'stt-expand-text', '展开正文');
+    expander.type = 'button';
+    expander.dataset.sttExpandText = '';
+    expander.hidden = true;
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-controls', text.id);
     expander.addEventListener('click', () => {
       const expanded = expander.getAttribute('aria-expanded') !== 'true';
-      expander.setAttribute('aria-expanded', String(expanded)); expander.textContent = expanded ? '收起正文' : '展开正文';
+      expander.setAttribute('aria-expanded', String(expanded));
+      expander.textContent = expanded ? '收起正文' : '展开正文';
       text.classList.toggle('stt-expanded', expanded);
     });
     const provenance = node('details', 'stt-provenance');
     provenance.append(node('summary', '', '来源信息'));
     const dl = node('dl', '');
-    const id = node('dd', '', tweetId); id.dataset.sttTweetId = '';
-    const date = node('dd', '', '待读取'); date.dataset.sttDate = '';
+    const id = node('dd', '', tweetId);
+    id.dataset.sttTweetId = '';
+    const date = node('dd', '', '待读取');
+    date.dataset.sttDate = '';
     dl.append(node('dt', '', '推文 ID'), id, node('dt', '', '发布时间'), date);
-    const sourceLink = node('a', 'stt-source-link', '查看原推'); sourceLink.dataset.sttSourceLink = '';
+    const sourceLink = node('a', 'stt-source-link', '查看原推');
+    sourceLink.dataset.sttSourceLink = '';
     sourceLink.href = `https://x.com/i/status/${encodeURIComponent(tweetId)}`;
-    sourceLink.target = '_blank'; sourceLink.rel = 'noopener noreferrer'; provenance.append(dl, sourceLink);
+    sourceLink.target = '_blank';
+    sourceLink.rel = 'noopener noreferrer';
+    provenance.append(dl, sourceLink);
     summary.append(authorRow, text, expander, provenance);
     const actions = node('div', 'stt-sheet-actions');
-    actions.addEventListener('click', event => {
-      const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-stt-action]') : null;
+    actions.addEventListener('click', (event) => {
+      const target =
+        event.target instanceof Element
+          ? event.target.closest<HTMLButtonElement>('button[data-stt-action]')
+          : null;
       if (!target || !actions.contains(target) || target.disabled) return;
       event.preventDefault();
       const action = target.dataset.sttAction;
-      if (action === 'copy-text') { void this.copyText(); return; }
+      if (action === 'copy-text') {
+        void this.copyText();
+        return;
+      }
       if (action === 'download-selected') {
         const mode = target.dataset.sttBatchMode;
         if (mode === 'original' || mode === 'framed') void this.saveSelectedMedia(mode);
@@ -404,106 +522,195 @@ export class ShareEnhancerController {
       }
       const index = Number(target.dataset.sttMediaIndex);
       if (!Number.isInteger(index)) return;
-      if (action === 'select-media') { this.toggleMediaSelection(index); }
-      else if (action === 'download-media') void this.saveMedia(index);
+      if (action === 'select-media') {
+        this.toggleMediaSelection(index);
+      } else if (action === 'download-media') void this.saveMedia(index);
       else if (action === 'frame-media') {
         const orientation = target.dataset.sttOrientation;
         if (orientation === 'top' || orientation === 'bottom') {
-          if (target.dataset.sttBatchMode === 'framed') void this.saveSelectedMedia('framed', orientation);
+          if (target.dataset.sttBatchMode === 'framed')
+            void this.saveSelectedMedia('framed', orientation);
           else void this.generateFrame(index, orientation);
         }
       }
     });
-    const skeleton = node('div', 'stt-action-skeleton', '正在准备分享选项…'); skeleton.setAttribute('aria-hidden', 'true'); actions.append(skeleton);
+    const skeleton = node('div', 'stt-action-skeleton', '正在准备分享选项…');
+    skeleton.setAttribute('aria-hidden', 'true');
+    actions.append(skeleton);
     scroll.append(summary, actions);
-    const status = node('p', 'stt-sheet-status', '正在读取推文…'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); status.setAttribute('aria-atomic', 'true');
-    const footer = node('footer', 'stt-sheet-footer'); footer.append(status, node('p', 'stt-sheet-note', '分享喜欢，也留下出处。'));
-    dialog.append(header, scroll, footer); backdrop.append(dialog); root.append(backdrop); return root;
+    const status = node('p', 'stt-sheet-status', '正在读取推文…');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.setAttribute('aria-atomic', 'true');
+    const footer = node('footer', 'stt-sheet-footer');
+    footer.append(status, node('p', 'stt-sheet-note', '分享喜欢，也留下出处。'));
+    dialog.append(header, scroll, footer);
+    backdrop.append(dialog);
+    root.append(backdrop);
+    return root;
   }
 
   private renderActions(record: TweetRecord): void {
     const actions = this.sheet?.querySelector<HTMLElement>('.stt-sheet-actions');
     if (!actions) return;
     this.reconcileMediaSelection(record);
-    const active = document.activeElement instanceof HTMLElement && actions.contains(document.activeElement) ? document.activeElement : undefined;
+    const active =
+      document.activeElement instanceof HTMLElement && actions.contains(document.activeElement)
+        ? document.activeElement
+        : undefined;
     const focusKey = active?.dataset.sttFocusKey;
-    const filenameOpen = actions.querySelector<HTMLDetailsElement>('.stt-file-details')?.open ?? false;
+    const filenameOpen =
+      actions.querySelector<HTMLDetailsElement>('.stt-file-details')?.open ?? false;
     const scroll = this.sheet?.querySelector<HTMLElement>('.stt-sheet-scroll');
     const scrollTop = scroll?.scrollTop ?? 0;
     const stripScroll = actions.querySelector<HTMLElement>('.stt-media-strip')?.scrollLeft ?? 0;
     actions.replaceChildren();
     if (record.media.length > 0) {
       const selectionHeading = node('div', 'stt-section-label');
-      const position = this.selectedMediaIndex === undefined ? 0 : record.media.findIndex(media => media.index === this.selectedMediaIndex) + 1;
-      selectionHeading.append(node('span', '', record.media.length > 1 ? '选择要保存的媒体' : '这条推文的内容'), node('span', 'stt-selection-count', record.media.length > 1 ? `已选 ${this.selectedMediaIndexes.size} / ${record.media.length}` : `${position} / ${record.media.length}`));
+      const position =
+        this.selectedMediaIndex === undefined
+          ? 0
+          : record.media.findIndex((media) => media.index === this.selectedMediaIndex) + 1;
+      selectionHeading.append(
+        node('span', '', record.media.length > 1 ? '选择要保存的媒体' : '这条推文的内容'),
+        node(
+          'span',
+          'stt-selection-count',
+          record.media.length > 1
+            ? `已选 ${this.selectedMediaIndexes.size} / ${record.media.length}`
+            : `${position} / ${record.media.length}`,
+        ),
+      );
       actions.append(selectionHeading);
-      const strip = node('div', 'stt-media-strip'); strip.setAttribute('role', 'group'); strip.setAttribute('aria-label', '选择媒体');
-      record.media.forEach(media => {
+      const strip = node('div', 'stt-media-strip');
+      strip.setAttribute('role', 'group');
+      strip.setAttribute('aria-label', '选择媒体');
+      record.media.forEach((media) => {
         const selected = this.selectedMediaIndexes.has(media.index);
-        const choice = node('button', 'stt-media-choice'); choice.type = 'button'; choice.dataset.sttAction = 'select-media';
-        choice.dataset.sttMediaIndex = String(media.index); choice.dataset.sttFocusKey = `select-${media.index}`;
+        const choice = node('button', 'stt-media-choice');
+        choice.type = 'button';
+        choice.dataset.sttAction = 'select-media';
+        choice.dataset.sttMediaIndex = String(media.index);
+        choice.dataset.sttFocusKey = `select-${media.index}`;
         choice.disabled = this.batchDownloadMode !== undefined;
         choice.setAttribute('aria-pressed', String(selected));
-        const label = media.type === 'photo' ? '照片' : media.type === 'animated_gif' ? 'GIF' : '视频';
+        const label =
+          media.type === 'photo' ? '照片' : media.type === 'animated_gif' ? 'GIF' : '视频';
         choice.setAttribute('aria-label', `${label} ${media.index}${selected ? '，已选中' : ''}`);
         const thumb = node('span', 'stt-media-thumb');
         thumb.append(icon(media.type === 'photo' ? 'photo' : 'video'));
         const url = thumbnailURL(media);
         if (url) {
-          const img = node('img', ''); img.src = url; img.alt = ''; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
-          img.addEventListener('error', () => img.remove(), { once: true }); thumb.append(img);
+          const img = node('img', '');
+          img.src = url;
+          img.alt = '';
+          img.loading = 'lazy';
+          img.referrerPolicy = 'no-referrer';
+          img.addEventListener('error', () => img.remove(), { once: true });
+          thumb.append(img);
         }
-        const check = node('span', 'stt-thumb-check'); check.append(icon('check')); thumb.append(check);
-        choice.append(thumb, node('span', 'stt-media-label', `${label} ${media.index}`)); strip.append(choice);
+        const check = node('span', 'stt-thumb-check');
+        check.append(icon('check'));
+        thumb.append(check);
+        choice.append(thumb, node('span', 'stt-media-label', `${label} ${media.index}`));
+        strip.append(choice);
       });
       actions.append(strip);
-      const selected = record.media.find(media => media.index === this.selectedMediaIndex) ?? record.media[0];
+      const selected =
+        record.media.find((media) => media.index === this.selectedMediaIndex) ?? record.media[0];
       if (selected) actions.append(this.createMediaAction(record, selected));
     }
     actions.append(this.createTextAction(record.media.length === 0));
-    const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details'); if (details) details.open = filenameOpen;
-    const newStrip = actions.querySelector<HTMLElement>('.stt-media-strip'); if (newStrip) newStrip.scrollLeft = stripScroll;
+    const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details');
+    if (details) details.open = filenameOpen;
+    const newStrip = actions.querySelector<HTMLElement>('.stt-media-strip');
+    if (newStrip) newStrip.scrollLeft = stripScroll;
     if (scroll) scroll.scrollTop = scrollTop;
     if (focusKey) {
-      const target = Array.from(actions.querySelectorAll<HTMLElement>('[data-stt-focus-key]')).find(item => item.dataset.sttFocusKey === focusKey);
-      if (target instanceof HTMLButtonElement && !target.disabled) target.focus({ preventScroll: true });
+      const target = Array.from(actions.querySelectorAll<HTMLElement>('[data-stt-focus-key]')).find(
+        (item) => item.dataset.sttFocusKey === focusKey,
+      );
+      if (target instanceof HTMLButtonElement && !target.disabled)
+        target.focus({ preventScroll: true });
       else if (target) {
         // While an action is disabled, keep keyboard focus inside the dialog.
         if (target.parentElement) {
           target.parentElement.dataset.sttFocusKey = focusKey;
-          target.parentElement.setAttribute('tabindex', '-1'); target.parentElement.focus({ preventScroll: true });
+          target.parentElement.setAttribute('tabindex', '-1');
+          target.parentElement.focus({ preventScroll: true });
         }
       }
     }
   }
 
-  private actionButton(action: string, focusKey: string, label: string, description: string, image: IconName, state: MediaActionState, primary = false): HTMLButtonElement {
+  private actionButton(
+    action: string,
+    focusKey: string,
+    label: string,
+    description: string,
+    image: IconName,
+    state: MediaActionState,
+    primary = false,
+  ): HTMLButtonElement {
     const button = node('button', `stt-command${primary ? ' stt-command-primary' : ''}`);
-    button.type = 'button'; button.dataset.sttAction = action; button.dataset.sttFocusKey = focusKey; button.dataset.state = state;
-    button.disabled = state === 'loading'; button.setAttribute('aria-busy', String(state === 'loading'));
-    const glyph = node('span', 'stt-command-icon'); glyph.append(icon(state === 'success' ? 'check' : image));
-    const copy = node('span', 'stt-command-copy'); copy.append(node('strong', '', label), node('span', '', description));
-    const end = node('span', 'stt-command-end'); end.append(icon(state === 'loading' ? 'download' : 'arrow'));
-    button.append(glyph, copy, end); return button;
+    button.type = 'button';
+    button.dataset.sttAction = action;
+    button.dataset.sttFocusKey = focusKey;
+    button.dataset.state = state;
+    button.disabled = state === 'loading';
+    button.setAttribute('aria-busy', String(state === 'loading'));
+    const glyph = node('span', 'stt-command-icon');
+    glyph.append(icon(state === 'success' ? 'check' : image));
+    const copy = node('span', 'stt-command-copy');
+    copy.append(node('strong', '', label), node('span', '', description));
+    const end = node('span', 'stt-command-end');
+    end.append(icon(state === 'loading' ? 'download' : 'arrow'));
+    button.append(glyph, copy, end);
+    return button;
   }
 
   private createTextAction(primary = false): HTMLElement {
-    const wrapper = node('div', 'stt-text-action'); wrapper.dataset.state = this.textActionState;
+    const wrapper = node('div', 'stt-text-action');
+    wrapper.dataset.state = this.textActionState;
     const state = this.textActionState;
-    const label = state === 'loading' ? '正在复制…' : state === 'success' ? '已复制 · 再复制一次' : state === 'error' ? '重试复制文字' : '复制推文文字';
-    wrapper.append(this.actionButton('copy-text', 'copy-text', label, '复制后，直接粘贴到聊天中', 'copy', state, primary));
-    if (state === 'error') wrapper.append(this.errorDetails('没能复制，请重试或检查剪贴板权限。', this.textActionError));
+    const label =
+      state === 'loading'
+        ? '正在复制…'
+        : state === 'success'
+          ? '已复制 · 再复制一次'
+          : state === 'error'
+            ? '重试复制文字'
+            : '复制推文文字';
+    wrapper.append(
+      this.actionButton(
+        'copy-text',
+        'copy-text',
+        label,
+        '复制后，直接粘贴到聊天中',
+        'copy',
+        state,
+        primary,
+      ),
+    );
+    if (state === 'error')
+      wrapper.append(this.errorDetails('没能复制，请重试或检查剪贴板权限。', this.textActionError));
     return wrapper;
   }
 
   private errorDetails(message: string, technical: string): HTMLElement {
-    const wrapper = node('div', 'stt-inline-error'); wrapper.setAttribute('role', 'status'); wrapper.append(node('p', '', message));
-    if (technical) { const details = node('details', ''); details.append(node('summary', '', '查看详细信息'), node('p', '', technical)); wrapper.append(details); }
+    const wrapper = node('div', 'stt-inline-error');
+    wrapper.setAttribute('role', 'status');
+    wrapper.append(node('p', '', message));
+    if (technical) {
+      const details = node('details', '');
+      details.append(node('summary', '', '查看详细信息'), node('p', '', technical));
+      wrapper.append(details);
+    }
     return wrapper;
   }
 
   private reconcileMediaSelection(record: TweetRecord): void {
-    const available = new Set(record.media.map(media => media.index));
+    const available = new Set(record.media.map((media) => media.index));
     for (const index of this.selectedMediaIndexes) {
       if (!available.has(index)) this.selectedMediaIndexes.delete(index);
     }
@@ -516,13 +723,19 @@ export class ShareEnhancerController {
     if (!this.mediaSelectionInitialized && record.media.length > 0) {
       this.mediaSelectionInitialized = true;
       this.selectedMediaIndex = this.selectedMediaIndex ?? record.media[0]?.index;
-      if (this.selectedMediaIndex !== undefined) this.selectedMediaIndexes.add(this.selectedMediaIndex);
+      if (this.selectedMediaIndex !== undefined)
+        this.selectedMediaIndexes.add(this.selectedMediaIndex);
     }
   }
 
   private toggleMediaSelection(mediaIndex: number): void {
     const record = this.currentRecord;
-    if (this.batchDownloadMode !== undefined || !record || !record.media.some(media => media.index === mediaIndex)) return;
+    if (
+      this.batchDownloadMode !== undefined ||
+      !record ||
+      !record.media.some((media) => media.index === mediaIndex)
+    )
+      return;
     if (this.selectedMediaIndexes.has(mediaIndex)) {
       if (this.selectedMediaIndexes.size > 1) {
         this.selectedMediaIndexes.delete(mediaIndex);
@@ -566,12 +779,22 @@ export class ShareEnhancerController {
 
     try {
       await copyTweetText(record, this.settings.textTemplate);
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.textActionState = 'success';
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('ready', '已复制，可直接粘贴到聊天中。');
     } catch (error) {
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.textActionState = 'error';
       this.textActionError = error instanceof Error ? error.message : String(error);
       this.renderActions(this.currentRecord ?? record);
@@ -583,9 +806,11 @@ export class ShareEnhancerController {
   private createMediaAction(record: TweetRecord, media: MediaRecord): HTMLElement {
     const wrapper = node('div', 'stt-media-action');
     const noSelection = this.selectedMediaIndexes.size === 0;
-    const singleState = noSelection ? 'idle' : this.mediaActionStates.get(media.index) ?? 'idle';
+    const singleState = noSelection ? 'idle' : (this.mediaActionStates.get(media.index) ?? 'idle');
     const batch = this.selectedMediaIndexes.size > 1;
-    const selectedPhotos = record.media.some(candidate => this.selectedMediaIndexes.has(candidate.index) && candidate.type === 'photo');
+    const selectedPhotos = record.media.some(
+      (candidate) => this.selectedMediaIndexes.has(candidate.index) && candidate.type === 'photo',
+    );
     const showFrameActions = noSelection || media.type === 'photo' || (batch && selectedPhotos);
     wrapper.dataset.state = singleState;
     const photo = media.type === 'photo';
@@ -595,8 +820,8 @@ export class ShareEnhancerController {
         const state = noSelection
           ? 'idle'
           : batch
-          ? this.batchFrameStates[orientation]
-          : this.frameActionStates.get(this.frameActionKey(media.index, orientation)) ?? 'idle';
+            ? this.batchFrameStates[orientation]
+            : (this.frameActionStates.get(this.frameActionKey(media.index, orientation)) ?? 'idle');
         const preferred = orientation === this.settings.frameOrientation;
         const direction = FRAME_ORIENTATION_LABELS[orientation];
         const label = batch
@@ -614,9 +839,19 @@ export class ShareEnhancerController {
               : state === 'error'
                 ? `重试${direction}画框`
                 : `保存${direction}画框`;
-        const frame = this.actionButton('frame-media', `frame-${media.index}-${orientation}`, label,
-          batch ? '照片添加画框，视频和 GIF 原样保存' : preferred ? '默认方向 · 一键保存' : '本次直接覆盖默认方向',
-          'frame', state, preferred);
+        const frame = this.actionButton(
+          'frame-media',
+          `frame-${media.index}-${orientation}`,
+          label,
+          batch
+            ? '照片添加画框，视频和 GIF 原样保存'
+            : preferred
+              ? '默认方向 · 一键保存'
+              : '本次直接覆盖默认方向',
+          'frame',
+          state,
+          preferred,
+        );
         frame.classList.add('stt-media-frame-button');
         frame.dataset.sttMediaIndex = String(media.index);
         frame.dataset.sttOrientation = orientation;
@@ -628,9 +863,19 @@ export class ShareEnhancerController {
       const frameError = noSelection
         ? undefined
         : batch
-        ? FRAME_ORIENTATIONS.map(orientation => this.batchFrameErrors[orientation]).find(message => message)
-        : FRAME_ORIENTATIONS.map(orientation => this.frameActionErrors.get(this.frameActionKey(media.index, orientation))).find(message => message);
-      if (frameError) wrapper.append(this.errorDetails(batch ? '部分带画框媒体保存失败，请重试。' : '这次画框没能生成，请重试。', frameError));
+          ? FRAME_ORIENTATIONS.map((orientation) => this.batchFrameErrors[orientation]).find(
+              (message) => message,
+            )
+          : FRAME_ORIENTATIONS.map((orientation) =>
+              this.frameActionErrors.get(this.frameActionKey(media.index, orientation)),
+            ).find((message) => message);
+      if (frameError)
+        wrapper.append(
+          this.errorDetails(
+            batch ? '部分带画框媒体保存失败，请重试。' : '这次画框没能生成，请重试。',
+            frameError,
+          ),
+        );
     }
     const state = batch ? this.batchOriginalState : singleState;
     const mediaLabel = photo ? '原图' : media.type === 'animated_gif' ? 'GIF 视频' : '视频';
@@ -642,42 +887,71 @@ export class ShareEnhancerController {
           : state === 'error'
             ? '重试保存已选媒体'
             : `保存已选媒体（${this.selectedMediaIndexes.size}）`
-      : state === 'loading' ? '正在保存…' : state === 'success' ? `再次保存${mediaLabel}` : state === 'error' ? `重试保存${mediaLabel}` : `保存${mediaLabel}`;
+      : state === 'loading'
+        ? '正在保存…'
+        : state === 'success'
+          ? `再次保存${mediaLabel}`
+          : state === 'error'
+            ? `重试保存${mediaLabel}`
+            : `保存${mediaLabel}`;
     const button = this.actionButton(
       batch ? 'download-selected' : 'download-media',
       batch ? 'download-selected-original' : `download-${media.index}`,
       label,
-      batch ? '照片、视频和 GIF 均按原始媒体保存' : photo ? '不加画框，保留原始图片' : media.type === 'animated_gif' ? '以 MP4 格式保存，不转换成 .gif' : '以 MP4 格式保存',
+      batch
+        ? '照片、视频和 GIF 均按原始媒体保存'
+        : photo
+          ? '不加画框，保留原始图片'
+          : media.type === 'animated_gif'
+            ? '以 MP4 格式保存，不转换成 .gif'
+            : '以 MP4 格式保存',
       'download',
       state,
-      batch || !photo
+      batch || !photo,
     );
     button.disabled = button.disabled || this.isBatchDownloading() || noSelection;
     if (batch) button.dataset.sttBatchMode = 'original';
     else button.dataset.sttMediaIndex = String(media.index);
     let filename = '';
     if (!noSelection) {
-      try { filename = buildMediaFilename(record, media, this.settings.filenameTemplate); }
-      catch (error) {
+      try {
+        filename = buildMediaFilename(record, media, this.settings.filenameTemplate);
+      } catch (error) {
         button.disabled = true;
-        wrapper.append(this.errorDetails('请先检查设置中的文件名模板。', error instanceof Error ? error.message : String(error)));
+        wrapper.append(
+          this.errorDetails(
+            '请先检查设置中的文件名模板。',
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
       }
     }
     wrapper.append(button);
     if (state === 'error') {
-      wrapper.append(this.errorDetails(
-        batch ? '部分原始媒体保存失败，请重试。' : '没能保存，请检查网络后重试。',
-        batch ? this.batchOriginalError : this.mediaActionErrors.get(media.index) ?? ''
-      ));
+      wrapper.append(
+        this.errorDetails(
+          batch ? '部分原始媒体保存失败，请重试。' : '没能保存，请检查网络后重试。',
+          batch ? this.batchOriginalError : (this.mediaActionErrors.get(media.index) ?? ''),
+        ),
+      );
     }
     if (filename) {
-      const details = node('details', 'stt-file-details'); details.append(node('summary', '', '查看保存文件名'));
-      const list = node('dl', ''); list.append(node('dt', '', photo ? '原图' : '视频'), node('dd', '', filename));
+      const details = node('details', 'stt-file-details');
+      details.append(node('summary', '', '查看保存文件名'));
+      const list = node('dl', '');
+      list.append(node('dt', '', photo ? '原图' : '视频'), node('dd', '', filename));
       if (photo) {
-        try { list.append(node('dt', '', '画框'), node('dd', '', buildFrameFilename(record, media, this.settings.filenameTemplate))); }
-        catch { list.append(node('dt', '', '画框'), node('dd', '', '文件名暂不可用，请检查模板。')); }
+        try {
+          list.append(
+            node('dt', '', '画框'),
+            node('dd', '', buildFrameFilename(record, media, this.settings.filenameTemplate)),
+          );
+        } catch {
+          list.append(node('dt', '', '画框'), node('dd', '', '文件名暂不可用，请检查模板。'));
+        }
       }
-      details.append(list); wrapper.append(details);
+      details.append(list);
+      wrapper.append(details);
     }
     return wrapper;
   }
@@ -710,12 +984,22 @@ export class ShareEnhancerController {
 
     try {
       await downloadMediaFile(media, filename);
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       this.mediaActionStates.set(mediaIndex, 'success');
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('ready', '已交给浏览器保存，可在下载列表中查看。');
     } catch (error) {
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       const message = error instanceof Error ? error.message : String(error);
       this.mediaActionStates.set(mediaIndex, 'error');
       this.mediaActionErrors.set(mediaIndex, message);
@@ -725,13 +1009,24 @@ export class ShareEnhancerController {
     }
   }
 
-  private async saveSelectedMedia(mode: BatchDownloadMode, orientation?: FrameOrientation): Promise<void> {
+  private async saveSelectedMedia(
+    mode: BatchDownloadMode,
+    orientation?: FrameOrientation,
+  ): Promise<void> {
     const record = this.currentRecord;
-    const selected = record?.media.filter(media => this.selectedMediaIndexes.has(media.index)) ?? [];
+    const selected =
+      record?.media.filter((media) => this.selectedMediaIndexes.has(media.index)) ?? [];
     if (mode === 'framed' && !orientation) return;
     const frameOrientation = orientation ?? this.settings.frameOrientation;
-    const state = mode === 'original' ? this.batchOriginalState : this.batchFrameStates[frameOrientation];
-    if (!record || selected.length < 2 || this.batchDownloadMode !== undefined || state === 'loading') return;
+    const state =
+      mode === 'original' ? this.batchOriginalState : this.batchFrameStates[frameOrientation];
+    if (
+      !record ||
+      selected.length < 2 ||
+      this.batchDownloadMode !== undefined ||
+      state === 'loading'
+    )
+      return;
 
     const tweetId = record.tweetId;
     const epoch = this.recordRequestId;
@@ -747,11 +1042,21 @@ export class ShareEnhancerController {
     this.renderActions(record);
 
     for (const [index, media] of selected.entries()) {
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       try {
         if (mode === 'framed' && media.type === 'photo') {
           const filename = buildFrameFilename(record, media, this.settings.filenameTemplate);
-          const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate, frameOrientation);
+          const blob = await renderPhotoFrame(
+            record,
+            media,
+            this.settings.frameTemplate,
+            frameOrientation,
+          );
           downloadBlob(blob, filename);
           const actionKey = this.frameActionKey(media.index, frameOrientation);
           this.frameActionStates.set(actionKey, 'success');
@@ -775,10 +1080,18 @@ export class ShareEnhancerController {
         }
       }
       this.renderActions(record);
-      this.setSheetStatus('loading', `正在保存${mode === 'framed' ? '带画框的' : ''}已选媒体（${index + 1}/${selected.length}）…`);
+      this.setSheetStatus(
+        'loading',
+        `正在保存${mode === 'framed' ? '带画框的' : ''}已选媒体（${index + 1}/${selected.length}）…`,
+      );
     }
 
-    if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+    if (
+      epoch !== this.recordRequestId ||
+      this.currentTweetId !== tweetId ||
+      this.currentRecord?.tweetId !== tweetId
+    )
+      return;
     this.batchDownloadMode = undefined;
     if (failures.length > 0) {
       if (mode === 'original') {
@@ -790,23 +1103,32 @@ export class ShareEnhancerController {
       }
       this.renderActions(record);
       this.setSheetStatus('error', `${failures.length} 项媒体保存失败，请查看详情后重试。`);
-      console.error(`分享有据 · Share This Tweet: failed to download selected ${mode} media`, failures);
+      console.error(
+        `分享有据 · Share This Tweet: failed to download selected ${mode} media`,
+        failures,
+      );
       return;
     }
 
     if (mode === 'original') this.batchOriginalState = 'success';
     else this.batchFrameStates[frameOrientation] = 'success';
     this.renderActions(record);
-    this.setSheetStatus('ready', mode === 'framed'
-      ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${FRAME_ORIENTATION_LABELS[frameOrientation]}画框，视频和 GIF 原样保存。`
-      : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`);
+    this.setSheetStatus(
+      'ready',
+      mode === 'framed'
+        ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${FRAME_ORIENTATION_LABELS[frameOrientation]}画框，视频和 GIF 原样保存。`
+        : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`,
+    );
   }
 
   private frameActionKey(mediaIndex: number, orientation: FrameOrientation): string {
     return `${mediaIndex}:${orientation}`;
   }
 
-  private async generateFrame(mediaIndex: number, orientation = this.settings.frameOrientation): Promise<void> {
+  private async generateFrame(
+    mediaIndex: number,
+    orientation = this.settings.frameOrientation,
+  ): Promise<void> {
     const record = this.currentRecord;
     const media = record?.media.find((candidate) => candidate.index === mediaIndex);
     if (!record || !media || media.type !== 'photo') return;
@@ -835,13 +1157,23 @@ export class ShareEnhancerController {
 
     try {
       const blob = await renderPhotoFrame(record, media, this.settings.frameTemplate, orientation);
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       downloadBlob(blob, filename);
       this.frameActionStates.set(actionKey, 'success');
       this.renderActions(this.currentRecord ?? record);
       this.setSheetStatus('ready', '带来源的图片已生成，并交给浏览器保存。');
     } catch (error) {
-      if (epoch !== this.recordRequestId || this.currentTweetId !== tweetId || this.currentRecord?.tweetId !== tweetId) return;
+      if (
+        epoch !== this.recordRequestId ||
+        this.currentTweetId !== tweetId ||
+        this.currentRecord?.tweetId !== tweetId
+      )
+        return;
       const message = error instanceof Error ? error.message : String(error);
       this.frameActionStates.set(actionKey, 'error');
       this.frameActionErrors.set(actionKey, message);
@@ -853,16 +1185,24 @@ export class ShareEnhancerController {
 
   private lockPage(): void {
     if (this.restoreOverlay || !this.sheet) return;
-    const siblings = Array.from(document.body.children).filter((child): child is HTMLElement => child instanceof HTMLElement && child !== this.sheet);
-    const inertState = siblings.map(element => ({ element, inert: element.inert }));
+    const siblings = Array.from(document.body.children).filter(
+      (child): child is HTMLElement => child instanceof HTMLElement && child !== this.sheet,
+    );
+    const inertState = siblings.map((element) => ({ element, inert: element.inert }));
     for (const { element } of inertState) element.inert = true;
     const targets = [document.documentElement, document.body];
-    const overflow = targets.map(element => ({ element, value: element.style.getPropertyValue('overflow'), priority: element.style.getPropertyPriority('overflow') }));
-    for (const { element } of overflow) element.style.setProperty('overflow', 'hidden', 'important');
+    const overflow = targets.map((element) => ({
+      element,
+      value: element.style.getPropertyValue('overflow'),
+      priority: element.style.getPropertyPriority('overflow'),
+    }));
+    for (const { element } of overflow)
+      element.style.setProperty('overflow', 'hidden', 'important');
     this.restoreOverlay = () => {
       for (const { element, inert } of inertState) element.inert = inert;
       for (const { element, value, priority } of overflow) {
-        if (value) element.style.setProperty('overflow', value, priority); else element.style.removeProperty('overflow');
+        if (value) element.style.setProperty('overflow', value, priority);
+        else element.style.removeProperty('overflow');
       }
     };
   }
@@ -870,12 +1210,20 @@ export class ShareEnhancerController {
   private openSheet(): void {
     if (!this.sheet) return;
     if (!this.sheet.hidden && this.sheet.dataset.state !== 'closing') return;
-    if (this.closeTimer !== undefined) { window.clearTimeout(this.closeTimer); this.closeTimer = undefined; }
-    this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    this.sheet.hidden = false; delete this.sheet.dataset.state;
+    if (this.closeTimer !== undefined) {
+      window.clearTimeout(this.closeTimer);
+      this.closeTimer = undefined;
+    }
+    this.previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    this.sheet.hidden = false;
+    delete this.sheet.dataset.state;
     this.trigger?.setAttribute('aria-expanded', 'true');
     this.lockPage();
-    requestAnimationFrame(() => { if (this.sheet && !this.sheet.hidden && this.sheet.dataset.state !== 'closing') this.sheet.dataset.state = 'open'; });
+    requestAnimationFrame(() => {
+      if (this.sheet && !this.sheet.hidden && this.sheet.dataset.state !== 'closing')
+        this.sheet.dataset.state = 'open';
+    });
     this.sheet.querySelector<HTMLButtonElement>('[data-stt-close]')?.focus({ preventScroll: true });
     // Refresh saved preferences when reopening; never cache old settings for the
     // entire lifetime of an X tab.
@@ -884,15 +1232,23 @@ export class ShareEnhancerController {
 
   private closeSheet(immediate = false): void {
     if (!this.sheet) return;
-    if (this.closeTimer !== undefined) { window.clearTimeout(this.closeTimer); this.closeTimer = undefined; }
+    if (this.closeTimer !== undefined) {
+      window.clearTimeout(this.closeTimer);
+      this.closeTimer = undefined;
+    }
     this.sheet.dataset.state = 'closing';
     this.trigger?.setAttribute('aria-expanded', 'false');
-    this.restoreOverlay?.(); this.restoreOverlay = undefined;
-    if (immediate) { this.sheet.hidden = true; delete this.sheet.dataset.state; }
-    else if (!this.sheet.hidden) {
+    this.restoreOverlay?.();
+    this.restoreOverlay = undefined;
+    if (immediate) {
+      this.sheet.hidden = true;
+      delete this.sheet.dataset.state;
+    } else if (!this.sheet.hidden) {
       this.closeTimer = window.setTimeout(() => {
         if (!this.sheet) return;
-        this.sheet.hidden = true; delete this.sheet.dataset.state; this.closeTimer = undefined;
+        this.sheet.hidden = true;
+        delete this.sheet.dataset.state;
+        this.closeTimer = undefined;
       }, 180);
     }
     if (this.previousFocus?.isConnected) this.previousFocus.focus({ preventScroll: true });

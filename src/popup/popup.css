@@ -1,6 +1,11 @@
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   --popup-bg: #ffffff;
   --popup-surface: #f5f8fc;
   --popup-text: #182230;
@@ -95,7 +100,11 @@ body {
 .template-summary code {
   overflow: hidden;
   color: var(--popup-text);
-  font: 0.76rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    0.76rem/1.3 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

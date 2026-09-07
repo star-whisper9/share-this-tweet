@@ -2,24 +2,15 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>分享有据 · Share This Tweet</title>
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
     <header class="app-header">
-      <a
-        class="brand"
-        href="#"
-        aria-label="分享有据 · Share This Tweet 设置首页"
-      >
-        <span class="brand-mark" aria-hidden="true"
-          ><img src="../icons/icon-48.png" alt=""
-        /></span>
+      <a class="brand" href="#" aria-label="分享有据 · Share This Tweet 设置首页">
+        <span class="brand-mark" aria-hidden="true"><img src="../icons/icon-48.png" alt="" /></span>
         <span>分享有据 · Share This Tweet</span>
       </a>
     </header>
@@ -29,8 +20,7 @@
       </header>
       <form data-settings-form novalidate>
         <div class="load-error" data-load-error hidden role="alert">
-          <span data-load-message></span
-          ><button type="button" data-retry-load>重新读取</button>
+          <span data-load-message></span><button type="button" data-retry-load>重新读取</button>
         </div>
         <div class="settings-tabs" role="tablist" aria-label="分享设置分类">
           <button
@@ -72,9 +62,7 @@
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="8" y="8" width="12" height="13" rx="2" />
-              <path
-                d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"
-              /></svg
+              <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></svg
             >复制文字
           </button>
         </div>
@@ -102,10 +90,7 @@
                 role="group"
                 aria-labelledby="frame-presets-label"
               ></div>
-              <p
-                class="field-label frame-orientation-label"
-                id="frame-orientation-label"
-              >
+              <p class="field-label frame-orientation-label" id="frame-orientation-label">
                 默认画框方向
               </p>
               <div
@@ -114,28 +99,17 @@
                 role="group"
                 aria-labelledby="frame-orientation-label"
               >
-                <button
-                  type="button"
-                  data-frame-orientation="top"
-                  aria-pressed="false"
-                >
+                <button type="button" data-frame-orientation="top" aria-pressed="false">
                   <span aria-hidden="true">↑</span><strong>上</strong>
                 </button>
-                <button
-                  type="button"
-                  data-frame-orientation="bottom"
-                  aria-pressed="true"
-                >
+                <button type="button" data-frame-orientation="bottom" aria-pressed="true">
                   <span aria-hidden="true">↓</span><strong>下</strong>
                 </button>
               </div>
               <details class="template-editor" data-editor="frameTemplate">
                 <summary>
                   <span>自定义文字与变量</span
-                  ><span
-                    class="custom-badge"
-                    data-custom-badge="frameTemplate"
-                    hidden
+                  ><span class="custom-badge" data-custom-badge="frameTemplate" hidden
                     >已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
@@ -167,21 +141,13 @@
                 </div>
               </details>
             </div>
-            <aside
-              class="settings-preview frame-preview"
-              aria-label="来源画框示意"
-            >
+            <aside class="settings-preview frame-preview" aria-label="来源画框示意">
               <div class="preview-heading">
                 <span>分享出去的样子</span><span class="preview-tag">示例</span>
               </div>
               <div class="photo-print">
-                <div
-                  class="sample-art"
-                  role="img"
-                  aria-label="蓝色抽象风景示意图"
-                >
-                  <span class="sample-sun"></span
-                  ><span class="sample-hill sample-hill-back"></span
+                <div class="sample-art" role="img" aria-label="蓝色抽象风景示意图">
+                  <span class="sample-sun"></span><span class="sample-hill sample-hill-back"></span
                   ><span class="sample-hill sample-hill-front"></span
                   ><span class="art-caption">A LITTLE<br />INSPIRATION.</span>
                 </div>
@@ -194,8 +160,7 @@
                 </div>
               </div>
               <p class="preview-description">
-                左侧为模板预览；右侧 Tweet ID 和 @handle
-                为固定溯源信息，画框排版仅供示意。
+                左侧为模板预览；右侧 Tweet ID 和 @handle 为固定溯源信息，画框排版仅供示意。
               </p>
             </aside>
           </section>
@@ -215,9 +180,7 @@
                   <p>把推主与推文编号留在文件名里，归档时更好找。</p>
                 </div>
               </div>
-              <p class="field-label" id="filename-presets-label">
-                选一种命名方式
-              </p>
+              <p class="field-label" id="filename-presets-label">选一种命名方式</p>
               <div
                 class="preset-grid"
                 data-presets="filenameTemplate"
@@ -227,10 +190,7 @@
               <details class="template-editor" data-editor="filenameTemplate">
                 <summary>
                   <span>自定义文件名</span
-                  ><span
-                    class="custom-badge"
-                    data-custom-badge="filenameTemplate"
-                    hidden
+                  ><span class="custom-badge" data-custom-badge="filenameTemplate" hidden
                     >已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
@@ -258,10 +218,7 @@
                 </div>
               </details>
             </div>
-            <aside
-              class="settings-preview file-preview"
-              aria-label="文件名预览"
-            >
+            <aside class="settings-preview file-preview" aria-label="文件名预览">
               <div class="preview-heading">
                 <span>保存在设备上</span><span class="preview-tag">示例</span>
               </div>
@@ -279,12 +236,9 @@
                 </div>
               </div>
               <div class="source-detail">
-                <span>示例来源</span><strong>@example</strong
-                ><span>第 1 张照片</span>
+                <span>示例来源</span><strong>@example</strong><span>第 1 张照片</span>
               </div>
-              <p class="preview-description">
-                上方文件名由你当前的模板实时生成。
-              </p>
+              <p class="preview-description">上方文件名由你当前的模板实时生成。</p>
             </aside>
           </section>
           <section
@@ -313,11 +267,7 @@
               <details class="template-editor" data-editor="textTemplate">
                 <summary>
                   <span>自定义文字排版</span
-                  ><span
-                    class="custom-badge"
-                    data-custom-badge="textTemplate"
-                    hidden
-                    >已自定义</span
+                  ><span class="custom-badge" data-custom-badge="textTemplate" hidden>已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
                 <div class="template-editor-body">
@@ -344,10 +294,7 @@
                 </div>
               </details>
             </div>
-            <aside
-              class="settings-preview text-preview"
-              aria-label="复制文字预览"
-            >
+            <aside class="settings-preview text-preview" aria-label="复制文字预览">
               <div class="preview-heading">
                 <span>粘贴到聊天中</span><span class="preview-tag">示例</span>
               </div>
@@ -355,9 +302,7 @@
                 <span class="chat-avatar" aria-hidden="true">你</span>
                 <pre data-preview="text"></pre>
               </div>
-              <p class="preview-description">
-                以上为示例内容，不会读取你的标签页和聊天。
-              </p>
+              <p class="preview-description">以上为示例内容，不会读取你的标签页和聊天。</p>
             </aside>
           </section>
         </fieldset>
@@ -367,17 +312,8 @@
             <p>这只会修改当前草稿，点击保存后才会生效。</p>
           </div>
           <div>
-            <button
-              type="button"
-              class="button button-secondary"
-              data-reset-cancel
-            >
-              取消</button
-            ><button
-              type="button"
-              class="button button-danger"
-              data-reset-confirm-button
-            >
+            <button type="button" class="button button-secondary" data-reset-cancel>取消</button
+            ><button type="button" class="button button-danger" data-reset-confirm-button>
               恢复默认
             </button>
           </div>
@@ -385,18 +321,10 @@
         <footer class="save-bar">
           <div class="save-state">
             <span class="state-dot" aria-hidden="true"></span
-            ><output data-status role="status" aria-live="polite"
-              >正在读取偏好…</output
-            >
+            ><output data-status role="status" aria-live="polite">正在读取偏好…</output>
           </div>
           <div class="save-actions">
-            <button
-              type="button"
-              class="button button-quiet"
-              data-reset
-              disabled
-            >
-              恢复默认</button
+            <button type="button" class="button button-quiet" data-reset disabled>恢复默认</button
             ><button type="submit" class="button button-primary" disabled>
               保存偏好 <span aria-hidden="true">↗</span>
             </button>

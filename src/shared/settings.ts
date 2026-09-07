@@ -1,5 +1,9 @@
 import { DEFAULT_FILENAME_TEMPLATE } from '../core/filename.js';
-import { DEFAULT_FRAME_ORIENTATION, DEFAULT_FRAME_TEMPLATE, type FrameOrientation } from '../core/frame.js';
+import {
+  DEFAULT_FRAME_ORIENTATION,
+  DEFAULT_FRAME_TEMPLATE,
+  type FrameOrientation,
+} from '../core/frame.js';
 import { DEFAULT_TEXT_TEMPLATE } from '../core/text-export.js';
 
 export const SETTINGS_STORAGE_KEY = 'share-this-tweet.settings';
@@ -15,12 +19,12 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
   frameTemplate: DEFAULT_FRAME_TEMPLATE,
   frameOrientation: DEFAULT_FRAME_ORIENTATION,
-  textTemplate: DEFAULT_TEXT_TEMPLATE
+  textTemplate: DEFAULT_TEXT_TEMPLATE,
 };
 
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined;
 }
 
@@ -29,9 +33,7 @@ function readTemplate(value: unknown, fallback: string): string {
 }
 
 function readOrientation(value: unknown): FrameOrientation {
-  return value === 'top' || value === 'bottom'
-    ? value
-    : DEFAULT_SETTINGS.frameOrientation;
+  return value === 'top' || value === 'bottom' ? value : DEFAULT_SETTINGS.frameOrientation;
 }
 
 export function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
@@ -40,7 +42,7 @@ export function normalizeSettings(values: Record<string, unknown>): ExtensionSet
     filenameTemplate: readTemplate(stored?.filenameTemplate, DEFAULT_SETTINGS.filenameTemplate),
     frameTemplate: readTemplate(stored?.frameTemplate, DEFAULT_SETTINGS.frameTemplate),
     frameOrientation: readOrientation(stored?.frameOrientation),
-    textTemplate: readTemplate(stored?.textTemplate, DEFAULT_SETTINGS.textTemplate)
+    textTemplate: readTemplate(stored?.textTemplate, DEFAULT_SETTINGS.textTemplate),
   };
 }
 

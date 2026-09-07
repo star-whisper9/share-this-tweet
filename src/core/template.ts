@@ -58,7 +58,11 @@ function getTemplateValue(field: string, context: TemplateContext): string {
   }
 }
 
-function formatTemplateValue(field: string, format: string | undefined, context: TemplateContext): string {
+function formatTemplateValue(
+  field: string,
+  format: string | undefined,
+  context: TemplateContext,
+): string {
   const value = getTemplateValue(field, context);
   if (!format) {
     return value;
@@ -86,7 +90,9 @@ function renderPlaceholder(placeholder: string, context: TemplateContext): strin
 
 export function renderTemplate(template: string, context: TemplateContext): string {
   return parseTemplate(template)
-    .map((segment) => segment.type === 'literal' ? segment.value : renderPlaceholder(segment.value, context))
+    .map((segment) =>
+      segment.type === 'literal' ? segment.value : renderPlaceholder(segment.value, context),
+    )
     .join('');
 }
 
@@ -104,7 +110,8 @@ export function parseTemplate(template: string): TemplateSegment[] {
     const closeLiteral = template.indexOf('}', cursor);
     if (open === -1) {
       if (closeLiteral !== -1) throw new TemplateError('模板包含未匹配的 }');
-      if (cursor < template.length) segments.push({ type: 'literal', value: template.slice(cursor) });
+      if (cursor < template.length)
+        segments.push({ type: 'literal', value: template.slice(cursor) });
       break;
     }
     if (closeLiteral !== -1 && closeLiteral < open) {

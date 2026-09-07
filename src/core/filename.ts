@@ -28,13 +28,13 @@ function forceExtension(filename: string, extension: string): string {
 export function buildMediaFilename(
   record: TweetRecord,
   media: MediaRecord,
-  template = DEFAULT_FILENAME_TEMPLATE
+  template = DEFAULT_FILENAME_TEMPLATE,
 ): string {
   const target = getMediaDownloadTarget(media);
   const rendered = renderTemplate(template, {
     tweet: record,
     media,
-    extension: target.extension
+    extension: target.extension,
   });
   return forceExtension(sanitizeFilename(rendered), target.extension);
 }
@@ -42,12 +42,12 @@ export function buildMediaFilename(
 export function buildFrameFilename(
   record: TweetRecord,
   media: MediaRecord,
-  template = DEFAULT_FILENAME_TEMPLATE
+  template = DEFAULT_FILENAME_TEMPLATE,
 ): string {
   const rendered = renderTemplate(template, {
     tweet: record,
     media,
-    extension: 'png'
+    extension: 'png',
   });
   return forceExtension(`${sanitizeFilename(rendered)}_framed`, 'png');
 }

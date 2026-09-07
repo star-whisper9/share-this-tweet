@@ -5,7 +5,7 @@ type JsonObject = Record<string, unknown>;
 
 function asObject(value: unknown): JsonObject | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonObject
+    ? (value as JsonObject)
     : undefined;
 }
 
@@ -16,9 +16,11 @@ function getObject(value: unknown, key: string): JsonObject | undefined {
 function isTweetCandidate(value: JsonObject): boolean {
   if (value.__typename === 'Tweet' && typeof value.rest_id === 'string') return true;
   if (value.__typename === 'TweetWithVisibilityResults' && getObject(value, 'tweet')) return true;
-  return typeof value.id_str === 'string'
-    && (typeof value.full_text === 'string' || typeof value.text === 'string')
-    && (getObject(value, 'user') !== undefined || typeof value.user_id_str === 'string');
+  return (
+    typeof value.id_str === 'string' &&
+    (typeof value.full_text === 'string' || typeof value.text === 'string') &&
+    (getObject(value, 'user') !== undefined || typeof value.user_id_str === 'string')
+  );
 }
 
 function findTweetCandidates(payload: unknown): JsonObject[] {
@@ -47,11 +49,13 @@ function findTweetCandidates(payload: unknown): JsonObject[] {
 function postTweetData(payload: unknown): void {
   const candidates = findTweetCandidates(payload);
   if (candidates.length === 0) return;
-  window.dispatchEvent(new CustomEvent(TWEET_DATA_EVENT, {
-    detail: JSON.stringify(candidates),
-    bubbles: false,
-    cancelable: false
-  }));
+  window.dispatchEvent(
+    new CustomEvent(TWEET_DATA_EVENT, {
+      detail: JSON.stringify(candidates),
+      bubbles: false,
+      cancelable: false,
+    }),
+  );
 }
 
 function processResponseText(text: string): void {

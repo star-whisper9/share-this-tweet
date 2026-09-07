@@ -2,8 +2,7 @@
 :root {
   color-scheme: light dark;
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
-    "Noto Sans CJK SC", sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', 'Noto Sans CJK SC', sans-serif;
   --page: #f5f7fa;
   --surface: #fff;
   --surface-soft: #f8fafc;
@@ -169,7 +168,7 @@ form {
   min-height: 44px;
   white-space: nowrap;
 }
-.settings-tabs button[aria-selected="true"] {
+.settings-tabs button[aria-selected='true'] {
   background: var(--surface);
   border-color: var(--border);
   color: var(--accent);
@@ -252,7 +251,7 @@ h2 {
 .preset:hover {
   border-color: var(--tint-border);
 }
-.preset[aria-pressed="true"] {
+.preset[aria-pressed='true'] {
   background: var(--tint);
   border-color: var(--accent);
   box-shadow: inset 0 0 0 0.5px var(--accent);
@@ -265,12 +264,12 @@ h2 {
   border-radius: 50%;
   margin-bottom: 12px;
 }
-.preset[aria-pressed="true"] .preset-check {
+.preset[aria-pressed='true'] .preset-check {
   background: var(--accent);
   border-color: var(--accent);
 }
-.preset[aria-pressed="true"] .preset-check::after {
-  content: "";
+.preset[aria-pressed='true'] .preset-check::after {
+  content: '';
   display: block;
   width: 6px;
   height: 3px;
@@ -305,7 +304,7 @@ h2 {
 .frame-orientation-grid button strong {
   font-size: 11px;
 }
-.frame-orientation-grid button[aria-pressed="true"] {
+.frame-orientation-grid button[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--tint);
@@ -385,7 +384,7 @@ textarea {
   padding: 11px 12px;
   line-height: 1.6;
   font-size: 13px;
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
 }
 input:focus,
 textarea:focus {
@@ -393,8 +392,8 @@ textarea:focus {
   box-shadow: var(--focus);
   outline: none;
 }
-input[aria-invalid="true"],
-textarea[aria-invalid="true"] {
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] {
   border-color: var(--danger);
 }
 textarea {
@@ -661,14 +660,14 @@ textarea {
   border-radius: 50%;
   background: var(--success);
 }
-form[data-state="dirty"] .state-dot {
+form[data-state='dirty'] .state-dot {
   background: var(--accent);
 }
-form[data-state="error"] .state-dot {
+form[data-state='error'] .state-dot {
   background: var(--danger);
 }
-form[data-state="saving"] .state-dot,
-form[data-state="loading"] .state-dot {
+form[data-state='saving'] .state-dot,
+form[data-state='loading'] .state-dot {
   background: var(--accent);
   animation: pulse 1s ease-in-out infinite alternate;
 }
@@ -954,7 +953,7 @@ form[data-state="loading"] .state-dot {
   .settings-tabs {
     background: #101b29;
   }
-  .preset[aria-pressed="true"] .preset-check::after {
+  .preset[aria-pressed='true'] .preset-check::after {
     border-color: #102546;
   }
   .photo-print {

@@ -42,7 +42,7 @@ export interface FrameLayout {
 export function wrapFrameText(
   text: string,
   maxWidth: number,
-  measureText: FrameTextMeasurement['measureText']
+  measureText: FrameTextMeasurement['measureText'],
 ): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split(/\r?\n/)) {
@@ -65,7 +65,10 @@ export function wrapFrameText(
   return lines;
 }
 
-function getMaxTextWidth(lines: string[], measureText: FrameTextMeasurement['measureText']): number {
+function getMaxTextWidth(
+  lines: string[],
+  measureText: FrameTextMeasurement['measureText'],
+): number {
   return Math.max(0, ...lines.map((line) => measureText(line).width));
 }
 
@@ -99,13 +102,13 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
       rightWidth: sourceWidth,
       leftLines,
       rightLines,
-      barHeight: paddingY * 2 + lineHeight * Math.max(leftLines.length, rightLines.length)
+      barHeight: paddingY * 2 + lineHeight * Math.max(leftLines.length, rightLines.length),
     };
   }
 
   const leftLines = [
     ...wrapFrameText(input.userText, availableWidth, input.measureText),
-    ...input.sourceLines.flatMap((line) => wrapFrameText(line, availableWidth, input.measureText))
+    ...input.sourceLines.flatMap((line) => wrapFrameText(line, availableWidth, input.measureText)),
   ];
   return {
     orientation,
@@ -120,7 +123,7 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
     rightWidth: 0,
     leftLines,
     rightLines: [],
-    barHeight: paddingY * 2 + lineHeight * leftLines.length
+    barHeight: paddingY * 2 + lineHeight * leftLines.length,
   };
 }
 
@@ -142,13 +145,17 @@ function getSourceLines(record: TweetRecord): string[] {
 
 function createFrameTextMeasurer(
   context: CanvasRenderingContext2D,
-  fontSize: number
+  fontSize: number,
 ): FrameTextMeasurement['measureText'] {
   const avatarWidth = fontSize * 1.25 + fontSize * 0.3;
   return (text) => ({
     width: text
       .split(FRAME_AVATAR_MARKER)
-      .reduce((width, part, index, parts) => width + context.measureText(part).width + (index < parts.length - 1 ? avatarWidth : 0), 0)
+      .reduce(
+        (width, part, index, parts) =>
+          width + context.measureText(part).width + (index < parts.length - 1 ? avatarWidth : 0),
+        0,
+      ),
   });
 }
 
@@ -178,12 +185,15 @@ async function loadImage(blob: Blob): Promise<HTMLImageElement> {
   }
 }
 
-async function loadAvatarImage(record: TweetRecord, frameText: string): Promise<HTMLImageElement | undefined> {
+async function loadAvatarImage(
+  record: TweetRecord,
+  frameText: string,
+): Promise<HTMLImageElement | undefined> {
   if (!frameText.includes(FRAME_AVATAR_MARKER)) return undefined;
   const urls = [
     record.author.avatarUrl,
     browser.runtime.getURL('/icons/x.png'),
-    browser.runtime.getURL('/icons/x.svg')
+    browser.runtime.getURL('/icons/x.svg'),
   ].filter((url): url is string => Boolean(url));
   for (const url of urls) {
     try {
@@ -197,7 +207,12 @@ async function loadAvatarImage(record: TweetRecord, frameText: string): Promise<
   return undefined;
 }
 
-function drawAvatarFallback(context: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+function drawAvatarFallback(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
   context.save();
   context.fillStyle = '#111111';
   context.fillRect(x, y, size, size);
@@ -215,7 +230,7 @@ function drawHorizontalTextLine(
   x: number,
   y: number,
   fontSize: number,
-  avatarImage?: HTMLImageElement
+  avatarImage?: HTMLImageElement,
 ): void {
   if (!line.includes(FRAME_AVATAR_MARKER)) {
     context.fillText(line, x, y);
@@ -252,7 +267,7 @@ export async function renderPhotoFrame(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FRAME_TEMPLATE,
-  orientation: FrameOrientation = DEFAULT_FRAME_ORIENTATION
+  orientation: FrameOrientation = DEFAULT_FRAME_ORIENTATION,
 ): Promise<Blob> {
   if (media.type !== 'photo') throw new Error('只有照片支持生成画框');
   const userText = getFrameText(record, media, template);
@@ -272,7 +287,7 @@ export async function renderPhotoFrame(
     sourceLines,
     fontSize,
     orientation,
-    measureText: createFrameTextMeasurer(context, fontSize)
+    measureText: createFrameTextMeasurer(context, fontSize),
   });
 
   canvas.width = image.naturalWidth;
@@ -280,7 +295,12 @@ export async function renderPhotoFrame(
   const imageY = orientation === 'top' ? layout.barHeight : 0;
   context.drawImage(image, 0, imageY, image.naturalWidth, image.naturalHeight);
   context.fillStyle = FRAME_BACKGROUND;
-  context.fillRect(0, orientation === 'top' ? 0 : image.naturalHeight, canvas.width, layout.barHeight);
+  context.fillRect(
+    0,
+    orientation === 'top' ? 0 : image.naturalHeight,
+    canvas.width,
+    layout.barHeight,
+  );
   context.fillStyle = '#1f2933';
   context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
   // Each line occupies a fixed-height cell. Centering the glyph in that cell
@@ -292,20 +312,38 @@ export async function renderPhotoFrame(
     const frameY = orientation === 'top' ? 0 : image.naturalHeight;
     context.textAlign = 'left';
     layout.leftLines.forEach((line, index) => {
-      drawHorizontalTextLine(context, line, layout.paddingX, frameY + layout.paddingY + (index + 0.5) * layout.lineHeight, layout.fontSize, avatarImage);
+      drawHorizontalTextLine(
+        context,
+        line,
+        layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        layout.fontSize,
+        avatarImage,
+      );
     });
     context.textAlign = 'right';
     layout.rightLines.forEach((line, index) => {
       context.globalAlpha = index === 0 ? 0.62 : 0.9;
       context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-      context.fillText(line, canvas.width - layout.paddingX, frameY + layout.paddingY + (index + 0.5) * layout.lineHeight);
+      context.fillText(
+        line,
+        canvas.width - layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+      );
     });
     context.globalAlpha = 1;
   } else {
     const frameY = orientation === 'top' ? 0 : image.naturalHeight;
     context.textAlign = 'left';
     layout.leftLines.forEach((line, index) => {
-      drawHorizontalTextLine(context, line, layout.paddingX, frameY + layout.paddingY + (index + 0.5) * layout.lineHeight, layout.fontSize, avatarImage);
+      drawHorizontalTextLine(
+        context,
+        line,
+        layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        layout.fontSize,
+        avatarImage,
+      );
     });
   }
 

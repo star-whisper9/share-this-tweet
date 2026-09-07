@@ -14,7 +14,7 @@ const entries = [
   ['src/content/bootstrap.ts', 'content/bootstrap.js'],
   ['src/page/interceptor.ts', 'page/interceptor.js'],
   ['src/options/options.ts', 'options/options.js'],
-  ['src/popup/popup.ts', 'popup/popup.js']
+  ['src/popup/popup.ts', 'popup/popup.js'],
 ];
 
 for (const [source, output] of entries) {
@@ -26,7 +26,7 @@ for (const [source, output] of entries) {
     platform: 'browser',
     target: 'firefox115',
     sourcemap: true,
-    legalComments: 'eof'
+    legalComments: 'eof',
   });
 }
 

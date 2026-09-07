@@ -54,7 +54,10 @@ export class TweetSource {
     return new Promise<TweetRecord>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         const waiters = this.waiters.get(tweetId) ?? [];
-        this.waiters.set(tweetId, waiters.filter((waiter) => waiter.timer !== timer));
+        this.waiters.set(
+          tweetId,
+          waiters.filter((waiter) => waiter.timer !== timer),
+        );
         reject(new Error(`Timed out waiting for tweet ${tweetId}`));
       }, timeoutMs);
       const waiters = this.waiters.get(tweetId) ?? [];

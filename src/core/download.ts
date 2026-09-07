@@ -7,10 +7,12 @@ export function isAndroidUserAgent(userAgent: string): boolean {
 }
 
 function isDownloadResponse(value: unknown): value is DownloadMediaResponse {
-  return typeof value === 'object'
-    && value !== null
-    && 'ok' in value
-    && typeof (value as { ok?: unknown }).ok === 'boolean';
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'ok' in value &&
+    typeof (value as { ok?: unknown }).ok === 'boolean'
+  );
 }
 
 async function downloadOnAndroid(url: string, filename: string): Promise<void> {
@@ -61,7 +63,7 @@ export async function downloadMedia(media: MediaRecord, filename: string): Promi
   const response = await browser.runtime.sendMessage({
     type: 'download-media',
     url,
-    filename
+    filename,
   });
   if (!isDownloadResponse(response)) throw new Error('下载服务返回了无效结果');
   if (!response.ok) throw new Error(response.error);

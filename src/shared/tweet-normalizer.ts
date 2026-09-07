@@ -4,7 +4,7 @@ type JsonObject = Record<string, unknown>;
 
 function asObject(value: unknown): JsonObject | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as JsonObject
+    ? (value as JsonObject)
     : undefined;
 }
 
@@ -60,7 +60,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
       type: 'photo',
       originalUrl: getOriginalPhotoUrl(url),
       width: getNumber(originalInfo, 'width'),
-      height: getNumber(originalInfo, 'height')
+      height: getNumber(originalInfo, 'height'),
     };
   }
 
@@ -82,7 +82,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
     type,
     variants,
     width: getNumber(getObject(videoInfo, 'original_info'), 'width'),
-    height: getNumber(getObject(videoInfo, 'original_info'), 'height')
+    height: getNumber(getObject(videoInfo, 'original_info'), 'height'),
   };
 }
 
@@ -115,16 +115,18 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
   const input = asObject(candidate);
   if (!input) return undefined;
 
-  const isGraphqlTweet = input.__typename === 'Tweet'
-    || input.__typename === 'TweetWithVisibilityResults';
-  const isLegacyTweet = typeof input.id_str === 'string'
-    && (typeof input.full_text === 'string' || typeof input.text === 'string')
-    && (getObject(input, 'user') !== undefined || typeof input.user_id_str === 'string');
+  const isGraphqlTweet =
+    input.__typename === 'Tweet' || input.__typename === 'TweetWithVisibilityResults';
+  const isLegacyTweet =
+    typeof input.id_str === 'string' &&
+    (typeof input.full_text === 'string' || typeof input.text === 'string') &&
+    (getObject(input, 'user') !== undefined || typeof input.user_id_str === 'string');
   if (!isGraphqlTweet && !isLegacyTweet) return undefined;
 
   const tweet = unwrapTweet(input);
   const legacy = getObject(tweet, 'legacy') ?? tweet;
-  const tweetId = getString(tweet, 'rest_id') ?? getString(legacy, 'id_str') ?? getString(tweet, 'id_str');
+  const tweetId =
+    getString(tweet, 'rest_id') ?? getString(legacy, 'id_str') ?? getString(tweet, 'id_str');
   if (!tweetId) return undefined;
 
   const user = getObject(legacy, 'user');
@@ -132,42 +134,50 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
   const userResult = getObject(userResults, 'result');
   const userResultLegacy = getObject(userResult, 'legacy');
   const userResultCore = getObject(userResult, 'core');
-  const authorId = getString(user, 'id_str')
-    ?? getString(userResult, 'id_str')
-    ?? getString(userResult, 'rest_id')
-    ?? getString(legacy, 'user_id_str')
-    ?? '';
-  const handle = getString(user, 'screen_name')
-    ?? getString(userResultLegacy, 'screen_name')
-    ?? getString(userResultCore, 'screen_name')
-    ?? '';
-  const name = getString(user, 'name')
-    ?? getString(userResultLegacy, 'name')
-    ?? getString(userResultCore, 'name')
-    ?? handle;
-  const avatarUrlValue = getString(user, 'profile_image_url_https')
-    ?? getString(userResultLegacy, 'profile_image_url_https')
-    ?? getString(userResult, 'profile_image_url_https')
-    ?? getString(userResultCore, 'profile_image_url_https')
-    ?? getString(getObject(userResult, 'avatar'), 'image_url');
+  const authorId =
+    getString(user, 'id_str') ??
+    getString(userResult, 'id_str') ??
+    getString(userResult, 'rest_id') ??
+    getString(legacy, 'user_id_str') ??
+    '';
+  const handle =
+    getString(user, 'screen_name') ??
+    getString(userResultLegacy, 'screen_name') ??
+    getString(userResultCore, 'screen_name') ??
+    '';
+  const name =
+    getString(user, 'name') ??
+    getString(userResultLegacy, 'name') ??
+    getString(userResultCore, 'name') ??
+    handle;
+  const avatarUrlValue =
+    getString(user, 'profile_image_url_https') ??
+    getString(userResultLegacy, 'profile_image_url_https') ??
+    getString(userResult, 'profile_image_url_https') ??
+    getString(userResultCore, 'profile_image_url_https') ??
+    getString(getObject(userResult, 'avatar'), 'image_url');
   const avatarUrl = avatarUrlValue ? normalizeAvatarUrl(avatarUrlValue) : undefined;
-  const media = (getArray(getObject(legacy, 'extended_entities'), 'media')
-    ?? getArray(legacy, 'media')
-    ?? [])
+  const media = (
+    getArray(getObject(legacy, 'extended_entities'), 'media') ??
+    getArray(legacy, 'media') ??
+    []
+  )
     .map((item, index) => normalizeMedia(item, index + 1))
     .filter((item): item is MediaRecord => item !== undefined);
   const text = removeMediaEntityUrls(
     getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
-    legacy
+    legacy,
   );
   const urlHandle = handle.replace(/^@+/, '');
 
   return {
     tweetId,
-    url: urlHandle ? `https://x.com/${urlHandle}/status/${tweetId}` : `https://x.com/i/status/${tweetId}`,
+    url: urlHandle
+      ? `https://x.com/${urlHandle}/status/${tweetId}`
+      : `https://x.com/i/status/${tweetId}`,
     text,
     author: { id: authorId, handle, name, avatarUrl },
     publishedAt: normalizePublishedAt(getString(legacy, 'created_at')),
-    media
+    media,
   };
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FILENAME_TEMPLATE, buildMediaFilename, sanitizeFilename } from '../src/core/filename.js';
+import {
+  DEFAULT_FILENAME_TEMPLATE,
+  buildMediaFilename,
+  sanitizeFilename,
+} from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
 import { renderTemplate, TemplateError } from '../src/core/template.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
@@ -8,29 +12,38 @@ const record: TweetRecord = {
   tweetId: '42',
   url: 'https://x.com/alice/status/42',
   text: 'hello\nworld',
-  author: { id: '7', handle: '@alice', name: 'Alice', avatarUrl: 'https://pbs.twimg.com/profile_images/alice.png' },
+  author: {
+    id: '7',
+    handle: '@alice',
+    name: 'Alice',
+    avatarUrl: 'https://pbs.twimg.com/profile_images/alice.png',
+  },
   publishedAt: '2026-09-07T10:00:00.000Z',
-  media: []
+  media: [],
 };
 
 const photo: MediaRecord = {
   index: 1,
   type: 'photo',
-  originalUrl: 'https://pbs.twimg.com/media/photo.jpg?format=jpg&name=orig'
+  originalUrl: 'https://pbs.twimg.com/media/photo.jpg?format=jpg&name=orig',
 };
 
 describe('renderTemplate', () => {
   it('renders tweet, author, media and formatted date values', () => {
-    expect(renderTemplate('{author.handle}_{tweet.id}_{tweet.publishedAt:YYYY-MM-DD}_{media.index}', {
-      tweet: record,
-      media: photo,
-      extension: 'jpg'
-    })).toBe('alice_42_2026-09-07_1');
-    expect(renderTemplate('{author.avatar}', {
-      tweet: record,
-      media: photo,
-      extension: 'jpg'
-    })).toBe('https://pbs.twimg.com/profile_images/alice.png');
+    expect(
+      renderTemplate('{author.handle}_{tweet.id}_{tweet.publishedAt:YYYY-MM-DD}_{media.index}', {
+        tweet: record,
+        media: photo,
+        extension: 'jpg',
+      }),
+    ).toBe('alice_42_2026-09-07_1');
+    expect(
+      renderTemplate('{author.avatar}', {
+        tweet: record,
+        media: photo,
+        extension: 'jpg',
+      }),
+    ).toBe('https://pbs.twimg.com/profile_images/alice.png');
   });
 
   it('rejects unknown fields, unavailable values and malformed syntax', () => {
@@ -62,12 +75,12 @@ describe('media download target', () => {
       variants: [
         { url: 'https://video.twimg.com/low.mp4', mime: 'video/mp4', bitrate: 64000 },
         { url: 'https://video.twimg.com/high.webm', mime: 'video/webm', bitrate: 999999 },
-        { url: 'https://video.twimg.com/high.mp4', mime: 'video/mp4', bitrate: 128000 }
-      ]
+        { url: 'https://video.twimg.com/high.mp4', mime: 'video/mp4', bitrate: 128000 },
+      ],
     };
     expect(getMediaDownloadTarget(media)).toEqual({
       url: 'https://video.twimg.com/high.mp4',
-      extension: 'mp4'
+      extension: 'mp4',
     });
   });
 });

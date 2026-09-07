@@ -55,7 +55,7 @@ function mergeMediaRecords(current: MediaRecord, incoming: MediaRecord): MediaRe
     originalUrl: preferValue(current.originalUrl, incoming.originalUrl),
     width: current.width ?? incoming.width,
     height: current.height ?? incoming.height,
-    variants: Array.from(variants.values())
+    variants: Array.from(variants.values()),
   };
 }
 
@@ -71,17 +71,18 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
 
   return {
     tweetId: current.tweetId,
-    url: current.url.includes('/i/status/') && !incoming.url.includes('/i/status/')
-      ? incoming.url
-      : current.url,
+    url:
+      current.url.includes('/i/status/') && !incoming.url.includes('/i/status/')
+        ? incoming.url
+        : current.url,
     text: current.text.length >= incoming.text.length ? current.text : incoming.text,
     author: {
       id: preferValue(current.author.id, incoming.author.id) ?? '',
       handle: authorHandle,
       name: authorName,
-      avatarUrl: preferValue(current.author.avatarUrl, incoming.author.avatarUrl)
+      avatarUrl: preferValue(current.author.avatarUrl, incoming.author.avatarUrl),
     },
     publishedAt: current.publishedAt ?? incoming.publishedAt,
-    media: Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index)
+    media: Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index),
   };
 }

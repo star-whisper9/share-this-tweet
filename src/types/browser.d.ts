@@ -15,11 +15,7 @@ interface BrowserRuntime {
 }
 
 interface BrowserDownloads {
-  download(options: {
-    url: string;
-    filename?: string;
-    saveAs?: boolean;
-  }): Promise<number>;
+  download(options: { url: string; filename?: string; saveAs?: boolean }): Promise<number>;
 }
 
 declare const browser: {

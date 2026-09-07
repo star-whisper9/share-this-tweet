@@ -27,14 +27,14 @@ describe('mergeTweetRecords', () => {
       url: 'https://x.com/alice/status/42',
       text: 'complete text',
       author: { id: '7', handle: 'alice', name: 'Alice' },
-      media: []
+      media: [],
     };
     const partial = {
       tweetId: '42',
       url: 'https://x.com/i/status/42',
       text: 'complete text',
       author: { id: '7', handle: '', name: '' },
-      media: []
+      media: [],
     };
 
     const merged = mergeTweetRecords(complete, partial);

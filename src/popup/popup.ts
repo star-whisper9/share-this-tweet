@@ -29,7 +29,7 @@ void loadSettings()
       frame: settings.frameTemplate,
       orientation: orientationLabel(settings.frameOrientation),
       filename: settings.filenameTemplate,
-      text: settings.textTemplate
+      text: settings.textTemplate,
     };
     for (const [key, value] of Object.entries(values)) {
       const element = document.querySelector<HTMLElement>(`[data-template="${key}"]`);
