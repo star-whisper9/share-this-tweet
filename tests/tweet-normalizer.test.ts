@@ -29,7 +29,11 @@ describe('normalizeTweetCandidate', () => {
         user_results: {
           result: {
             rest_id: '7',
-            legacy: { screen_name: 'alice', name: 'Alice' }
+            legacy: {
+              screen_name: 'alice',
+              name: 'Alice',
+              profile_image_url_https: 'https://pbs.twimg.com/profile_images/7_normal.jpg'
+            }
           }
         }
       }
@@ -38,6 +42,7 @@ describe('normalizeTweetCandidate', () => {
     expect(record?.tweetId).toBe('42');
     expect(record?.url).toBe('https://x.com/alice/status/42');
     expect(record?.author.handle).toBe('alice');
+    expect(record?.author.avatarUrl).toBe('https://pbs.twimg.com/profile_images/7_400x400.jpg');
     expect(record?.media[0].originalUrl).toBe('https://pbs.twimg.com/media/photo.jpg?format=jpg&name=orig');
     expect(record?.media[1].variants).toHaveLength(2);
     expect(record?.publishedAt).toBe('2026-09-07T10:00:00.000Z');

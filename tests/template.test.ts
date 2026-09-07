@@ -8,7 +8,7 @@ const record: TweetRecord = {
   tweetId: '42',
   url: 'https://x.com/alice/status/42',
   text: 'hello\nworld',
-  author: { id: '7', handle: '@alice', name: 'Alice' },
+  author: { id: '7', handle: '@alice', name: 'Alice', avatarUrl: 'https://pbs.twimg.com/profile_images/alice.png' },
   publishedAt: '2026-09-07T10:00:00.000Z',
   media: []
 };
@@ -26,6 +26,11 @@ describe('renderTemplate', () => {
       media: photo,
       extension: 'jpg'
     })).toBe('alice_42_2026-09-07_1');
+    expect(renderTemplate('{author.avatar}', {
+      tweet: record,
+      media: photo,
+      extension: 'jpg'
+    })).toBe('https://pbs.twimg.com/profile_images/alice.png');
   });
 
   it('rejects unknown fields, unavailable values and malformed syntax', () => {

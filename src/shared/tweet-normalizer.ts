@@ -39,6 +39,13 @@ function getOriginalPhotoUrl(url: string): string {
   return extension ? `${base}?format=${extension}&name=orig` : `${base}?name=orig`;
 }
 
+function normalizeAvatarUrl(url: string): string {
+  // X commonly sends the small `_normal` variant. Request the larger variant
+  // for the exported frame, while retaining the original URL shape for paths
+  // that do not use one of X's known size suffixes.
+  return url.replace(/_(?:mini|normal|bigger)(?=\.[a-z0-9]+(?:$|\?))/i, '_400x400');
+}
+
 function normalizeMedia(media: unknown, index: number): MediaRecord | undefined {
   const value = asObject(media);
   const type = getString(value, 'type');
@@ -138,8 +145,12 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
     ?? getString(userResultLegacy, 'name')
     ?? getString(userResultCore, 'name')
     ?? handle;
-  const avatarUrl = getString(user, 'profile_image_url_https')
-    ?? getString(userResultLegacy, 'profile_image_url_https');
+  const avatarUrlValue = getString(user, 'profile_image_url_https')
+    ?? getString(userResultLegacy, 'profile_image_url_https')
+    ?? getString(userResult, 'profile_image_url_https')
+    ?? getString(userResultCore, 'profile_image_url_https')
+    ?? getString(getObject(userResult, 'avatar'), 'image_url');
+  const avatarUrl = avatarUrlValue ? normalizeAvatarUrl(avatarUrlValue) : undefined;
   const media = (getArray(getObject(legacy, 'extended_entities'), 'media')
     ?? getArray(legacy, 'media')
     ?? [])

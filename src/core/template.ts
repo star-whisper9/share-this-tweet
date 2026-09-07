@@ -21,6 +21,7 @@ type TemplateValue = keyof {
   'author.id': string;
   'author.handle': string;
   'author.name': string;
+  'author.avatar': string;
   'media.index': string;
   'media.type': string;
   extension: string;
@@ -42,6 +43,8 @@ function getTemplateValue(field: string, context: TemplateContext): string {
       return context.tweet.author.handle.replace(/^@+/, '');
     case 'author.name':
       return context.tweet.author.name;
+    case 'author.avatar':
+      return context.tweet.author.avatarUrl ?? '';
     case 'media.index':
       if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
       return String(context.media.index);
@@ -82,7 +85,18 @@ function renderPlaceholder(placeholder: string, context: TemplateContext): strin
 }
 
 export function renderTemplate(template: string, context: TemplateContext): string {
-  let output = '';
+  return parseTemplate(template)
+    .map((segment) => segment.type === 'literal' ? segment.value : renderPlaceholder(segment.value, context))
+    .join('');
+}
+
+export interface TemplateSegment {
+  type: 'literal' | 'placeholder';
+  value: string;
+}
+
+export function parseTemplate(template: string): TemplateSegment[] {
+  const segments: TemplateSegment[] = [];
   let cursor = 0;
 
   while (cursor < template.length) {
@@ -90,23 +104,23 @@ export function renderTemplate(template: string, context: TemplateContext): stri
     const closeLiteral = template.indexOf('}', cursor);
     if (open === -1) {
       if (closeLiteral !== -1) throw new TemplateError('模板包含未匹配的 }');
-      output += template.slice(cursor);
+      if (cursor < template.length) segments.push({ type: 'literal', value: template.slice(cursor) });
       break;
     }
     if (closeLiteral !== -1 && closeLiteral < open) {
       throw new TemplateError('模板包含未匹配的 }');
     }
 
-    output += template.slice(cursor, open);
+    if (cursor < open) segments.push({ type: 'literal', value: template.slice(cursor, open) });
     const close = template.indexOf('}', open + 1);
     if (close === -1) throw new TemplateError('模板包含未匹配的 {');
     if (template.indexOf('{', open + 1) !== -1 && template.indexOf('{', open + 1) < close) {
       throw new TemplateError('模板占位符不能嵌套');
     }
 
-    output += renderPlaceholder(template.slice(open + 1, close), context);
+    segments.push({ type: 'placeholder', value: template.slice(open + 1, close) });
     cursor = close + 1;
   }
 
-  return output;
+  return segments;
 }

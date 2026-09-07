@@ -32,7 +32,7 @@ const previews = {
 const sampleRecord: TweetRecord = {
   tweetId: '1234567890', url: 'https://x.com/example/status/1234567890',
   text: '把路上的光，留给每一个平常的日子。\n今天也有值得分享的小事。',
-  author: { id: '7', handle: '@example', name: '晴日来信' },
+  author: { id: '7', handle: '@example', name: '晴日来信', avatarUrl: '/icons/x.png' },
   publishedAt: '2026-09-07T10:00:00.000Z', media: []
 };
 const sampleMedia: MediaRecord = {
@@ -107,7 +107,9 @@ function renderValue(name: SettingKey, value: string): string {
     ? renderTemplate(value, { tweet: sampleRecord, media: sampleMedia, extension: 'png' })
     : buildTweetText(sampleRecord, value);
   if (!output.trim()) throw new Error('预览内容为空，请至少保留文字或一个变量。');
-  return output;
+  return name === 'frameTemplate'
+    ? output.replace(sampleRecord.author.avatarUrl ?? '', '作者头像')
+    : output;
 }
 function validateAndPreview(settings: ExtensionSettings): boolean {
   invalidFields = [];
@@ -164,7 +166,7 @@ function openEditor(name: SettingKey, focus = true): void {
 }
 function tokenLabel(token: string): string {
   const labels: Record<string, string> = {
-    '{author.name}': '作者昵称', '{author.handle}': '推主账号', '{author.id}': '推主 ID',
+    '{author.name}': '作者昵称', '{author.handle}': '推主账号', '{author.id}': '推主 ID', '{author.avatar}': '作者头像',
     '{tweet.id}': '推文 ID', '{tweet.text}': '推文正文', '{tweet.url}': '原文链接',
     '{text}': '推文正文', '{url}': '原文链接', '{tweetId}': '推文 ID',
     '{media.index}': '媒体序号', '{extension}': '扩展名'
@@ -199,7 +201,7 @@ function buildControls(): void {
     const discovered = DEFAULT_SETTINGS[name].match(/\{[^{}]+\}/g) ?? [];
     const extras = name === 'filenameTemplate'
       ? ['{author.handle}', '{tweet.id}', '{media.index}', '{extension}']
-      : name === 'frameTemplate' ? ['{author.handle}'] : [];
+      : name === 'frameTemplate' ? ['{author.handle}', '{author.avatar}'] : [];
     const tokenContainer = document.querySelector(`[data-tokens="${name}"]`);
     for (const token of new Set([...discovered, ...extras])) {
       const button = document.createElement('button');

@@ -87,8 +87,9 @@
 .stt-command[data-state="success"]:not(.stt-command-primary) .stt-command-icon { color: var(--stt-success); }
 .stt-command[data-state="error"]:not(.stt-command-primary) { border-color: var(--stt-error); }
 .stt-frame-direction-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.stt-frame-direction-grid .stt-command { min-height: 62px; padding: 10px 11px; gap: 8px; }
+.stt-frame-direction-grid .stt-command { height: 76px; min-height: 76px; padding: 10px 11px; gap: 8px; }
 .stt-frame-direction-grid .stt-command+.stt-command { margin-top: 0; }
+.stt-frame-direction-grid + .stt-command { margin-top: 9px; }
 .stt-frame-direction-grid .stt-command-copy strong { font-size: 11px; }
 .stt-frame-direction-grid .stt-command-copy>span { font-size: 10px; }
 .stt-frame-direction-grid .stt-command-end { display: none; }

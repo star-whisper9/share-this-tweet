@@ -35,6 +35,13 @@ await mkdir(resolve(dist, 'icons'), { recursive: true });
 for (const icon of ['icon-16.png', 'icon-32.png', 'icon-48.png', 'icon-96.png', 'icon-128.png']) {
   await cp(resolve(root, 'src/icons', icon), resolve(dist, 'icons', icon));
 }
+for (const icon of ['x.svg', 'x.png']) {
+  try {
+    await cp(resolve(root, 'src/icons', icon), resolve(dist, 'icons', icon));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
 await cp(resolve(root, 'src/styles'), resolve(dist, 'styles'), { recursive: true });
 await cp(resolve(root, 'src/options/options.html'), resolve(dist, 'options/options.html'));
 await cp(resolve(root, 'src/options/options.css'), resolve(dist, 'options/options.css'));
