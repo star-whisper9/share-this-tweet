@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FILENAME_TEMPLATE,
   buildMediaFilename,
+  buildCardFilename,
   sanitizeFilename,
 } from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
@@ -82,5 +83,15 @@ describe('media download target', () => {
       url: 'https://video.twimg.com/high.mp4',
       extension: 'mp4',
     });
+  });
+});
+
+describe('card filenames', () => {
+  it('names text-only cards without inventing a media record', () => {
+    expect(buildCardFilename(record)).toBe('X_alice_t42_m0_card.png');
+    expect(buildCardFilename(record, undefined, '{tweet.id}.{extension}')).toBe('42_card.png');
+    expect(buildCardFilename(record, photo)).toBe('X_alice_t42_m1_card.png');
+    expect(() => buildCardFilename(record, undefined, '{media.type}.png')).toThrow(TemplateError);
+    expect(() => renderTemplate('{media.index}', { tweet: record })).toThrow(TemplateError);
   });
 });

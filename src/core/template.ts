@@ -4,6 +4,8 @@ export interface TemplateContext {
   tweet: TweetRecord;
   media?: MediaRecord;
   extension?: string;
+  // Card output has index 0 when no photo is present; it is not a media item.
+  card?: boolean;
 }
 
 export class TemplateError extends Error {
@@ -46,6 +48,7 @@ function getTemplateValue(field: string, context: TemplateContext): string {
     case 'author.avatar':
       return context.tweet.author.avatarUrl ?? '';
     case 'media.index':
+      if (!context.media && context.card) return '0';
       if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
       return String(context.media.index);
     case 'media.type':

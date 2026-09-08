@@ -54,13 +54,15 @@ export function buildFrameFilename(
 
 export function buildCardFilename(
   record: TweetRecord,
-  media: MediaRecord,
+  media?: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
 ): string {
   const rendered = renderTemplate(template, {
     tweet: record,
     media,
     extension: 'png',
+    card: true,
   });
-  return forceExtension(`${sanitizeFilename(rendered)}_card`, 'png');
+  const base = forceExtension(sanitizeFilename(rendered), 'png').slice(0, -4);
+  return forceExtension(`${base}_card.png`, 'png');
 }

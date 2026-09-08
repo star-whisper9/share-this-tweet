@@ -65,3 +65,29 @@ describe('card theme selection', () => {
     expect(resolveCardTheme(undefined, false)).toBe('light');
   });
 });
+
+describe('text-only card layout', () => {
+  it('uses a finite default width and adds only text height, without an image area', () => {
+    const short = calculateTweetCardLayout({ images: [], text: 'hello', measureText });
+    const long = calculateTweetCardLayout({
+      images: [],
+      text: 'hello\n中文 😀\nworld',
+      measureText,
+    });
+    expect(short.width).toBe(800);
+    expect(short.imageRects).toEqual([]);
+    expect(short.imageAreaHeight).toBe(0);
+    expect(long.height - short.height).toBe(short.textLineHeight * 2);
+    expect(Number.isFinite(short.height)).toBe(true);
+    expect(short.height).toBeGreaterThan(0);
+  });
+
+  it('handles empty captions and rejects invalid photo dimensions', () => {
+    expect(calculateTweetCardLayout({ images: [], text: '', measureText }).height).toBeGreaterThan(
+      0,
+    );
+    expect(() =>
+      calculateTweetCardLayout({ images: [{ width: NaN, height: 1 }], text: '', measureText }),
+    ).toThrow('有效的图片尺寸');
+  });
+});

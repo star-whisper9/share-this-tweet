@@ -663,6 +663,16 @@ export class ShareEnhancerController {
       if (selected) actions.append(this.createMediaAction(record, selected));
     }
     if (isAndroidUserAgent(navigator.userAgent)) actions.append(this.createShareActions(record));
+    else {
+      actions.append(this.createCardSaveButton('保存正文、作者与来源为 PNG'));
+      if (this.cardSaveState === 'error')
+        actions.append(this.errorDetails('卡片保存失败，请重试。', this.cardSaveError));
+    }
+    if (record.media.some((media) => media.type !== 'photo')) {
+      actions.append(
+        node('p', 'stt-sheet-note', '推文卡片不包含视频或 GIF，仅保留正文、照片和来源。'),
+      );
+    }
     actions.append(this.createTextAction(record.media.length === 0));
     const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details');
     if (details) details.open = filenameOpen;
@@ -812,7 +822,6 @@ export class ShareEnhancerController {
 
   private createShareActions(record: TweetRecord): HTMLElement {
     const wrapper = node('div', 'stt-share-actions');
-    const photos = record.media.filter((media) => media.type === 'photo');
     const textButton = this.actionButton(
       'share-text',
       'share-text',
@@ -843,10 +852,9 @@ export class ShareEnhancerController {
       this.imageShareState,
       false,
     );
-    const imageShareSupported = photos.length > 0 && this.canShareImageFile();
-    imageButton.disabled = imageButton.disabled || photos.length === 0;
+    const imageShareSupported = this.canShareImageFile();
     wrapper.append(textButton);
-    if (imageShareSupported || photos.length === 0) wrapper.append(imageButton);
+    if (imageShareSupported) wrapper.append(imageButton);
     else wrapper.append(this.createCardSaveButton('当前环境不支持图片文件分享'));
     if (this.textShareState === 'error') {
       wrapper.append(
@@ -895,7 +903,7 @@ export class ShareEnhancerController {
 
   private async createCardFile(record: TweetRecord, photos: MediaRecord[]): Promise<File> {
     const result = await renderTweetCard(record, photos);
-    const filename = buildCardFilename(record, photos[0]!, this.settings.filenameTemplate);
+    const filename = buildCardFilename(record, photos[0], this.settings.filenameTemplate);
     return new File([result.blob], filename, { type: 'image/png' });
   }
 
@@ -946,18 +954,20 @@ export class ShareEnhancerController {
   private async shareTweetImage(): Promise<void> {
     const record = this.currentRecord;
     const photos = record?.media.filter((media) => media.type === 'photo') ?? [];
-    if (!record || photos.length === 0 || this.imageShareState === 'loading') return;
+    if (!record || this.imageShareState === 'loading') return;
     const tweetId = record.tweetId;
     const epoch = this.recordRequestId;
+    const isCurrent = (): boolean =>
+      epoch === this.recordRequestId && this.currentTweetId === tweetId;
     this.imageShareState = 'loading';
     this.imageShareError = '';
     this.renderActions(record);
     this.setSheetStatus('loading', '正在生成并打开推文卡片分享…');
     try {
-      if (!this.generatedCardFile) {
-        this.generatedCardFile = await this.createCardFile(record, photos);
-      }
-      await shareImage(this.generatedCardFile);
+      const cardFile = this.generatedCardFile ?? (await this.createCardFile(record, photos));
+      if (!isCurrent()) return;
+      this.generatedCardFile = cardFile;
+      await shareImage(cardFile);
       if (
         epoch !== this.recordRequestId ||
         this.currentTweetId !== tweetId ||
@@ -967,9 +977,10 @@ export class ShareEnhancerController {
       const storageWarning = await this.persistOutput(record, {
         tweetId,
         outputType: 'shared-image',
-        filename: this.generatedCardFile.name,
-        mediaIndex: photos[0]!.index,
+        filename: cardFile.name,
+        ...(photos[0] ? { mediaIndex: photos[0].index } : {}),
       });
+      if (!isCurrent()) return;
       this.imageShareState = 'success';
       this.renderActions(record);
       this.setSheetStatus(
@@ -977,6 +988,7 @@ export class ShareEnhancerController {
         storageWarning ?? '推文卡片分享已完成。',
       );
     } catch (error) {
+      if (!isCurrent()) return;
       if (error instanceof ShareCancelledError) {
         this.imageShareState = 'idle';
         this.renderActions(record);
@@ -1001,7 +1013,10 @@ export class ShareEnhancerController {
     const record = this.currentRecord;
     const file = this.generatedCardFile;
     const photo = record?.media.find((media) => media.type === 'photo');
-    if (!record || !photo || this.cardSaveState === 'loading') return;
+    if (!record || this.cardSaveState === 'loading') return;
+    const epoch = this.recordRequestId;
+    const isCurrent = (): boolean =>
+      epoch === this.recordRequestId && this.currentTweetId === record.tweetId;
     this.cardSaveState = 'loading';
     this.cardSaveError = '';
     this.renderActions(record);
@@ -1012,18 +1027,21 @@ export class ShareEnhancerController {
           record,
           record.media.filter((media) => media.type === 'photo'),
         ));
+      if (!isCurrent()) return;
       this.generatedCardFile = cardFile;
       downloadBlob(cardFile, cardFile.name);
       const storageWarning = await this.persistOutput(record, {
         tweetId: record.tweetId,
         outputType: 'tweet-card',
         filename: cardFile.name,
-        mediaIndex: photo.index,
+        ...(photo ? { mediaIndex: photo.index } : {}),
       });
+      if (!isCurrent()) return;
       this.cardSaveState = 'success';
       this.renderActions(record);
       this.setSheetStatus(storageWarning ? 'error' : 'ready', storageWarning ?? '推文卡片已保存。');
     } catch (error) {
+      if (!isCurrent()) return;
       this.cardSaveState = 'error';
       this.cardSaveError = error instanceof Error ? error.message : String(error);
       this.renderActions(record);

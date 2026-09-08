@@ -4,6 +4,7 @@ import { normalizeHandle } from '../shared/model.js';
 const CARD_FONT_FAMILY = '"SF Pro Display", "Helvetica Neue", system-ui, sans-serif';
 const CARD_MAX_WIDTH = 1200;
 const CARD_MIN_WIDTH = 320;
+const CARD_TEXT_WIDTH = 800;
 const CARD_MAX_SINGLE_IMAGE_HEIGHT = 780;
 const CARD_RENDER_SCALE = 2;
 
@@ -104,17 +105,27 @@ export function wrapCardText(
 }
 
 function validateImageDimensions(images: CardImageDimension[]): void {
-  if (images.length < 1 || images.length > 4) {
-    throw new Error('推文卡片目前支持 1～4 张照片');
+  if (images.length > 4) {
+    throw new Error('推文卡片最多支持 4 张照片');
   }
-  if (images.some((image) => image.width <= 0 || image.height <= 0)) {
+  if (
+    images.some(
+      (image) =>
+        !Number.isFinite(image.width) ||
+        !Number.isFinite(image.height) ||
+        image.width <= 0 ||
+        image.height <= 0,
+    )
+  ) {
     throw new Error('推文卡片需要有效的图片尺寸');
   }
 }
 
 export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCardLayout {
   validateImageDimensions(input.images);
-  const naturalWidth = Math.max(...input.images.map((image) => image.width));
+  const naturalWidth = input.images.length
+    ? Math.max(...input.images.map((image) => image.width))
+    : CARD_TEXT_WIDTH;
   const width = Math.max(
     CARD_MIN_WIDTH,
     Math.min(CARD_MAX_WIDTH, Math.round(input.cardWidth ?? naturalWidth)),
@@ -146,7 +157,7 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       width: imageWidth,
       height: imageHeight,
     });
-  } else {
+  } else if (input.images.length > 1) {
     const gridGap = Math.max(10, Math.round(width * 0.012));
     const columns = 2;
     const rows = Math.ceil(input.images.length / columns);
@@ -167,9 +178,9 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   const imageAreaHeight =
     input.images.length === 1
       ? imageRects[0]!.height
-      : Math.max(...imageRects.map((rect) => rect.y + rect.height));
-  const imageY = padding + headerHeight + textHeight + gap;
-  const footerHeight = Math.max(42, Math.round(width * 0.05));
+      : Math.max(0, ...imageRects.map((rect) => rect.y + rect.height));
+  const imageY = padding + headerHeight + textHeight + (input.images.length ? gap : 0);
+  const footerHeight = input.images.length ? Math.max(42, Math.round(width * 0.05)) : 64;
   const height = imageY + imageAreaHeight + gap + footerHeight + padding;
   return {
     width,
@@ -318,8 +329,8 @@ export async function renderTweetCard(
   if (media.some((item) => item.type !== 'photo')) {
     throw new Error('推文卡片目前只支持照片');
   }
-  if (media.length < 1 || media.length > 4) {
-    throw new Error('推文卡片目前支持 1～4 张照片');
+  if (media.length > 4) {
+    throw new Error('推文卡片最多支持 4 张照片');
   }
 
   const images: HTMLImageElement[] = [];
@@ -335,7 +346,10 @@ export async function renderTweetCard(
     const palette = CARD_PALETTES[theme];
     const estimatedWidth = Math.max(
       CARD_MIN_WIDTH,
-      Math.min(CARD_MAX_WIDTH, Math.max(...images.map((image) => image.naturalWidth))),
+      Math.min(
+        CARD_MAX_WIDTH,
+        images.length ? Math.max(...images.map((image) => image.naturalWidth)) : CARD_TEXT_WIDTH,
+      ),
     );
     const bodyFontSize = Math.max(18, Math.min(30, Math.round(estimatedWidth * 0.024)));
     context.font = `400 ${bodyFontSize}px ${CARD_FONT_FAMILY}`;
@@ -344,7 +358,18 @@ export async function renderTweetCard(
       text: record.text,
       measureText: (text) => context.measureText(text),
     });
-    canvas.width = layout.width * CARD_RENDER_SCALE;
+    const pixelWidth = layout.width * CARD_RENDER_SCALE;
+    const pixelHeight = layout.height * CARD_RENDER_SCALE;
+    if (
+      !Number.isFinite(pixelWidth) ||
+      !Number.isFinite(pixelHeight) ||
+      pixelWidth > 16384 ||
+      pixelHeight > 16384 ||
+      pixelWidth * pixelHeight > 32000000
+    ) {
+      throw new Error('推文内容超出卡片尺寸限制，无法完整生成。');
+    }
+    canvas.width = pixelWidth;
     canvas.height = layout.height * CARD_RENDER_SCALE;
     context.scale(CARD_RENDER_SCALE, CARD_RENDER_SCALE);
     context.fillStyle = palette.background;
@@ -414,6 +439,17 @@ export async function renderTweetCard(
       layout.width - layout.padding,
       footerY + layout.footerHeight / 2,
     );
+
+    if (media.length === 0) {
+      context.textAlign = 'left';
+      context.font = `400 ${Math.max(13, Math.round(bodyFontSize * 0.62))}px ${CARD_FONT_FAMILY}`;
+      context.fillText(
+        record.url,
+        layout.padding,
+        footerY + layout.footerHeight - 4,
+        layout.contentWidth,
+      );
+    }
 
     const blob = await canvasToBlob(canvas);
     return { blob, width: canvas.width, height: canvas.height };
