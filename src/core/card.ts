@@ -1,3 +1,4 @@
+import { tagRunsForLines, type CardTextRun } from './card-tags.js';
 import { languageName } from '../shared/translation.js';
 import {
   IMAGE_PALETTES as CARD_PALETTES,
@@ -58,7 +59,7 @@ export interface TweetCardLayout {
   headerHeight: number;
   bodyFontSize: number;
   textLines: string[];
-  bodyLines: Array<{ text: string; icon?: 'grok' | 'x' }>;
+  bodyLines: Array<{ text: string; icon?: 'grok' | 'x'; runs?: CardTextRun[] }>;
   textLineHeight: number;
   imageY: number;
   imageRects: CardImageRect[];
@@ -131,10 +132,10 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   const textLineHeight = Math.round(bodyFontSize * 1.42);
   const bodyLines: TweetCardLayout['bodyLines'] = [];
   const appendText = (text: string) => {
-    if (text.trim())
-      bodyLines.push(
-        ...wrapCardText(text, contentWidth, input.measureText).map((text) => ({ text })),
-      );
+    if (!text.trim()) return;
+    const lines = wrapCardText(text, contentWidth, input.measureText);
+    const runs = tagRunsForLines(text, lines);
+    bodyLines.push(...lines.map((text, index) => ({ text, runs: runs[index] })));
   };
   const appendLabel = (text: string, icon: 'grok' | 'x') => {
     bodyLines.push(
@@ -419,7 +420,22 @@ async function renderCardCanvas(
       context.fillStyle = line.icon ? palette.muted : palette.text;
       if (icon)
         context.drawImage(icon, layout.padding, y, layout.bodyFontSize, layout.bodyFontSize);
-      context.fillText(line.text, layout.padding + (line.icon ? layout.bodyFontSize * 1.4 : 0), y);
+      if (line.runs) {
+        for (const run of line.runs) {
+          context.fillStyle = run.tag ? (theme === 'dark' ? '#8cc8f5' : '#559bd2') : palette.text;
+          context.fillText(
+            run.text,
+            layout.padding + context.measureText(line.text.slice(0, run.start)).width,
+            y,
+          );
+        }
+      } else {
+        context.fillText(
+          line.text,
+          layout.padding + (line.icon ? layout.bodyFontSize * 1.4 : 0),
+          y,
+        );
+      }
     });
 
     images.forEach((image, index) => {
