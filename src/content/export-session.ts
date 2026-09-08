@@ -1,5 +1,6 @@
 import { buildCardFilename, buildFrameFilename, buildMediaFilename } from '../core/filename.js';
-import { renderTweetCard } from '../core/card.js';
+import { ImageResources } from '../core/image-resources.js';
+import { detectCardTheme, renderTweetCard } from '../core/card.js';
 import { downloadBlob, downloadMedia } from '../core/download.js';
 import { renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
 import { buildTweetText, copyTweetText } from '../core/text-export.js';
@@ -51,6 +52,9 @@ export class ExportSession {
   private active = true;
   private batchRunning = false;
   private cardFile?: File;
+  private cardKey?: string;
+  private cardPending?: { key: string; promise: Promise<File> };
+  private readonly resources = new ImageResources();
   private tweet: TweetRecord;
   private preferences: ExtensionSettings;
   private currentStatus: SheetStatus = { state: 'ready', message: '' };
@@ -103,17 +107,27 @@ export class ExportSession {
 
   updateRecord(record: TweetRecord): void {
     if (record.tweetId !== this.tweet.tweetId) throw new Error('A session cannot change its tweet');
+    if (JSON.stringify(record) !== JSON.stringify(this.tweet)) this.invalidateCard();
     this.tweet = record;
     this.selection.reconcile(record.media);
   }
 
   updateSettings(settings: ExtensionSettings): void {
+    if (settings.filenameTemplate !== this.preferences.filenameTemplate) this.invalidateCard();
     this.preferences = settings;
+  }
+
+  private invalidateCard(): void {
+    this.cardFile = undefined;
+    this.cardKey = undefined;
+    this.cardPending = undefined;
   }
 
   dispose(): void {
     this.active = false;
     this.cardFile = undefined;
+    this.cardPending = undefined;
+    this.resources.dispose();
   }
 
   toggleMedia(index: number): void {
@@ -207,16 +221,27 @@ export class ExportSession {
   }
 
   private async getCard({ record, settings }: ExportContext): Promise<File> {
-    if (this.cardFile) return this.cardFile;
     const photos = record.media.filter((media) => media.type === 'photo');
-    const result = await renderTweetCard(record, photos);
-    const file = new File(
-      [result.blob],
-      buildCardFilename(record, photos[0], settings.filenameTemplate),
-      { type: 'image/png' },
-    );
-    if (this.active) this.cardFile = file;
-    return file;
+    const theme = detectCardTheme();
+    const filename = buildCardFilename(record, photos[0], settings.filenameTemplate);
+    const key = JSON.stringify([record, theme, filename]);
+    if (this.cardKey === key && this.cardFile) return this.cardFile;
+    if (this.cardPending?.key === key) return this.cardPending.promise;
+    this.cardFile = undefined;
+    this.cardKey = key;
+    const promise = (async () => {
+      const result = await renderTweetCard(record, photos, { theme, resources: this.resources });
+      const file = new File([result.blob], filename, { type: 'image/png' });
+      if (this.active && this.cardKey === key && file.size <= 32 * 1024 * 1024)
+        this.cardFile = file;
+      return file;
+    })();
+    this.cardPending = { key, promise };
+    try {
+      return await promise;
+    } finally {
+      if (this.cardPending?.promise === promise) this.cardPending = undefined;
+    }
   }
 
   private cardOutput(
@@ -278,8 +303,21 @@ export class ExportSession {
     let filename: string;
     const framed = mode === 'framed' && media.type === 'photo';
     if (framed) {
-      filename = buildFrameFilename(record, media, settings.filenameTemplate);
-      const blob = await renderPhotoFrame(record, media, settings.frameTemplate, orientation);
+      const blob = await renderPhotoFrame(
+        record,
+        media,
+        settings.frameTemplate,
+        orientation,
+        this.resources,
+      );
+      if (blob.type !== 'image/jpeg' && blob.type !== 'image/webp')
+        throw new Error('画框输出格式不正确');
+      filename = buildFrameFilename(
+        record,
+        media,
+        settings.filenameTemplate,
+        blob.type === 'image/webp' ? 'webp' : 'jpg',
+      );
       if (!this.active) return;
       downloadBlob(blob, filename);
     } else {

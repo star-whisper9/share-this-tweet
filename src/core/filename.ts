@@ -43,13 +43,14 @@ export function buildFrameFilename(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
+  extension: 'jpg' | 'webp' = 'jpg',
 ): string {
-  const rendered = renderTemplate(template, {
-    tweet: record,
-    media,
-    extension: 'png',
-  });
-  return forceExtension(`${sanitizeFilename(rendered)}_framed`, 'png');
+  const rendered = renderTemplate(template, { tweet: record, media, extension });
+  const base = forceExtension(sanitizeFilename(rendered), extension).slice(
+    0,
+    -(extension.length + 1),
+  );
+  return forceExtension(`${base}_framed.${extension}`, extension);
 }
 
 export function buildCardFilename(

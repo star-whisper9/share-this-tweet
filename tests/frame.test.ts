@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calculateFrameLayout, wrapFrameText } from '../src/core/frame.js';
+import {
+  calculateFrameLayout,
+  wrapFrameText,
+  hasTransparentPixels,
+  encodeFrame,
+} from '../src/core/frame.js';
 
 const measureText = (text: string): { width: number } => ({ width: [...text].length * 10 });
 
@@ -47,5 +52,35 @@ describe('calculateFrameLayout', () => {
 describe('wrapFrameText', () => {
   it('preserves explicit line breaks', () => {
     expect(wrapFrameText('first\nsecond', 100, measureText)).toEqual(['first', 'second']);
+  });
+});
+
+describe('frame encoding', () => {
+  it('detects partial transparency and excludes pixels outside the source region', () => {
+    const read = {
+      getImageData: (_x: number, y: number) => ({
+        data: new Uint8ClampedArray([10, 20, 30, y === 70 ? 254 : 255]),
+      }),
+    };
+    expect(hasTransparentPixels(read as unknown as CanvasRenderingContext2D, 1, 1, 70)).toBe(true);
+    expect(hasTransparentPixels(read as unknown as CanvasRenderingContext2D, 1, 1, 0)).toBe(false);
+  });
+
+  it('requires the requested format instead of accepting a silent PNG fallback', async () => {
+    const canvas = {
+      toBlob: (callback: BlobCallback, type: string) => callback(new Blob(['encoded'], { type })),
+    };
+    expect((await encodeFrame(canvas as unknown as HTMLCanvasElement, false)).type).toBe(
+      'image/jpeg',
+    );
+    expect((await encodeFrame(canvas as unknown as HTMLCanvasElement, true)).type).toBe(
+      'image/webp',
+    );
+    const unsupported = {
+      toBlob: (callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })),
+    };
+    await expect(encodeFrame(unsupported as unknown as HTMLCanvasElement, true)).rejects.toThrow(
+      Error,
+    );
   });
 });

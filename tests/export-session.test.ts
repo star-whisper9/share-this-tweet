@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExportSession } from '../src/content/export-session.js';
-import { renderTweetCard } from '../src/core/card.js';
+import { detectCardTheme, renderTweetCard } from '../src/core/card.js';
 import { renderPhotoFrame } from '../src/core/frame.js';
 import { downloadBlob, downloadMedia } from '../src/core/download.js';
 import { recordOutput, saveTweetRecord } from '../src/core/storage-client.js';
@@ -8,7 +8,10 @@ import { ShareCancelledError, shareImage } from '../src/core/share.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
 
-vi.mock('../src/core/card.js', () => ({ renderTweetCard: vi.fn() }));
+vi.mock('../src/core/card.js', () => ({
+  renderTweetCard: vi.fn(),
+  detectCardTheme: vi.fn(() => 'light'),
+}));
 vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderPhotoFrame: vi.fn(),
@@ -61,7 +64,8 @@ function deferred<T>() {
 }
 beforeEach(() => {
   vi.mocked(renderTweetCard).mockResolvedValue({ blob: png, width: 1600, height: 500 });
-  vi.mocked(renderPhotoFrame).mockResolvedValue(png);
+  vi.mocked(renderPhotoFrame).mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }));
+  vi.mocked(detectCardTheme).mockReturnValue('light');
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -79,7 +83,11 @@ describe('export session', () => {
     expect(file).toBeInstanceOf(File);
     expect(file.type).toBe('image/png');
     expect(renderTweetCard).toHaveBeenCalledOnce();
-    expect(renderTweetCard).toHaveBeenCalledWith(record, []);
+    expect(renderTweetCard).toHaveBeenCalledWith(
+      record,
+      [],
+      expect.objectContaining({ theme: 'light' }),
+    );
     expect(downloadBlob).toHaveBeenCalledTimes(2);
     expect(shareImage).toHaveBeenCalledWith(file);
     expect(saveTweetRecord).toHaveBeenCalledWith(record);
@@ -163,6 +171,32 @@ describe('export session', () => {
     expect(downloadBlob).not.toHaveBeenCalled();
     expect(downloadMedia).not.toHaveBeenCalled();
     expect(recordOutput).not.toHaveBeenCalled();
+  });
+
+  it('merges save/share generation and invalidates changed card inputs', async () => {
+    const generation = deferred<Awaited<ReturnType<typeof renderTweetCard>>>();
+    vi.mocked(renderTweetCard).mockReturnValueOnce(generation.promise);
+    const session = new ExportSession(record, settings);
+    const save = session.saveCard();
+    const share = session.shareImage();
+    expect(renderTweetCard).toHaveBeenCalledOnce();
+    generation.resolve({ blob: png, width: 100, height: 100 });
+    await Promise.all([save, share]);
+    session.updateRecord({ ...record, text: 'updated' });
+    await session.saveCard();
+    vi.mocked(detectCardTheme).mockReturnValue('dark');
+    await session.saveCard();
+    session.updateSettings({ ...settings, filenameTemplate: 'changed_{tweet.id}.{extension}' });
+    await session.saveCard();
+    expect(renderTweetCard).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(downloadBlob).mock.calls.at(-1)![1]).toBe('changed_42_card.png');
+  });
+
+  it('uses the actual transparent frame format for the downloaded filename', async () => {
+    vi.mocked(renderPhotoFrame).mockResolvedValue(new Blob(['webp'], { type: 'image/webp' }));
+    const session = new ExportSession({ ...record, media: [photo(1)] }, settings);
+    await session.saveSelected('framed');
+    expect(vi.mocked(downloadBlob).mock.calls[0][1]).toBe('42_1_framed.webp');
   });
 
   it('reports storage failure separately from an already completed output', async () => {

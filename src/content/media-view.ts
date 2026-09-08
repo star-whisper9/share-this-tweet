@@ -192,7 +192,7 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
       } catch {
         frameFilename = '文件名暂不可用，请检查模板。';
       }
-      list.append(node('dt', '', '画框'), node('dd', '', frameFilename));
+      list.append(node('dt', '', '画框'), node('dd', '', `${frameFilename}（透明图片使用 .webp）`));
     }
     details.append(list);
     wrapper.append(details);

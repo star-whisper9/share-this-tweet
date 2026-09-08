@@ -1,3 +1,4 @@
+import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
 
@@ -130,15 +131,15 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     CARD_MIN_WIDTH,
     Math.min(CARD_MAX_WIDTH, Math.round(input.cardWidth ?? naturalWidth)),
   );
-  const padding = Math.max(24, Math.round(width * 0.05));
+  const padding = Math.max(16, Math.round(width * 0.03));
   const contentWidth = width - padding * 2;
-  const headerHeight = Math.max(56, Math.round(width * 0.07));
+  const headerHeight = Math.max(48, Math.round(width * 0.05));
   const bodyFontSize = Math.max(18, Math.min(30, Math.round(width * 0.024)));
-  const textLineHeight = Math.round(bodyFontSize * 1.55);
+  const textLineHeight = Math.round(bodyFontSize * 1.42);
   const textLines = input.text.trim()
     ? wrapCardText(input.text, contentWidth, input.measureText)
     : [];
-  const gap = Math.max(18, Math.round(width * 0.025));
+  const gap = Math.max(12, Math.round(width * 0.015));
   const textHeight = textLines.length > 0 ? gap + textLineHeight * textLines.length : 0;
   const imageRects: CardImageRect[] = [];
 
@@ -159,19 +160,22 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     });
   } else if (input.images.length > 1) {
     const gridGap = Math.max(10, Math.round(width * 0.012));
-    const columns = 2;
-    const tileWidth = Math.floor((contentWidth - gridGap * (columns - 1)) / columns);
-    const tileHeight = Math.min(360, Math.max(180, Math.round(tileWidth * 0.72)));
-    input.images.forEach((_image, index) => {
-      const row = Math.floor(index / columns);
-      const column = index % columns;
-      imageRects.push({
-        x: padding + column * (tileWidth + gridGap),
-        y: row * (tileHeight + gridGap),
-        width: tileWidth,
-        height: tileHeight,
-      });
-    });
+    let y = 0;
+    for (let index = 0; index < input.images.length; index += 2) {
+      const row = input.images.slice(index, index + 2);
+      const ratios = row.map((image) => image.width / image.height);
+      const available = contentWidth - gridGap * (row.length - 1);
+      const rowHeight = Math.min(480, available / ratios.reduce((sum, ratio) => sum + ratio, 0));
+      const rowWidth =
+        ratios.reduce((sum, ratio) => sum + ratio * rowHeight, 0) + gridGap * (row.length - 1);
+      let x = (width - rowWidth) / 2;
+      for (const ratio of ratios) {
+        const imageWidth = ratio * rowHeight;
+        imageRects.push({ x, y, width: imageWidth, height: rowHeight });
+        x += imageWidth + gridGap;
+      }
+      y += rowHeight + gridGap;
+    }
   }
 
   const imageAreaHeight =
@@ -179,8 +183,8 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       ? imageRects[0]!.height
       : Math.max(0, ...imageRects.map((rect) => rect.y + rect.height));
   const imageY = padding + headerHeight + textHeight + (input.images.length ? gap : 0);
-  const footerHeight = input.images.length ? Math.max(42, Math.round(width * 0.05)) : 64;
-  const height = imageY + imageAreaHeight + gap + footerHeight + padding;
+  const footerHeight = input.images.length ? 30 : 50;
+  const height = Math.ceil(imageY + imageAreaHeight + gap + footerHeight + padding);
   return {
     width,
     height,
@@ -213,50 +217,6 @@ export function detectCardTheme(root: HTMLElement = document.documentElement): C
   const systemDark =
     typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
   return resolveCardTheme(explicitMode ?? undefined, systemDark);
-}
-
-async function fetchPhotoBlob(media: MediaRecord): Promise<Blob> {
-  if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
-  const response = await fetch(media.originalUrl, { credentials: 'omit' });
-  if (!response.ok) throw new Error(`照片请求失败：HTTP ${response.status}`);
-  const blob = await response.blob();
-  if (blob.size === 0) throw new Error('照片响应为空');
-  return blob;
-}
-
-async function loadImage(blob: Blob): Promise<HTMLImageElement> {
-  const objectUrl = URL.createObjectURL(blob);
-  const image = new Image();
-  image.src = objectUrl;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('卡片图片无法解码'));
-    });
-    return image;
-  } catch (error) {
-    image.remove();
-    URL.revokeObjectURL(objectUrl);
-    throw error;
-  }
-}
-
-async function loadAuthorAvatar(record: TweetRecord): Promise<HTMLImageElement | undefined> {
-  const urls = [
-    record.author.avatarUrl,
-    browser.runtime.getURL('/icons/x.png'),
-    browser.runtime.getURL('/icons/x.svg'),
-  ].filter((url): url is string => Boolean(url));
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { credentials: 'omit' });
-      if (!response.ok) continue;
-      return await loadImage(await response.blob());
-    } catch {
-      // Continue to the built-in logo fallback.
-    }
-  }
-  return undefined;
 }
 
 function drawAvatar(
@@ -322,7 +282,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 export async function renderTweetCard(
   record: TweetRecord,
   mediaInput: MediaRecord | MediaRecord[],
-  options: { theme?: CardTheme } = {},
+  options: { theme?: CardTheme; resources?: ImageResources } = {},
 ): Promise<TweetCardResult> {
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
   if (media.some((item) => item.type !== 'photo')) {
@@ -332,12 +292,34 @@ export async function renderTweetCard(
     throw new Error('推文卡片最多支持 4 张照片');
   }
 
+  const resources = options.resources ?? new ImageResources();
   const images: HTMLImageElement[] = [];
+  let canvas: HTMLCanvasElement | undefined;
   let avatar: HTMLImageElement | undefined;
   try {
-    for (const item of media) images.push(await loadImage(await fetchPhotoBlob(item)));
-    avatar = await loadAuthorAvatar(record);
-    const canvas = document.createElement('canvas');
+    // Two photos at a time bound concurrent decoding. Settle all started work before cleanup.
+    const results = await Promise.allSettled([
+      (async () => {
+        for (let index = 0; index < media.length; index += 2) {
+          const pair = await Promise.allSettled(
+            media.slice(index, index + 2).map(async (item) => {
+              if (!item.originalUrl) throw new Error('当前照片没有可用的原图地址');
+              return resources.load(item.originalUrl);
+            }),
+          );
+          for (const result of pair) if (result.status === 'fulfilled') images.push(result.value);
+          const failed = pair.find((result) => result.status === 'rejected');
+          if (failed?.status === 'rejected') throw failed.reason;
+        }
+      })(),
+      loadAvatar(record.author.avatarUrl, resources).then((image) => {
+        avatar = image;
+      }),
+    ]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    resources.checkActive();
+    canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
 
@@ -412,7 +394,7 @@ export async function renderTweetCard(
         layout.padding,
         layout.padding +
           layout.headerHeight +
-          Math.max(18, Math.round(layout.width * 0.025)) +
+          Math.max(12, Math.round(layout.width * 0.015)) +
           index * layout.textLineHeight,
       );
     });
@@ -450,14 +432,16 @@ export async function renderTweetCard(
       );
     }
 
+    resources.checkActive();
     const blob = await canvasToBlob(canvas);
     return { blob, width: canvas.width, height: canvas.height };
   } finally {
-    for (const image of images) {
-      image.remove();
-      URL.revokeObjectURL(image.src);
+    for (const image of images) releaseImage(image);
+    if (avatar) releaseImage(avatar);
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
     }
-    avatar?.remove();
-    if (avatar) URL.revokeObjectURL(avatar.src);
+    if (!options.resources) resources.dispose();
   }
 }

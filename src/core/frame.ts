@@ -1,3 +1,4 @@
+import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
 import { parseTemplate, renderTemplate } from './template.js';
@@ -127,8 +128,13 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
   };
 }
 
-function getFrameText(record: TweetRecord, media: MediaRecord, template: string): string {
-  const context = { tweet: record, media, extension: 'png' };
+function getFrameText(
+  record: TweetRecord,
+  media: MediaRecord,
+  template: string,
+  extension = 'jpg',
+): string {
+  const context = { tweet: record, media, extension };
   return parseTemplate(template)
     .map((segment) => {
       if (segment.type === 'literal') return segment.value;
@@ -157,54 +163,6 @@ function createFrameTextMeasurer(
         0,
       ),
   });
-}
-
-async function fetchPhotoBlob(media: MediaRecord): Promise<Blob> {
-  if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
-  const response = await fetch(media.originalUrl, { credentials: 'omit' });
-  if (!response.ok) throw new Error(`原图请求失败：HTTP ${response.status}`);
-  const blob = await response.blob();
-  if (blob.size === 0) throw new Error('原图响应为空');
-  return blob;
-}
-
-async function loadImage(blob: Blob): Promise<HTMLImageElement> {
-  const objectUrl = URL.createObjectURL(blob);
-  const image = new Image();
-  image.src = objectUrl;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('原图无法解码'));
-    });
-    return image;
-  } catch (error) {
-    image.remove();
-    URL.revokeObjectURL(objectUrl);
-    throw error;
-  }
-}
-
-async function loadAvatarImage(
-  record: TweetRecord,
-  frameText: string,
-): Promise<HTMLImageElement | undefined> {
-  if (!frameText.includes(FRAME_AVATAR_MARKER)) return undefined;
-  const urls = [
-    record.author.avatarUrl,
-    browser.runtime.getURL('/icons/x.png'),
-    browser.runtime.getURL('/icons/x.svg'),
-  ].filter((url): url is string => Boolean(url));
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { credentials: 'omit' });
-      if (!response.ok) continue;
-      return await loadImage(await response.blob());
-    } catch {
-      // Try the next source, then use the generated X fallback.
-    }
-  }
-  return undefined;
 }
 
 function drawAvatarFallback(
@@ -251,15 +209,36 @@ function drawHorizontalTextLine(
   }
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+/** Read bounded strips rather than allocating a second full-size RGBA image. */
+export function hasTransparentPixels(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  offsetY = 0,
+): boolean {
+  for (let y = 0; y < height; y += 64) {
+    const pixels = context.getImageData(0, y + offsetY, width, Math.min(64, height - y)).data;
+    for (let offset = 3; offset < pixels.length; offset += 4) {
+      if (pixels[offset] < 255) return true;
+    }
+  }
+  return false;
+}
+
+export function encodeFrame(canvas: HTMLCanvasElement, transparent: boolean): Promise<Blob> {
+  const type = transparent ? 'image/webp' : 'image/jpeg';
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error('PNG 画框生成失败'));
-        return;
-      }
-      resolve(blob);
-    }, 'image/png');
+    canvas.toBlob(
+      (blob) => {
+        if (!blob || blob.type !== type) {
+          reject(new Error(`浏览器无法生成 ${type} 画框`));
+          return;
+        }
+        resolve(blob);
+      },
+      type,
+      0.92,
+    );
   });
 }
 
@@ -268,95 +247,133 @@ export async function renderPhotoFrame(
   media: MediaRecord,
   template = DEFAULT_FRAME_TEMPLATE,
   orientation: FrameOrientation = DEFAULT_FRAME_ORIENTATION,
+  resources = new ImageResources(),
 ): Promise<Blob> {
   if (media.type !== 'photo') throw new Error('只有照片支持生成画框');
-  const userText = getFrameText(record, media, template);
-  const blob = await fetchPhotoBlob(media);
-  const image = await loadImage(blob);
-  const avatarImage = await loadAvatarImage(record, userText);
+  let userText = getFrameText(record, media, template);
+  if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
+  let image: HTMLImageElement | undefined;
+  let avatarImage: HTMLImageElement | undefined;
   const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('浏览器不支持 Canvas 画框渲染');
+  try {
+    const loaded = await Promise.allSettled([
+      resources.load(media.originalUrl).then((value) => {
+        image = value;
+      }),
+      userText.includes(FRAME_AVATAR_MARKER)
+        ? loadAvatar(record.author.avatarUrl, resources).then((value) => {
+            avatarImage = value;
+          })
+        : Promise.resolve(),
+    ]);
+    const failed = loaded.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    resources.checkActive();
+    if (!image) throw new Error('原图无法解码');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('浏览器不支持 Canvas 画框渲染');
 
-  const sourceLines = getSourceLines(record);
-  const fontSize = Math.max(12, Math.min(32, Math.round(image.naturalWidth * 0.035)));
-  context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
-  const layout = calculateFrameLayout({
-    width: image.naturalWidth,
-    userText,
-    sourceLines,
-    fontSize,
-    orientation,
-    measureText: createFrameTextMeasurer(context, fontSize),
-  });
+    if (
+      image.naturalWidth > 16384 ||
+      image.naturalHeight > 16384 ||
+      image.naturalWidth * image.naturalHeight > 32000000
+    ) {
+      throw new Error('图片超出画框尺寸限制，无法完整生成。');
+    }
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    context.drawImage(image, 0, 0);
+    const transparent = hasTransparentPixels(context, image.naturalWidth, image.naturalHeight);
+    userText = getFrameText(record, media, template, transparent ? 'webp' : 'jpg');
 
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight + layout.barHeight;
-  const imageY = orientation === 'top' ? layout.barHeight : 0;
-  context.drawImage(image, 0, imageY, image.naturalWidth, image.naturalHeight);
-  context.fillStyle = FRAME_BACKGROUND;
-  context.fillRect(
-    0,
-    orientation === 'top' ? 0 : image.naturalHeight,
-    canvas.width,
-    layout.barHeight,
-  );
-  context.fillStyle = '#1f2933';
-  context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-  // Each line occupies a fixed-height cell. Centering the glyph in that cell
-  // keeps the same paddingY on both sides of a top or bottom frame, regardless
-  // of the font's ascent/descent metrics.
-  context.textBaseline = 'middle';
-
-  if (layout.mode === 'double') {
-    const frameY = orientation === 'top' ? 0 : image.naturalHeight;
-    context.textAlign = 'left';
-    layout.leftLines.forEach((line, index) => {
-      drawHorizontalTextLine(
-        context,
-        line,
-        layout.paddingX,
-        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-        layout.fontSize,
-        avatarImage,
-      );
+    const sourceLines = getSourceLines(record);
+    const fontSize = Math.max(12, Math.min(32, Math.round(image.naturalWidth * 0.035)));
+    context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
+    const layout = calculateFrameLayout({
+      width: image.naturalWidth,
+      userText,
+      sourceLines,
+      fontSize,
+      orientation,
+      measureText: createFrameTextMeasurer(context, fontSize),
     });
-    context.textAlign = 'right';
-    layout.rightLines.forEach((line, index) => {
-      context.globalAlpha = index === 0 ? 0.62 : 0.9;
-      context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-      context.fillText(
-        line,
-        canvas.width - layout.paddingX,
-        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-      );
-    });
+
+    if (
+      image.naturalWidth > 16384 ||
+      image.naturalHeight + layout.barHeight > 16384 ||
+      image.naturalWidth * (image.naturalHeight + layout.barHeight) > 32000000
+    ) {
+      throw new Error('图片超出画框尺寸限制，无法完整生成。');
+    }
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight + layout.barHeight;
+    const imageY = orientation === 'top' ? layout.barHeight : 0;
+    context.drawImage(image, 0, imageY, image.naturalWidth, image.naturalHeight);
+    context.fillStyle = FRAME_BACKGROUND;
+    context.fillRect(
+      0,
+      orientation === 'top' ? 0 : image.naturalHeight,
+      canvas.width,
+      layout.barHeight,
+    );
+    context.fillStyle = '#1f2933';
+    context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
+    // Each line occupies a fixed-height cell. Centering the glyph in that cell
+    // keeps the same paddingY on both sides of a top or bottom frame, regardless
+    // of the font's ascent/descent metrics.
+    context.textBaseline = 'middle';
+
+    if (layout.mode === 'double') {
+      const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+      context.textAlign = 'left';
+      layout.leftLines.forEach((line, index) => {
+        drawHorizontalTextLine(
+          context,
+          line,
+          layout.paddingX,
+          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+          layout.fontSize,
+          avatarImage,
+        );
+      });
+      context.textAlign = 'right';
+      layout.rightLines.forEach((line, index) => {
+        context.globalAlpha = index === 0 ? 0.62 : 0.9;
+        context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
+        context.fillText(
+          line,
+          canvas.width - layout.paddingX,
+          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        );
+      });
+      context.globalAlpha = 1;
+    } else {
+      const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+      context.textAlign = 'left';
+      layout.leftLines.forEach((line, index) => {
+        drawHorizontalTextLine(
+          context,
+          line,
+          layout.paddingX,
+          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+          layout.fontSize,
+          avatarImage,
+        );
+      });
+    }
+
     context.globalAlpha = 1;
-  } else {
+    context.strokeStyle = FRAME_BORDER;
+    context.lineWidth = 1;
     const frameY = orientation === 'top' ? 0 : image.naturalHeight;
-    context.textAlign = 'left';
-    layout.leftLines.forEach((line, index) => {
-      drawHorizontalTextLine(
-        context,
-        line,
-        layout.paddingX,
-        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-        layout.fontSize,
-        avatarImage,
-      );
-    });
+    context.strokeRect(0.5, frameY + 0.5, canvas.width - 1, layout.barHeight - 1);
+
+    resources.checkActive();
+    return await encodeFrame(canvas, transparent);
+  } finally {
+    if (image) releaseImage(image);
+    if (avatarImage) releaseImage(avatarImage);
+    canvas.width = 0;
+    canvas.height = 0;
   }
-
-  context.globalAlpha = 1;
-  context.strokeStyle = FRAME_BORDER;
-  context.lineWidth = 1;
-  const frameY = orientation === 'top' ? 0 : image.naturalHeight;
-  context.strokeRect(0.5, frameY + 0.5, canvas.width - 1, layout.barHeight - 1);
-
-  const result = await canvasToBlob(canvas);
-  image.remove();
-  URL.revokeObjectURL(image.src);
-  avatarImage?.remove();
-  if (avatarImage) URL.revokeObjectURL(avatarImage.src);
-  return result;
 }
