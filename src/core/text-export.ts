@@ -2,7 +2,7 @@ import type { TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
 
 export const DEFAULT_TEXT_TEMPLATE =
-  '{tweet.text}\n\n{author.name} (@{author.handle})\n{tweet.url}';
+  '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\nX · 原文：\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
 export function buildTweetText(record: TweetRecord, template = DEFAULT_TEXT_TEMPLATE): string {
   const main = renderTemplate(template, { tweet: record });

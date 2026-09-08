@@ -1,3 +1,4 @@
+import { languageName } from '../shared/translation.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 
 export interface TemplateContext {
@@ -46,6 +47,49 @@ const base: TemplateField[] = [
     ({ tweet }) => tweet.publishedAt,
     '日期格式使用 UTC。',
     { date: true },
+  ),
+  field(
+    'translation.sourceLanguage',
+    '原文语言',
+    '推文',
+    '英语',
+    ({ tweet }) => {
+      const t = tweet.translation;
+      return languageName(
+        t?.status === 'available' ? t.sourceLanguage : tweet.language,
+        t?.status === 'available' ? t.sourceLanguageName : undefined,
+      );
+    },
+    '优先使用响应可读名称，否则映射到中文名称；未知代码原样显示。',
+  ),
+  field(
+    'translation.targetLanguage',
+    '译文语言',
+    '推文',
+    '中文',
+    ({ tweet }) => {
+      const t = tweet.translation;
+      return t?.status === 'available'
+        ? languageName(t.targetLanguage, t.targetLanguageName)
+        : undefined;
+    },
+    '无可用译文时为空。',
+  ),
+  field(
+    'translation.originalText',
+    '原推文正文',
+    '推文',
+    'Hello',
+    ({ tweet }) => tweet.text,
+    '始终为原文，与 tweet.text 相同。',
+  ),
+  field(
+    'translation.text',
+    '译文正文',
+    '推文',
+    '你好',
+    ({ tweet }) => (tweet.translation?.status === 'available' ? tweet.translation.text : undefined),
+    '只使用 X 已返回的译文；未提供或异常时为空，可用于可选区块。',
   ),
   field('tweet.language', '语言', '推文', 'zh', ({ tweet }) => tweet.language),
   field(

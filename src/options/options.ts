@@ -102,11 +102,16 @@ const presets: Record<SettingKey, Preset[]> = {
   ],
   textTemplate: [
     {
-      label: '正文与来源',
-      description: '正文、署名与原推链接',
+      label: '双语与来源',
+      description: '有译文时显示译文和原文，否则仅原文',
       value: DEFAULT_SETTINGS.textTemplate,
     },
-    { label: '简洁转发', description: '正文和链接', value: '{tweet.text}\n\n{tweet.url}' },
+    {
+      label: '简洁转发',
+      description: '可选译文、原文和链接',
+      value:
+        '{?translation.text}{translation.text}\n\n原文：\n{/translation.text}{translation.originalText}\n\n{tweet.url}',
+    },
     {
       label: '来源索引',
       description: '作者、日期和链接',

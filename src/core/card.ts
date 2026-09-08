@@ -1,3 +1,4 @@
+import { languageName } from '../shared/translation.js';
 import {
   IMAGE_PALETTES as CARD_PALETTES,
   detectImageTheme as detectCardTheme,
@@ -9,7 +10,13 @@ export {
   resolveImageTheme as resolveCardTheme,
 } from './image-theme.js';
 export type { ImageTheme as CardTheme } from './image-theme.js';
-import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
+import {
+  ImageResources,
+  loadAvatar,
+  loadMonochromeIcon,
+  releaseImage,
+  type LoadedAvatar,
+} from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
 
@@ -39,6 +46,7 @@ export interface CardImageRect {
 export interface TweetCardLayoutInput extends CardTextMeasurement {
   images: CardImageDimension[];
   text: string;
+  translation?: { text: string; sourceLanguage: string };
   cardWidth?: number;
 }
 
@@ -50,6 +58,7 @@ export interface TweetCardLayout {
   headerHeight: number;
   bodyFontSize: number;
   textLines: string[];
+  bodyLines: Array<{ text: string; icon?: 'grok' | 'x' }>;
   textLineHeight: number;
   imageY: number;
   imageRects: CardImageRect[];
@@ -120,9 +129,28 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   const headerHeight = Math.max(48, Math.round(width * 0.05));
   const bodyFontSize = Math.max(18, Math.min(30, Math.round(width * 0.024)));
   const textLineHeight = Math.round(bodyFontSize * 1.42);
-  const textLines = input.text.trim()
-    ? wrapCardText(input.text, contentWidth, input.measureText)
-    : [];
+  const bodyLines: TweetCardLayout['bodyLines'] = [];
+  const appendText = (text: string) => {
+    if (text.trim())
+      bodyLines.push(
+        ...wrapCardText(text, contentWidth, input.measureText).map((text) => ({ text })),
+      );
+  };
+  const appendLabel = (text: string, icon: 'grok' | 'x') => {
+    bodyLines.push(
+      ...wrapCardText(text, contentWidth - bodyFontSize * 1.4, input.measureText).map(
+        (text, index) => ({ text, ...(index === 0 ? { icon } : {}) }),
+      ),
+    );
+  };
+  if (input.translation) {
+    appendLabel(`翻译自 ${input.translation.sourceLanguage}`, 'grok');
+    appendText(input.translation.text);
+    bodyLines.push({ text: '' });
+    appendLabel('原文：', 'x');
+  }
+  appendText(input.text);
+  const textLines = bodyLines.map((line) => line.text);
   const gap = Math.max(12, Math.round(width * 0.015));
   const textHeight = textLines.length > 0 ? gap + textLineHeight * textLines.length : 0;
   const imageRects: CardImageRect[] = [];
@@ -177,6 +205,7 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     headerHeight,
     bodyFontSize,
     textLines,
+    bodyLines,
     textLineHeight,
     imageY,
     imageRects,
@@ -187,7 +216,7 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
 
 function drawAvatar(
   context: CanvasRenderingContext2D,
-  image: HTMLImageElement | undefined,
+  image: LoadedAvatar | undefined,
   x: number,
   y: number,
   size: number,
@@ -259,9 +288,14 @@ async function renderCardCanvas(
   }
 
   const resources = options.resources ?? new ImageResources();
+  const theme = options.theme ?? detectCardTheme();
+  const palette = CARD_PALETTES[theme];
+  const translation = record.translation?.status === 'available' ? record.translation : undefined;
+  let grokIcon: HTMLCanvasElement | undefined;
+  let xIcon: HTMLCanvasElement | undefined;
   const images: HTMLImageElement[] = [];
   let canvas: HTMLCanvasElement | undefined;
-  let avatar: HTMLImageElement | undefined;
+  let avatar: LoadedAvatar | undefined;
   let completed = false;
   try {
     // Two photos at a time bound concurrent decoding. Settle all started work before cleanup.
@@ -279,9 +313,19 @@ async function renderCardCanvas(
           if (failed?.status === 'rejected') throw failed.reason;
         }
       })(),
-      loadAvatar(record.author.avatarUrl, resources).then((image) => {
+      loadAvatar(record.author.avatarUrl, resources, palette.text).then((image) => {
         avatar = image;
       }),
+      translation
+        ? loadMonochromeIcon('grok.svg', resources, palette.muted).then((icon) => {
+            grokIcon = icon;
+          })
+        : Promise.resolve(),
+      translation
+        ? loadMonochromeIcon('x.svg', resources, palette.muted).then((icon) => {
+            xIcon = icon;
+          })
+        : Promise.resolve(),
     ]);
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
@@ -290,8 +334,6 @@ async function renderCardCanvas(
     const context = canvas.getContext('2d');
     if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
 
-    const theme = options.theme ?? detectCardTheme();
-    const palette = CARD_PALETTES[theme];
     const estimatedWidth = Math.max(
       CARD_MIN_WIDTH,
       Math.min(
@@ -307,6 +349,14 @@ async function renderCardCanvas(
     const layout = calculateTweetCardLayout({
       images: images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight })),
       text: record.text,
+      translation: translation
+        ? {
+            text: translation.text,
+            sourceLanguage:
+              languageName(translation.sourceLanguage, translation.sourceLanguageName) ||
+              '未知语言',
+          }
+        : undefined,
       cardWidth: options.cardWidth,
       measureText: (text) => context.measureText(text),
     });
@@ -359,15 +409,17 @@ async function renderCardCanvas(
     context.textAlign = 'left';
     context.fillStyle = palette.text;
     context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
-    layout.textLines.forEach((line, index) => {
-      context.fillText(
-        line,
-        layout.padding,
+    layout.bodyLines.forEach((line, index) => {
+      const y =
         layout.padding +
-          layout.headerHeight +
-          Math.max(12, Math.round(layout.width * 0.015)) +
-          index * layout.textLineHeight,
-      );
+        layout.headerHeight +
+        Math.max(12, Math.round(layout.width * 0.015)) +
+        index * layout.textLineHeight;
+      const icon = line.icon === 'grok' ? grokIcon : line.icon === 'x' ? xIcon : undefined;
+      context.fillStyle = line.icon ? palette.muted : palette.text;
+      if (icon)
+        context.drawImage(icon, layout.padding, y, layout.bodyFontSize, layout.bodyFontSize);
+      context.fillText(line.text, layout.padding + (line.icon ? layout.bodyFontSize * 1.4 : 0), y);
     });
 
     images.forEach((image, index) => {
@@ -381,6 +433,8 @@ async function renderCardCanvas(
   } finally {
     for (const image of images) releaseImage(image);
     if (avatar) releaseImage(avatar);
+    if (grokIcon) releaseImage(grokIcon);
+    if (xIcon) releaseImage(xIcon);
     if (canvas && !completed) {
       canvas.width = 0;
       canvas.height = 0;

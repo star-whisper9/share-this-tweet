@@ -137,6 +137,7 @@ export function mountTemplateGuide(
     ['quote', '带引用'],
     ['empty', '缺少可选字段'],
     ['no-media', '没有媒体'],
+    ['translated', '有 X 译文'],
   ]) {
     const option = node('option', label);
     option.value = value;
@@ -156,6 +157,19 @@ export function mountTemplateGuide(
   );
   function updatePreview(): void {
     let tweet: TweetRecord = example;
+    if (scenario.value === 'translated')
+      tweet = {
+        ...example,
+        text: 'A photo from today.',
+        language: 'en',
+        translation: {
+          status: 'available',
+          originalText: 'A photo from today.',
+          text: '今天的照片。',
+          sourceLanguage: 'en',
+          targetLanguage: 'zh',
+        },
+      };
     if (scenario.value === 'quote')
       tweet = {
         ...example,
@@ -201,6 +215,10 @@ export function mountTemplateGuide(
   const quick = node('div');
   quick.className = 'token-list';
   for (const name of [
+    'translation.text',
+    'translation.originalText',
+    'translation.sourceLanguage',
+    'translation.targetLanguage',
     'tweet.text',
     'author.name',
     'author.handle',

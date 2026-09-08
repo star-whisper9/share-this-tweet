@@ -1,5 +1,11 @@
+import { validTranslation } from './translation.js';
 /** Optional additions remain compatible with archives written before metadata support. */
 export function validMetadata(value: Record<string, unknown>): boolean {
+  if (!validTranslation(value.translation)) return false;
+  if (value.translation && typeof value.translation === 'object') {
+    const translation = value.translation as Record<string, unknown>;
+    if (translation.status === 'available' && translation.originalText !== value.text) return false;
+  }
   const text = (object: Record<string, unknown>, keys: string[]) =>
     keys.every(
       (key) =>

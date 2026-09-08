@@ -1,5 +1,5 @@
 import { IMAGE_PALETTES, detectImageTheme, type ImageTheme } from './image-theme.js';
-import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
+import { ImageResources, loadAvatar, releaseImage, type LoadedAvatar } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
 
@@ -180,7 +180,7 @@ function drawHorizontalTextLine(
   x: number,
   y: number,
   fontSize: number,
-  avatarImage?: HTMLImageElement,
+  avatarImage?: LoadedAvatar,
   brandImage?: HTMLImageElement,
 ): void {
   if (!/[\uE000\uE001]/.test(line)) {
@@ -268,7 +268,7 @@ export async function renderPhotoFrame(
   let userText = getFrameText(record, media, template);
   if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
   let image: HTMLImageElement | undefined;
-  let avatarImage: HTMLImageElement | undefined;
+  let avatarImage: LoadedAvatar | undefined;
   let brandImage: HTMLImageElement | undefined;
   const canvas = document.createElement('canvas');
   try {
@@ -280,7 +280,7 @@ export async function renderPhotoFrame(
         image = value;
       }),
       userText.includes(FRAME_AVATAR_MARKER)
-        ? loadAvatar(record.author.avatarUrl, resources).then((value) => {
+        ? loadAvatar(record.author.avatarUrl, resources, palette.text).then((value) => {
             avatarImage = value;
           })
         : Promise.resolve(),

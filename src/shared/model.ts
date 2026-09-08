@@ -1,3 +1,4 @@
+import { mergeTranslation, type TweetTranslation } from './translation.js';
 export type MediaType = 'photo' | 'video' | 'animated_gif';
 
 export interface MediaVariant {
@@ -49,6 +50,7 @@ export interface TweetRecord {
   media: MediaRecord[];
   quote?: TweetQuote;
   language?: string;
+  translation?: TweetTranslation;
   replyToTweetId?: string;
   replyToUserId?: string;
   sensitive?: boolean;
@@ -126,6 +128,11 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
     textSource: useIncomingText ? incoming.textSource : current.textSource,
     observedAt: preferred.observedAt ?? fallback.observedAt,
     language: preferred.language ?? fallback.language,
+    translation: mergeTranslation(
+      preferred.translation,
+      fallback.translation,
+      useIncomingText ? incoming.text : current.text,
+    ),
     replyToTweetId: preferred.replyToTweetId ?? fallback.replyToTweetId,
     replyToUserId: preferred.replyToUserId ?? fallback.replyToUserId,
     sensitive: preferred.sensitive ?? fallback.sensitive,

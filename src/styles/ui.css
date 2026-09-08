@@ -782,3 +782,13 @@
 .stt-sheet p.stt-quote-text {
   white-space: pre-wrap;
 }
+
+.stt-sheet p.stt-translation-warning {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  color: var(--stt-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

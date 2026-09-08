@@ -1,3 +1,4 @@
+import { normalizeTranslation } from './translation.js';
 import type { MediaRecord, MediaVariant, TweetRecord, TweetQuote } from './model.js';
 
 type JsonObject = Record<string, unknown>;
@@ -234,6 +235,11 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
         ? 'partial'
         : 'full',
     language: getString(legacy, 'lang'),
+    translation: normalizeTranslation(
+      tweet.grok_translated_post_with_availability,
+      text,
+      getString(legacy, 'lang'),
+    ),
     replyToTweetId: replyId && /^\d+$/.test(replyId) ? replyId : undefined,
     replyToUserId: replyUser && /^\d+$/.test(replyUser) ? replyUser : undefined,
     sensitive:

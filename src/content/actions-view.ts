@@ -1,3 +1,4 @@
+import { translationWarning } from '../shared/translation.js';
 import type { ExportSession } from './export-session.js';
 import { appendMediaActions } from './media-view.js';
 import { actionButton, actionLabel, errorDetails, node } from './ui-components.js';
@@ -69,6 +70,17 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
   const scroll = sheet.querySelector<HTMLElement>('.stt-sheet-scroll');
   const scrollTop = scroll?.scrollTop ?? 0;
   actions.replaceChildren();
+  for (const [label, record] of [
+    ['主推文', session.record],
+    ['引用推文', session.quoted?.record],
+  ] as const) {
+    const warning = translationWarning(record?.translation);
+    if (warning) {
+      const message = node('p', 'stt-translation-warning', `翻译警告 · ${label}：${warning}`);
+      message.setAttribute('role', 'status');
+      actions.append(message);
+    }
+  }
   appendMediaActions(actions, session, session.record.quote ? '主推文媒体' : '所选媒体');
   if (session.quoted) appendMediaActions(actions, session.quoted, '引用推文媒体');
   actions.append(

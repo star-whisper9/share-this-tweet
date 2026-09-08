@@ -42,6 +42,7 @@ for (const icon of ['x.svg', 'x.png']) {
     if (error?.code !== 'ENOENT') throw error;
   }
 }
+await cp(resolve(root, 'src/icons/grok.svg'), resolve(dist, 'icons/grok.svg'));
 await cp(resolve(root, 'src/styles'), resolve(dist, 'styles'), { recursive: true });
 await cp(resolve(root, 'src/options/options.html'), resolve(dist, 'options/options.html'));
 await cp(resolve(root, 'src/options/options.css'), resolve(dist, 'options/options.css'));

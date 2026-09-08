@@ -103,28 +103,63 @@ export class ImageResources {
   }
 }
 
-export function releaseImage(image: HTMLImageElement): void {
+export type LoadedAvatar = HTMLImageElement | HTMLCanvasElement;
+
+export function releaseImage(image: LoadedAvatar): void {
+  if (image instanceof HTMLCanvasElement) {
+    image.width = 0;
+    image.height = 0;
+  }
   image.removeAttribute('src');
   image.remove();
+}
+
+/** Paint monochrome assets through their alpha mask, preserving transparent pixels. */
+export async function loadMonochromeIcon(
+  name: 'x.svg' | 'grok.svg',
+  resources: ImageResources,
+  color: string,
+): Promise<HTMLCanvasElement> {
+  const image = await resources.load(browser.runtime.getURL(`/icons/${name}`));
+  const canvas = document.createElement('canvas');
+  try {
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('浏览器无法绘制徽标');
+    const ratio = Math.min(64 / image.naturalWidth, 64 / image.naturalHeight);
+    const width = image.naturalWidth * ratio;
+    const height = image.naturalHeight * ratio;
+    context.drawImage(image, (64 - width) / 2, (64 - height) / 2, width, height);
+    context.globalCompositeOperation = 'source-in';
+    context.fillStyle = color;
+    context.fillRect(0, 0, 64, 64);
+    return canvas;
+  } catch (error) {
+    canvas.width = 0;
+    canvas.height = 0;
+    throw error;
+  } finally {
+    releaseImage(image);
+  }
 }
 
 export async function loadAvatar(
   url: string | undefined,
   resources: ImageResources,
-): Promise<HTMLImageElement | undefined> {
-  const urls = [
-    url,
-    browser.runtime.getURL('/icons/x.png'),
-    browser.runtime.getURL('/icons/x.svg'),
-  ];
-  for (const source of urls) {
-    if (!source) continue;
+  color = '#17202a',
+): Promise<LoadedAvatar | undefined> {
+  if (url) {
     try {
-      return await resources.load(source);
+      return await resources.load(url);
     } catch {
       resources.checkActive();
-      // Avatars have an explicit built-in logo fallback; photo failures remain fatal.
     }
   }
-  return undefined;
+  try {
+    return await loadMonochromeIcon('x.svg', resources, color);
+  } catch {
+    resources.checkActive();
+    return undefined;
+  }
 }
