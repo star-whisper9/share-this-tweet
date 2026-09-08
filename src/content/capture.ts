@@ -1,4 +1,8 @@
-import { CAPTURE_READY_EVENT, TWEET_DATA_EVENT } from '../shared/capture-protocol.js';
+import {
+  CAPTURE_READY_EVENT,
+  TWEET_DATA_EVENT,
+  TRANSLATION_DATA_EVENT,
+} from '../shared/capture-protocol.js';
 import type { TweetSource } from './tweet-source.js';
 
 // Start listening before inserting the page script: its first response can
@@ -11,6 +15,16 @@ export function startTweetCapture(source: TweetSource): void {
       source.ingestSerialized(detail);
     } catch (error) {
       console.error('分享有据: 推文数据解析失败', error instanceof Error ? error.name : 'Error');
+    }
+  });
+
+  window.addEventListener(TRANSLATION_DATA_EVENT, (event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (typeof detail !== 'string') return;
+    try {
+      source.ingestTranslation(JSON.parse(detail));
+    } catch (error) {
+      console.error('分享有据: 翻译数据解析失败', error instanceof Error ? error.name : 'Error');
     }
   });
 

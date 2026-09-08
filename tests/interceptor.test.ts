@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CAPTURE_READY_EVENT, TWEET_DATA_EVENT } from '../src/shared/capture-protocol.js';
+import {
+  CAPTURE_READY_EVENT,
+  TWEET_DATA_EVENT,
+  TRANSLATION_DATA_EVENT,
+} from '../src/shared/capture-protocol.js';
 
 const candidate = { __typename: 'Tweet', rest_id: '42', legacy: { full_text: 'test' } };
 
@@ -16,6 +20,7 @@ class FakeXHR extends EventTarget {
   getResponseHeader(): string {
     return this.contentType;
   }
+  open(): void {}
   send(): void {
     this.dispatchEvent(new Event('load'));
   }
@@ -124,4 +129,46 @@ describe('page response capture', () => {
     expect(await window.fetch('/test')).toBe(response);
     await vi.waitFor(() => expect(console.error).toHaveBeenCalledOnce());
   });
+});
+
+it('captures manual translation text streams with their request identity over XHR', async () => {
+  const events: Array<Record<string, unknown>> = [];
+  window.addEventListener(TRANSLATION_DATA_EVENT, (event) =>
+    events.push(JSON.parse((event as CustomEvent<string>).detail)),
+  );
+  await import('../src/page/interceptor.js');
+  const xhr = new XMLHttpRequest() as unknown as FakeXHR;
+  xhr.body =
+    '{"result":{"content_type":"POST","text":"早上"}}{"result":{"content_type":"POST","text":"好！"}}';
+  xhr.contentType = 'text/plain';
+  const real = xhr as unknown as XMLHttpRequest;
+  real.open('POST', 'https://api.x.com/2/grok/translation.json');
+  real.send(JSON.stringify({ content_type: 'POST', id: '42', dst_lang: 'zh' }));
+  expect(events.map((event) => event.phase)).toEqual(['start', 'complete']);
+  expect(events[1]).toMatchObject({
+    tweetId: '42',
+    targetLanguage: 'zh',
+    text: '早上好！',
+    requestId: events[0].requestId,
+  });
+});
+it('captures fetch translation streams without changing the returned response', async () => {
+  const events: Array<Record<string, unknown>> = [];
+  window.addEventListener(TRANSLATION_DATA_EVENT, (event) =>
+    events.push(JSON.parse((event as CustomEvent<string>).detail)),
+  );
+  const response = new Response('{"result":{"content_type":"POST","text":"translated"}}', {
+    headers: { 'Content-Type': 'text/plain' },
+  });
+  vi.mocked(window.fetch).mockResolvedValue(response);
+  await import('../src/page/interceptor.js');
+  expect(
+    await window.fetch('https://api.x.com/2/grok/translation.json', {
+      method: 'POST',
+      body: JSON.stringify({ content_type: 'POST', id: '42', dst_lang: 'zh' }),
+    }),
+  ).toBe(response);
+  await vi.waitFor(() => expect(events).toHaveLength(2));
+  expect(events[1].text).toBe('translated');
+  expect(await response.text()).toContain('translated');
 });

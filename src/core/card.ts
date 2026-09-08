@@ -48,6 +48,7 @@ export interface TweetCardLayoutInput extends CardTextMeasurement {
   images: CardImageDimension[];
   text: string;
   translation?: { text: string; sourceLanguage: string };
+  measureLabelText?: CardTextMeasurement['measureText'];
   cardWidth?: number;
 }
 
@@ -58,8 +59,10 @@ export interface TweetCardLayout {
   contentWidth: number;
   headerHeight: number;
   bodyFontSize: number;
+  labelFontSize: number;
+  labelLineHeight: number;
   textLines: string[];
-  bodyLines: Array<{ text: string; icon?: 'grok' | 'x'; runs?: CardTextRun[] }>;
+  bodyLines: Array<{ text: string; icon?: 'grok' | 'x'; label?: boolean; runs?: CardTextRun[] }>;
   textLineHeight: number;
   imageY: number;
   imageRects: CardImageRect[];
@@ -130,6 +133,8 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   const headerHeight = Math.max(48, Math.round(width * 0.05));
   const bodyFontSize = Math.max(18, Math.min(30, Math.round(width * 0.024)));
   const textLineHeight = Math.round(bodyFontSize * 1.42);
+  const labelFontSize = Math.max(12, Math.round(bodyFontSize * 0.7));
+  const labelLineHeight = Math.round(labelFontSize * 1.5);
   const bodyLines: TweetCardLayout['bodyLines'] = [];
   const appendText = (text: string) => {
     if (!text.trim()) return;
@@ -139,9 +144,12 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   };
   const appendLabel = (text: string, icon: 'grok' | 'x') => {
     bodyLines.push(
-      ...wrapCardText(text, contentWidth - bodyFontSize * 1.4, input.measureText).map(
-        (text, index) => ({ text, ...(index === 0 ? { icon } : {}) }),
-      ),
+      ...wrapCardText(
+        text,
+        contentWidth - labelFontSize * 1.4,
+        input.measureLabelText ??
+          ((value) => ({ width: (input.measureText(value).width * labelFontSize) / bodyFontSize })),
+      ).map((text, index) => ({ text, label: true, ...(index === 0 ? { icon } : {}) })),
     );
   };
   if (input.translation) {
@@ -153,7 +161,14 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   appendText(input.text);
   const textLines = bodyLines.map((line) => line.text);
   const gap = Math.max(12, Math.round(width * 0.015));
-  const textHeight = textLines.length > 0 ? gap + textLineHeight * textLines.length : 0;
+  const textHeight =
+    textLines.length > 0
+      ? gap +
+        bodyLines.reduce(
+          (height, line) => height + (line.label ? labelLineHeight : textLineHeight),
+          0,
+        )
+      : 0;
   const imageRects: CardImageRect[] = [];
 
   if (input.images.length === 1) {
@@ -205,6 +220,8 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     contentWidth,
     headerHeight,
     bodyFontSize,
+    labelFontSize,
+    labelLineHeight,
     textLines,
     bodyLines,
     textLineHeight,
@@ -360,6 +377,13 @@ async function renderCardCanvas(
         : undefined,
       cardWidth: options.cardWidth,
       measureText: (text) => context.measureText(text),
+      measureLabelText: (text) => {
+        context.save();
+        context.font = `400 ${Math.max(12, Math.round(bodyFontSize * 0.7))}px ${CARD_FONT_FAMILY}`;
+        const measured = context.measureText(text);
+        context.restore();
+        return measured;
+      },
     });
     const pixelWidth = layout.width * CARD_RENDER_SCALE;
     const pixelHeight = layout.height * CARD_RENDER_SCALE;
@@ -410,16 +434,16 @@ async function renderCardCanvas(
     context.textAlign = 'left';
     context.fillStyle = palette.text;
     context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
-    layout.bodyLines.forEach((line, index) => {
-      const y =
-        layout.padding +
-        layout.headerHeight +
-        Math.max(12, Math.round(layout.width * 0.015)) +
-        index * layout.textLineHeight;
+    let textY =
+      layout.padding + layout.headerHeight + Math.max(12, Math.round(layout.width * 0.015));
+    layout.bodyLines.forEach((line) => {
+      const y = textY;
+      const fontSize = line.label ? layout.labelFontSize : layout.bodyFontSize;
+      context.font = `400 ${fontSize}px ${CARD_FONT_FAMILY}`;
+      textY += line.label ? layout.labelLineHeight : layout.textLineHeight;
       const icon = line.icon === 'grok' ? grokIcon : line.icon === 'x' ? xIcon : undefined;
-      context.fillStyle = line.icon ? palette.muted : palette.text;
-      if (icon)
-        context.drawImage(icon, layout.padding, y, layout.bodyFontSize, layout.bodyFontSize);
+      context.fillStyle = line.label ? palette.muted : palette.text;
+      if (icon) context.drawImage(icon, layout.padding, y, fontSize, fontSize);
       if (line.runs) {
         for (const run of line.runs) {
           context.fillStyle = run.tag ? (theme === 'dark' ? '#8cc8f5' : '#559bd2') : palette.text;
@@ -430,11 +454,7 @@ async function renderCardCanvas(
           );
         }
       } else {
-        context.fillText(
-          line.text,
-          layout.padding + (line.icon ? layout.bodyFontSize * 1.4 : 0),
-          y,
-        );
+        context.fillText(line.text, layout.padding + (line.icon ? fontSize * 1.4 : 0), y);
       }
     });
 

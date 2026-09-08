@@ -1,3 +1,8 @@
+import {
+  normalizeTranslation,
+  mergeTranslation,
+  type TweetTranslation,
+} from '../shared/translation.js';
 import { normalizeTweetCandidate } from '../shared/tweet-normalizer.js';
 import { mergeTweetRecords, withoutQuote, type TweetRecord } from '../shared/model.js';
 
@@ -9,6 +14,94 @@ interface Waiter {
 
 export class TweetSource {
   private captureError?: Error;
+  private readonly translationRequests = new Map<
+    number,
+    { tweetId: string; targetLanguage: string; originalText?: string; language?: string }
+  >();
+  private readonly latestTranslations = new Map<string, number>();
+  private readonly translationUpdates = new Map<
+    string,
+    { text?: string; targetLanguage: string; originalText?: string; language?: string }
+  >();
+
+  ingestTranslation(value: unknown): void {
+    if (!value || typeof value !== 'object') return;
+    const event = value as Record<string, unknown>;
+    if (
+      typeof event.requestId !== 'number' ||
+      !Number.isSafeInteger(event.requestId) ||
+      typeof event.tweetId !== 'string' ||
+      !/^\d+$/.test(event.tweetId) ||
+      typeof event.targetLanguage !== 'string' ||
+      !event.targetLanguage.trim() ||
+      event.targetLanguage.length > 100
+    )
+      return;
+    if (event.phase === 'start') {
+      const record =
+        this.records.get(event.tweetId) ??
+        Array.from(this.records.values()).find((item) => item.quote?.tweetId === event.tweetId)
+          ?.quote?.record;
+      this.translationRequests.set(event.requestId, {
+        tweetId: event.tweetId,
+        targetLanguage: event.targetLanguage,
+        originalText: record?.text,
+        language: record?.language,
+      });
+      this.latestTranslations.delete(event.tweetId);
+      this.latestTranslations.set(event.tweetId, event.requestId);
+      while (this.translationRequests.size > 32)
+        this.translationRequests.delete(this.translationRequests.keys().next().value!);
+      while (this.latestTranslations.size > 32)
+        this.latestTranslations.delete(this.latestTranslations.keys().next().value!);
+      return;
+    }
+    if (event.phase !== 'complete') return;
+    const request = this.translationRequests.get(event.requestId);
+    this.translationRequests.delete(event.requestId);
+    if (
+      !request ||
+      request.tweetId !== event.tweetId ||
+      request.targetLanguage !== event.targetLanguage ||
+      this.latestTranslations.get(event.tweetId) !== event.requestId
+    )
+      return;
+    const text =
+      typeof event.text === 'string' && event.text.length <= 100000 ? event.text : undefined;
+    this.translationUpdates.delete(event.tweetId);
+    this.translationUpdates.set(event.tweetId, { ...request, text });
+    while (this.translationUpdates.size > 32)
+      this.translationUpdates.delete(this.translationUpdates.keys().next().value!);
+    this.ingest([]);
+  }
+
+  private translatedRecord(record: TweetRecord): TweetRecord {
+    const update = this.translationUpdates.get(record.tweetId);
+    if (!update) return record;
+    // A response can precede the first core record; bind it once rather than synthesizing a tweet.
+    update.originalText ??= record.text;
+    update.language ??= record.language;
+    const translation: TweetTranslation | undefined = mergeTranslation(
+      normalizeTranslation(
+        {
+          is_available: true,
+          data: {
+            translation: update.text,
+            source_language: update.language,
+            destination_language: update.targetLanguage,
+          },
+        },
+        update.originalText,
+        update.language,
+      ),
+      undefined,
+      record.text,
+    );
+    return JSON.stringify(translation) === JSON.stringify(record.translation)
+      ? record
+      : { ...record, translation };
+  }
+
   private readonly records = new Map<string, TweetRecord>();
   private readonly waiters = new Map<string, Waiter[]>();
   private readonly listeners = new Set<(record: TweetRecord) => void>();
@@ -78,6 +171,19 @@ export class TweetSource {
             },
           }),
         );
+      }
+    }
+    // Apply manual results after quote hydration so an older embedded snapshot cannot undo them.
+    for (const [id, original] of this.records) {
+      let record = this.translatedRecord(original);
+      if (record.quote?.record) {
+        const quoted = this.translatedRecord(record.quote.record);
+        if (quoted !== record.quote.record)
+          record = { ...record, quote: { ...record.quote, record: withoutQuote(quoted) } };
+      }
+      if (record !== original) {
+        this.records.set(id, record);
+        changed.add(id);
       }
     }
     for (const id of changed) {
