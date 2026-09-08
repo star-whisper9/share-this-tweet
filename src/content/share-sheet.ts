@@ -163,7 +163,7 @@ export class ShareSheet {
     brand.append(extensionIcon('brand'));
     const headings = node('div', 'stt-headings');
     headings.append(node('p', 'stt-brand-name', '分享有据 · Share This Tweet'));
-    const title = node('h2', '', '分享这条推文');
+    const title = node('h2', '', '导出推文');
     title.id = 'stt-sheet-title';
     headings.append(title);
     titleGroup.append(brand, headings);
@@ -219,7 +219,7 @@ export class ShareSheet {
     provenance.append(dl, sourceLink);
     summary.append(authorRow, text, expander, provenance);
     const actions = node('div', 'stt-sheet-actions');
-    const skeleton = node('div', 'stt-action-skeleton', '正在准备分享选项…');
+    const skeleton = node('div', 'stt-action-skeleton', '正在准备导出选项…');
     skeleton.setAttribute('aria-hidden', 'true');
     actions.append(skeleton);
     scroll.append(summary, actions);
@@ -228,7 +228,7 @@ export class ShareSheet {
     status.setAttribute('aria-live', 'polite');
     status.setAttribute('aria-atomic', 'true');
     const footer = node('footer', 'stt-sheet-footer');
-    footer.append(status, node('p', 'stt-sheet-note', '分享喜欢，也留下出处。'));
+    footer.append(status);
     dialog.append(header, scroll, footer);
     backdrop.append(dialog);
     root.append(backdrop);

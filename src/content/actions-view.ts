@@ -2,7 +2,7 @@ import type { ExportSession } from './export-session.js';
 import { appendMediaActions } from './media-view.js';
 import { actionButton, actionLabel, errorDetails, node } from './ui-components.js';
 
-function cardSaveButton(session: ExportSession, description: string): HTMLButtonElement {
+function cardSaveButton(session: ExportSession): HTMLButtonElement {
   const state = session.action('save-card');
   const button = actionButton({
     key: 'save-card',
@@ -12,7 +12,6 @@ function cardSaveButton(session: ExportSession, description: string): HTMLButton
       success: '再次保存推文卡片',
       error: '保存推文卡片',
     }),
-    description,
     image: 'download',
     state,
     onClick: () => {
@@ -34,7 +33,6 @@ function textAction(session: ExportSession): HTMLElement {
         success: '已复制 · 再复制一次',
         error: '重试复制文字',
       }),
-      description: '复制后，直接粘贴到聊天中',
       image: 'copy',
       state,
       primary: session.record.media.length === 0,
@@ -64,7 +62,10 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
   const stripScroll = actions.querySelector<HTMLElement>('.stt-media-strip')?.scrollLeft ?? 0;
   actions.replaceChildren();
   appendMediaActions(actions, session);
-  actions.append(cardSaveButton(session, '保存正文、作者与来源为 PNG'));
+  actions.append(node('div', 'stt-section-label', '整条推文'));
+  const exports = node('div', 'stt-export-grid');
+  exports.append(cardSaveButton(session), textAction(session));
+  actions.append(exports);
   const save = session.action('save-card');
   if (save.status === 'error')
     actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
@@ -73,7 +74,6 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
       node('p', 'stt-sheet-note', '推文卡片不包含视频或 GIF，仅保留正文、照片和来源。'),
     );
   }
-  actions.append(textAction(session));
   const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details');
   if (details) details.open = filenameOpen;
   const strip = actions.querySelector<HTMLElement>('.stt-media-strip');

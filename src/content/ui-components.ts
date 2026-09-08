@@ -131,7 +131,7 @@ export function actionButton(options: ActionButtonOptions): HTMLButtonElement {
   copy.append(node('strong', '', label));
   if (description) copy.append(node('span', '', description));
   const end = node('span', 'stt-command-end');
-  end.append(icon(state.status === 'loading' ? 'download' : 'arrow'));
+  end.hidden = state.status !== 'loading';
   button.append(glyph, copy, end);
   return button;
 }

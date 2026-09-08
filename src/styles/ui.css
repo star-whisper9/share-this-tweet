@@ -152,7 +152,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 24px 23px 18px;
+  padding: 14px 16px 10px;
 }
 .stt-title-group {
   display: flex;
@@ -163,8 +163,8 @@
 .stt-brand-mark {
   display: grid;
   place-items: center;
-  width: 41px;
-  height: 41px;
+  width: 32px;
+  height: 32px;
   border-radius: 12px;
   background: var(--stt-tint);
   color: var(--stt-accent);
@@ -175,8 +175,8 @@
   height: 25px;
 }
 .stt-brand-icon {
-  width: 29px;
-  height: 29px;
+  width: 25px;
+  height: 25px;
   border-radius: 8px;
   object-fit: cover;
 }
@@ -188,7 +188,7 @@
   margin-bottom: 2px;
 }
 .stt-sheet-header h2 {
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.4;
   letter-spacing: -0.5px;
   font-weight: 750;
@@ -218,12 +218,12 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 0 23px 4px;
+  padding: 0 16px 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--stt-border) transparent;
 }
 .stt-tweet-summary {
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--stt-border);
   border-radius: 16px;
   background: var(--stt-surface-raised);
@@ -299,7 +299,7 @@
   font-size: 11px !important;
 }
 .stt-provenance {
-  margin-top: 9px;
+  margin-top: 2px;
   font-size: 11px;
   color: var(--stt-text-muted);
 }
@@ -342,7 +342,7 @@
   font-size: 11px;
   font-weight: 550;
   color: var(--stt-text-muted);
-  margin: 20px 0 10px;
+  margin: 12px 0 6px;
 }
 .stt-selection-count {
   font-variant-numeric: tabular-nums;
@@ -361,8 +361,8 @@
   overscroll-behavior-x: contain;
 }
 .stt-media-choice {
-  flex: 0 0 77px;
-  width: 77px;
+  flex: 0 0 64px;
+  width: 64px;
   border: 0;
   background: transparent;
   padding: 0;
@@ -371,8 +371,8 @@
 }
 .stt-media-thumb {
   position: relative;
-  width: 77px;
-  height: 63px;
+  width: 64px;
+  height: 52px;
   overflow: hidden;
   border-radius: 10px;
   display: grid;
@@ -479,7 +479,7 @@
   height: 17px;
 }
 .stt-sheet button.stt-command-primary {
-  min-height: 76px;
+  min-height: 48px;
   color: var(--stt-accent-contrast);
   background: var(--stt-accent);
   border-color: var(--stt-accent);
@@ -528,8 +528,8 @@
   gap: 9px;
 }
 .stt-frame-direction-grid .stt-command {
-  height: 76px;
-  min-height: 76px;
+  height: auto;
+  min-height: 48px;
   padding: 10px 11px;
   gap: 8px;
 }
@@ -549,9 +549,7 @@
   display: none;
 }
 .stt-text-action {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--stt-border);
+  min-width: 0;
 }
 .stt-text-action:only-child {
   margin-top: 17px;
@@ -565,7 +563,7 @@
   margin-top: 6px;
 }
 .stt-file-details > summary {
-  min-height: 29px;
+  min-height: 25px;
   padding: 7px 0 2px;
   cursor: pointer;
   width: fit-content;
@@ -592,7 +590,7 @@
 }
 .stt-sheet-footer {
   flex: 0 0 auto;
-  padding: 9px 23px max(14px, env(safe-area-inset-bottom));
+  padding: 4px 16px max(8px, env(safe-area-inset-bottom));
 }
 .stt-sheet p.stt-sheet-status {
   font-size: 11px;
@@ -650,13 +648,13 @@
 }
 @media (max-width: 380px) {
   .stt-sheet-header {
-    padding: 20px 18px 15px;
+    padding: 12px 14px 8px;
   }
   .stt-sheet-scroll {
-    padding-inline: 18px;
+    padding-inline: 14px;
   }
   .stt-sheet-footer {
-    padding-inline: 18px;
+    padding-inline: 14px;
   }
   .stt-tweet-summary {
     padding: 13px;
@@ -726,5 +724,46 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Compact actions retain touch targets and allow labels to grow when text is enlarged. */
+.stt-sheet .stt-command {
+  min-height: 48px;
+  height: auto;
+  padding: 10px 12px;
+  gap: 8px;
+  border-radius: 10px;
+}
+.stt-export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.stt-export-grid .stt-command {
+  width: 100%;
+  margin: 0;
+}
+.stt-command-copy strong {
+  overflow-wrap: anywhere;
+}
+.stt-default-badge {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+.stt-frame-direction-grid .stt-command-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.stt-sheet p.stt-sheet-status {
+  margin-bottom: 0;
+}
+@media (max-width: 340px) {
+  .stt-frame-direction-grid {
+    grid-template-columns: 1fr;
   }
 }

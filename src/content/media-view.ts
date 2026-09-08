@@ -17,17 +17,11 @@ export function appendMediaActions(actions: HTMLElement, session: ExportSession)
   const { record, selection } = session;
   if (record.media.length === 0) return;
   const heading = node('div', 'stt-section-label');
-  const position = record.media.findIndex((media) => media.index === selection.primary) + 1;
-  heading.append(
-    node('span', '', record.media.length > 1 ? '选择要保存的媒体' : '这条推文的内容'),
-    node(
-      'span',
-      'stt-selection-count',
-      record.media.length > 1
-        ? `已选 ${selection.size} / ${record.media.length}`
-        : `${position} / ${record.media.length}`,
-    ),
-  );
+  heading.append(node('span', '', '所选媒体'));
+  if (record.media.length > 1)
+    heading.append(
+      node('span', 'stt-selection-count', `已选 ${selection.size} / ${record.media.length}`),
+    );
   const strip = node('div', 'stt-media-strip');
   strip.setAttribute('role', 'group');
   strip.setAttribute('aria-label', '选择媒体');
@@ -86,11 +80,6 @@ function frameActions(session: ExportSession, media: MediaRecord): HTMLElement {
     const button = actionButton({
       key: `frame-${media.index}-${orientation}`,
       label: actionLabel(state, labels),
-      description: batch
-        ? '照片添加画框，视频和 GIF 原样保存'
-        : preferred
-          ? '默认方向 · 一键保存'
-          : '本次直接覆盖默认方向',
       image: 'frame',
       state,
       primary: preferred,
@@ -99,6 +88,8 @@ function frameActions(session: ExportSession, media: MediaRecord): HTMLElement {
         void session.saveSelected('framed', orientation);
       },
     });
+    if (preferred)
+      button.querySelector('.stt-command-copy')?.append(node('small', 'stt-default-badge', '默认'));
     button.classList.add('stt-media-frame-button');
     grid.append(button);
   }
@@ -115,6 +106,8 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
   const selectedPhotos = selection.selected(record.media).some((item) => item.type === 'photo');
   if (selection.size === 0 || photo || (batch && selectedPhotos)) {
     wrapper.append(frameActions(session, media));
+    if (batch && selection.selected(record.media).some((item) => item.type !== 'photo'))
+      wrapper.append(node('p', 'stt-sheet-note', '画框仅用于照片，视频和 GIF 原样保存。'));
     const error = FRAME_ORIENTATIONS.map(
       (orientation) => session.mediaAction('framed', orientation).error,
     ).find(Boolean);
@@ -143,13 +136,6 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
   const button = actionButton({
     key: batch ? 'download-selected-original' : `download-${media.index}`,
     label: actionLabel(state, labels),
-    description: batch
-      ? '照片、视频和 GIF 均按原始媒体保存'
-      : {
-          photo: '不加画框，保留原始图片',
-          animated_gif: '以 MP4 格式保存，不转换成 .gif',
-          video: '以 MP4 格式保存',
-        }[media.type],
     image: 'download',
     state,
     primary: batch || !photo,

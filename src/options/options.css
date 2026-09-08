@@ -1125,3 +1125,72 @@ form[data-state='loading'] .state-dot {
     scroll-behavior: auto !important;
   }
 }
+
+/* Reserve classic scrollbar space across panels without reducing overlay-scrollbar layouts. */
+html {
+  scrollbar-gutter: stable;
+}
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  box-sizing: border-box;
+}
+.settings-tabs button {
+  min-width: 0;
+  padding-inline: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.settings-panel > *,
+.settings-editor,
+.settings-preview {
+  min-width: 0;
+}
+input,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 720px) {
+  .settings-tabs svg {
+    display: none;
+  }
+  .settings-tabs {
+    margin-bottom: 12px;
+  }
+  .settings-tabs button {
+    padding: 8px 4px;
+  }
+  .page-heading {
+    margin-bottom: 16px;
+  }
+  .settings-editor {
+    padding: 16px;
+  }
+  .settings-preview {
+    order: 0;
+    padding: 16px;
+    border-bottom: 0;
+    border-top: 1px solid var(--border);
+  }
+  .section-heading {
+    margin-bottom: 14px;
+  }
+  .preset {
+    min-height: 76px;
+  }
+  .brand {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .save-bar {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 360px) {
+  .settings-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
