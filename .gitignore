@@ -149,3 +149,5 @@ vite.config.ts.timestamp-*
 .DS_Store
 
 twitter-improvements/
+# Local video production assets and tooling
+/production/

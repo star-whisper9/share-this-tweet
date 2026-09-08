@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
     "lint:extension": "web-ext lint --source-dir dist --warnings-as-errors --no-config-discovery",
-    "package": "npm run check && npm run lint:extension && node scripts/package.mjs"
+    "package": "npm run check && npm run lint:extension && node scripts/package.mjs",
+    "sign:unlisted": "node scripts/sign-unlisted.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -79,6 +79,43 @@ npm run build
 
 </details>
 
+## 个人使用：签名 unlisted 版本
+
+需要 Mozilla Add-ons API 凭据，通过环境变量 `WEB_EXT_API_KEY` 和
+`WEB_EXT_API_SECRET` 提供。不要将凭据写进仓库或命令行参数。
+
+```sh
+# 检查、构建并签名；会上传到 Mozilla，但不会在商店公开列出
+npm run sign:unlisted
+
+# 仅生成和验证产物，不上传，也不要求凭据
+npm run sign:unlisted -- --prepare-only
+
+# 换电脑、清理本地记录或 AMO 已占用编号时，指定一个更大的第四段数字
+npm run sign:unlisted -- --build-number 42
+```
+
+脚本保持当前扩展 ID，以源码版本为基础分配第四段数字，例如
+`0.3.0.1`、`0.3.0.2`。只有独立副本的 manifest 会改变；源码版本、
+`package.json`、锁文件及正式 `dist/manifest.json` 都保持原版本。
+原始 TypeScript 源码包随签名上传，内含重建步骤及版本覆盖命令。
+
+产物位于 `releases.local/unlisted/<版本号>/`，包含独立扩展目录、
+未签名 ZIP、审核源码 ZIP、成功后取得的 XPI 和 `submission.json` 状态记录。
+**目录本身就是编号预留记录**：准备模式和失败提交也会消耗编号；不要删除这些
+版本目录后继续自动编号。脚本只知道本地编号，不查询 AMO，遇到远端版本冲突时
+请根据 AMO 记录，用 `--build-number` 指定更大的编号后重试。
+
+同一时间只能运行一个 unlisted 构建；强制终止可能留下
+`releases.local/sign-unlisted.lock/`，确认没有相关进程后再手动移除。
+运行签名时不要在另一个终端同时执行会重建 `dist/` 的命令。
+
+listed 和 unlisted 共享版本号空间。安装 `0.3.0.1` 后，商店的 `0.3.0`
+不会自动覆盖它；后续正式 `0.3.1` 才更高。当前 manifest 没有自定义
+`update_url`，后续更高的 AMO 正式版可以成为更新来源。
+参见 [Mozilla unlisted 分发说明](https://extensionworkshop.com/documentation/publish/self-distribution/)
+和 [版本格式](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/version)。
+
 ## 使用前了解
 
 - **翻译由 X 提供。** 扩展不会主动请求翻译。没有译文时保留原文；在 X 中手动点击翻译后，无需刷新即可更新导出内容。翻译数据异常时，面板会显示警告。
