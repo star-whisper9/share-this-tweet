@@ -3,8 +3,7 @@ import { ImageResources } from '../core/image-resources.js';
 import { detectCardTheme, renderTweetCard } from '../core/card.js';
 import { downloadBlob, downloadMedia } from '../core/download.js';
 import { renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
-import { buildTweetText, copyTweetText } from '../core/text-export.js';
-import { ShareCancelledError, shareImage, shareText } from '../core/share.js';
+import { copyTweetText } from '../core/text-export.js';
 import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import type { OutputRecordInput } from '../shared/storage-model.js';
@@ -20,13 +19,12 @@ export interface SheetStatus {
   state: 'loading' | 'ready' | 'error';
   message: string;
 }
-export type TweetAction = 'copy-text' | 'share-text' | 'share-image' | 'save-card';
+export type TweetAction = 'copy-text' | 'save-card';
 export type MediaMode = 'original' | 'framed';
 interface ActionMessages {
   loading: string;
   success: string;
   failure: string;
-  cancelled?: string;
 }
 interface ExportContext {
   record: TweetRecord;
@@ -83,10 +81,6 @@ export class ExportSession {
 
   get isSavingBatch(): boolean {
     return this.batchRunning;
-  }
-
-  get hasCard(): boolean {
-    return this.cardFile !== undefined;
   }
 
   action(key: TweetAction): Readonly<ActionState> {
@@ -163,11 +157,6 @@ export class ExportSession {
       this.setStatus(warning ? 'error' : 'ready', warning ?? messages.success);
     } catch (error) {
       if (!this.active) return;
-      if (error instanceof ShareCancelledError) {
-        this.actions.set(key, { status: 'idle' });
-        this.setStatus('ready', messages.cancelled ?? '已取消分享。');
-        return;
-      }
       this.actions.set(key, { status: 'error', error: errorMessage(error) });
       this.setStatus('error', messages.failure);
       console.error('分享有据: 输出失败', key, error);
@@ -204,22 +193,6 @@ export class ExportSession {
     );
   }
 
-  shareText(): Promise<void> {
-    return this.run(
-      'share-text',
-      {
-        loading: '正在打开文本分享…',
-        success: '文本分享已完成。',
-        failure: '',
-        cancelled: '已取消文本分享。',
-      },
-      async ({ record, settings }) => {
-        await shareText(buildTweetText(record, settings.textTemplate));
-        return this.persist(record, { tweetId: record.tweetId, outputType: 'shared-text' });
-      },
-    );
-  }
-
   private async getCard({ record, settings }: ExportContext): Promise<File> {
     const photos = record.media.filter((media) => media.type === 'photo');
     const theme = detectCardTheme();
@@ -244,36 +217,14 @@ export class ExportSession {
     }
   }
 
-  private cardOutput(
-    record: TweetRecord,
-    file: File,
-    outputType: 'tweet-card' | 'shared-image',
-  ): OutputRecordInput {
+  private cardOutput(record: TweetRecord, file: File): OutputRecordInput {
     const photo = record.media.find((media) => media.type === 'photo');
     return {
       tweetId: record.tweetId,
-      outputType,
+      outputType: 'tweet-card',
       filename: file.name,
       ...(photo ? { mediaIndex: photo.index } : {}),
     };
-  }
-
-  shareImage(): Promise<void> {
-    return this.run(
-      'share-image',
-      {
-        loading: '正在生成并打开推文卡片分享…',
-        success: '推文卡片分享已完成。',
-        failure: '',
-        cancelled: '已取消图片分享。',
-      },
-      async (context) => {
-        const file = await this.getCard(context);
-        if (!this.active) return;
-        await shareImage(file);
-        return this.persist(context.record, this.cardOutput(context.record, file, 'shared-image'));
-      },
-    );
   }
 
   saveCard(): Promise<void> {
@@ -288,7 +239,7 @@ export class ExportSession {
         const file = await this.getCard(context);
         if (!this.active) return;
         downloadBlob(file, file.name);
-        return this.persist(context.record, this.cardOutput(context.record, file, 'tweet-card'));
+        return this.persist(context.record, this.cardOutput(context.record, file));
       },
     );
   }

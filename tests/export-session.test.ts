@@ -4,7 +4,6 @@ import { detectCardTheme, renderTweetCard } from '../src/core/card.js';
 import { renderPhotoFrame } from '../src/core/frame.js';
 import { downloadBlob, downloadMedia } from '../src/core/download.js';
 import { recordOutput, saveTweetRecord } from '../src/core/storage-client.js';
-import { ShareCancelledError, shareImage } from '../src/core/share.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
 
@@ -20,10 +19,6 @@ vi.mock('../src/core/download.js', () => ({ downloadBlob: vi.fn(), downloadMedia
 vi.mock('../src/core/storage-client.js', () => ({
   recordOutput: vi.fn(),
   saveTweetRecord: vi.fn(),
-}));
-vi.mock('../src/core/share.js', async (original) => ({
-  ...(await original<typeof import('../src/core/share.js')>()),
-  shareImage: vi.fn(),
 }));
 
 const record: TweetRecord = {
@@ -74,11 +69,10 @@ afterEach(() => {
 });
 
 describe('export session', () => {
-  it('reuses a text-only card while keeping save/share output records independent', async () => {
+  it('reuses a text-only card while recording each save', async () => {
     const session = new ExportSession(record, settings);
     await session.saveCard();
     await session.saveCard();
-    await session.shareImage();
     const file = vi.mocked(downloadBlob).mock.calls[0][0];
     expect(file).toBeInstanceOf(File);
     expect(file.type).toBe('image/png');
@@ -89,14 +83,9 @@ describe('export session', () => {
       expect.objectContaining({ theme: 'light' }),
     );
     expect(downloadBlob).toHaveBeenCalledTimes(2);
-    expect(shareImage).toHaveBeenCalledWith(file);
     expect(saveTweetRecord).toHaveBeenCalledWith(record);
     const outputs = vi.mocked(recordOutput).mock.calls.map(([output]) => output);
-    expect(outputs.map(({ outputType }) => outputType)).toEqual([
-      'tweet-card',
-      'tweet-card',
-      'shared-image',
-    ]);
+    expect(outputs.map(({ outputType }) => outputType)).toEqual(['tweet-card', 'tweet-card']);
     for (const output of outputs) {
       expect(output.tweetId).toBe(record.tweetId);
       expect(output.filename).toBe((file as File).name);
@@ -104,36 +93,17 @@ describe('export session', () => {
     }
   });
 
-  it('distinguishes cancellation from failure without falling back or discarding the card', async () => {
-    const session = new ExportSession(record, settings);
-    vi.mocked(shareImage)
-      .mockRejectedValueOnce(new ShareCancelledError())
-      .mockRejectedValueOnce(new Error());
-    await session.shareImage();
-    expect(session.action('share-image').status).toBe('idle');
-    expect(session.hasCard).toBe(true);
-    await session.shareImage();
-    expect(session.action('share-image').status).toBe('error');
-    expect(session.hasCard).toBe(true);
-    expect(renderTweetCard).toHaveBeenCalledOnce();
-    expect(downloadBlob).not.toHaveBeenCalled();
-    expect(recordOutput).not.toHaveBeenCalled();
-  });
-
   it('suppresses duplicate clicks and stale completion after the session is disposed', async () => {
     const generation = deferred<Awaited<ReturnType<typeof renderTweetCard>>>();
     vi.mocked(renderTweetCard).mockReturnValue(generation.promise);
     const changed = vi.fn();
     const session = new ExportSession(record, settings, changed);
-    const pending = session.shareImage();
-    await session.shareImage();
+    const pending = session.saveCard();
     expect(renderTweetCard).toHaveBeenCalledOnce();
     session.dispose();
     changed.mockClear();
     generation.resolve({ blob: png, width: 1600, height: 500 });
     await pending;
-    expect(session.hasCard).toBe(false);
-    expect(shareImage).not.toHaveBeenCalled();
     expect(recordOutput).not.toHaveBeenCalled();
     expect(changed).not.toHaveBeenCalled();
   });
@@ -173,15 +143,15 @@ describe('export session', () => {
     expect(recordOutput).not.toHaveBeenCalled();
   });
 
-  it('merges save/share generation and invalidates changed card inputs', async () => {
+  it('suppresses concurrent saves and invalidates changed card inputs', async () => {
     const generation = deferred<Awaited<ReturnType<typeof renderTweetCard>>>();
     vi.mocked(renderTweetCard).mockReturnValueOnce(generation.promise);
     const session = new ExportSession(record, settings);
     const save = session.saveCard();
-    const share = session.shareImage();
+    const duplicate = session.saveCard();
     expect(renderTweetCard).toHaveBeenCalledOnce();
     generation.resolve({ blob: png, width: 100, height: 100 });
-    await Promise.all([save, share]);
+    await Promise.all([save, duplicate]);
     session.updateRecord({ ...record, text: 'updated' });
     await session.saveCard();
     vi.mocked(detectCardTheme).mockReturnValue('dark');

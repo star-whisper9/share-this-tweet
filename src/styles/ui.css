@@ -539,55 +539,6 @@
 .stt-frame-direction-grid + .stt-command {
   margin-top: 9px;
 }
-.stt-share-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--stt-border);
-}
-.stt-share-actions .stt-command {
-  height: 60px;
-  min-height: 60px;
-  max-height: 60px;
-  align-self: start;
-  padding: 10px 12px;
-  gap: 9px;
-}
-.stt-share-actions .stt-command + .stt-command {
-  margin-top: 0;
-}
-.stt-share-actions .stt-command-copy strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.stt-share-actions .stt-command-copy > span {
-  font-size: 10px;
-  line-height: 1.4;
-}
-.stt-share-actions .stt-inline-error,
-.stt-share-actions .stt-share-fallback {
-  grid-column: 1 / -1;
-}
-.stt-share-actions .stt-inline-error {
-  margin: 0;
-  padding: 8px 11px;
-  border: 1px solid var(--stt-error);
-  border-radius: 9px;
-  background: transparent;
-  font-size: 11px;
-  line-height: 1.55;
-}
-.stt-share-actions .stt-inline-error details {
-  margin-top: 3px;
-}
-.stt-share-actions .stt-share-fallback {
-  min-height: 56px;
-}
 .stt-frame-direction-grid .stt-command-copy strong {
   font-size: 11px;
 }
@@ -719,9 +670,6 @@
   }
   .stt-command-primary .stt-command-copy strong {
     font-size: 13px;
-  }
-  .stt-share-actions {
-    grid-template-columns: 1fr;
   }
 }
 @media (pointer: coarse) {
