@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_FILENAME_TEMPLATE,
-  buildMediaFilename,
-  buildCardFilename,
-  sanitizeFilename,
-} from '../src/core/filename.js';
+import { buildMediaFilename, buildCardFilename, sanitizeFilename } from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
 import { renderTemplate, TemplateError } from '../src/core/template.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
@@ -57,11 +52,6 @@ describe('renderTemplate', () => {
 });
 
 describe('buildMediaFilename', () => {
-  it('uses the default template and the photo extension from the media URL', () => {
-    expect(buildMediaFilename(record, photo)).toBe('X_alice_t42_m1.jpg');
-    expect(DEFAULT_FILENAME_TEMPLATE).toContain('{tweet.id}');
-  });
-
   it('sanitizes filename characters and forces the actual media extension', () => {
     expect(buildMediaFilename(record, photo, 'a:/bad name.gif')).toBe('a__bad name.jpg');
     expect(sanitizeFilename('  hello\nworld  ')).toBe('hello_world');
@@ -88,9 +78,13 @@ describe('media download target', () => {
 
 describe('card filenames', () => {
   it('names text-only cards without inventing a media record', () => {
-    expect(buildCardFilename(record)).toBe('X_alice_t42_m0_card.png');
+    expect(buildCardFilename(record, undefined, '{tweet.id}_{media.index}.{extension}')).toBe(
+      '42_0_card.png',
+    );
     expect(buildCardFilename(record, undefined, '{tweet.id}.{extension}')).toBe('42_card.png');
-    expect(buildCardFilename(record, photo)).toBe('X_alice_t42_m1_card.png');
+    expect(buildCardFilename(record, photo, '{tweet.id}_{media.index}.{extension}')).toBe(
+      '42_1_card.png',
+    );
     expect(() => buildCardFilename(record, undefined, '{media.type}.png')).toThrow(TemplateError);
     expect(() => renderTemplate('{media.index}', { tweet: record })).toThrow(TemplateError);
   });

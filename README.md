@@ -25,6 +25,16 @@
 
 项目使用 TypeScript、npm 和 Vitest，许可证为 GPL v3。
 
+## 开发结构
+
+- `content/ui.ts`：页面与推文数据协调入口。
+- `content/tweet-page.ts`、`share-sheet.ts`：X 页面入口、弹层生命周期与焦点管理。
+- `content/actions-view.ts`、`media-view.ts`、`ui-components.ts`：动作和媒体界面。
+- `content/export-session.ts`、`media-selection.ts`：每条推文的导出状态、媒体选择和操作流程。
+- `core/`：下载、渲染、模板及来源存储。
+
+开发验证规范见 `AGENTS.md`；常规实机回归由星语负责。
+
 ## Roadmap
 
 - 后续 `v0.x.0`：继续评估跨设备图片原生分享方案，暂不承诺所有 Firefox Android 版本均可直接分享图片。

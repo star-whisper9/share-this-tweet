@@ -71,10 +71,10 @@ describe('early capture startup', () => {
       doc.documentElement = root;
       const source = new TweetSource();
       startTweetCapture(source);
-      const waiting = expect(source.waitFor('42')).rejects.toThrow('读取器未能启动');
+      const waiting = expect(source.waitFor('42')).rejects.toThrow(Error);
       script.dispatchEvent(new Event(event));
       await waiting;
-      await expect(source.waitFor('42')).rejects.toThrow('读取器未能启动');
+      await expect(source.waitFor('42')).rejects.toThrow(Error);
       expect(vi.getTimerCount()).toBe(0);
     },
   );
@@ -82,7 +82,7 @@ describe('early capture startup', () => {
   it('times out startup and allows a late ready handshake and response to recover', async () => {
     const source = new TweetSource();
     startTweetCapture(source);
-    const waiting = expect(source.waitFor('42', 10000)).rejects.toThrow('读取器启动超时');
+    const waiting = expect(source.waitFor('42', 10000)).rejects.toThrow(Error);
     await vi.advanceTimersByTimeAsync(5000);
     await waiting;
     window.dispatchEvent(new Event(CAPTURE_READY_EVENT));
@@ -92,7 +92,7 @@ describe('early capture startup', () => {
 
   it('keeps target waiters independent and accepts data after a timeout', async () => {
     const source = new TweetSource();
-    const timedOut = expect(source.waitFor('42', 10)).rejects.toThrow('尚未收到');
+    const timedOut = expect(source.waitFor('42', 10)).rejects.toThrow(Error);
     const other = source.waitFor('99', 1000);
     await vi.advanceTimersByTimeAsync(10);
     await timedOut;

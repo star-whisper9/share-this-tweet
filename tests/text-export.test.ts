@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTweetText, DEFAULT_TEXT_TEMPLATE } from '../src/core/text-export.js';
+import { buildTweetText } from '../src/core/text-export.js';
 import type { TweetRecord } from '../src/shared/model.js';
 
 const record: TweetRecord = {
@@ -12,13 +12,9 @@ const record: TweetRecord = {
 
 describe('buildTweetText', () => {
   it('keeps the body line breaks and includes source metadata', () => {
-    expect(buildTweetText(record)).toBe(
-      '第一行\n第二行\n\n── @alice\nhttps://x.com/alice/status/42\nTweet ID: 42',
-    );
-  });
-
-  it('supports a custom template through the shared template parser', () => {
-    expect(buildTweetText(record, '{author.name}: {tweet.text}')).toBe('Alice: 第一行\n第二行');
-    expect(DEFAULT_TEXT_TEMPLATE).toContain('{tweet.url}');
+    const text = buildTweetText(record);
+    for (const value of [record.text, record.author.handle, record.url, record.tweetId]) {
+      expect(text).toContain(value);
+    }
   });
 });

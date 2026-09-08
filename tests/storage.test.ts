@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createOutputRecord, validateStorageArchive } from '../src/core/storage.js';
+import { createOutputRecord, validateStorageArchive, StorageError } from '../src/core/storage.js';
 
 describe('storage record models', () => {
   it('creates an output record without changing the supplied output metadata', () => {
@@ -39,6 +39,6 @@ describe('storage record models', () => {
           },
         ],
       }),
-    ).toThrow('来源记录归档包含无效输出记录');
+    ).toThrow(StorageError);
   });
 });

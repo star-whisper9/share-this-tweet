@@ -160,7 +160,6 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   } else if (input.images.length > 1) {
     const gridGap = Math.max(10, Math.round(width * 0.012));
     const columns = 2;
-    const rows = Math.ceil(input.images.length / columns);
     const tileWidth = Math.floor((contentWidth - gridGap * (columns - 1)) / columns);
     const tileHeight = Math.min(360, Math.max(180, Math.round(tileWidth * 0.72)));
     input.images.forEach((_image, index) => {
