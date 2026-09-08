@@ -55,29 +55,51 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
       ? document.activeElement
       : undefined;
   const focusKey = active?.dataset.sttFocusKey;
-  const filenameOpen =
-    actions.querySelector<HTMLDetailsElement>('.stt-file-details')?.open ?? false;
+  const expandedFiles = new Set(
+    Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))
+      .filter((group) => group.querySelector<HTMLDetailsElement>('.stt-file-details')?.open)
+      .map((group) => group.dataset.tweetId),
+  );
+  const stripPositions = new Map(
+    Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-strip')).map((strip) => [
+      strip.dataset.tweetId,
+      strip.scrollLeft,
+    ]),
+  );
   const scroll = sheet.querySelector<HTMLElement>('.stt-sheet-scroll');
   const scrollTop = scroll?.scrollTop ?? 0;
-  const stripScroll = actions.querySelector<HTMLElement>('.stt-media-strip')?.scrollLeft ?? 0;
   actions.replaceChildren();
-  appendMediaActions(actions, session);
-  actions.append(node('div', 'stt-section-label', '整条推文'));
+  appendMediaActions(actions, session, session.record.quote ? '主推文媒体' : '所选媒体');
+  if (session.quoted) appendMediaActions(actions, session.quoted, '引用推文媒体');
+  actions.append(
+    node(
+      'div',
+      'stt-section-label',
+      session.record.quote ? '整条推文（包含一层引用）' : '整条推文',
+    ),
+  );
   const exports = node('div', 'stt-export-grid');
   exports.append(cardSaveButton(session), textAction(session));
   actions.append(exports);
   const save = session.action('save-card');
   if (save.status === 'error')
     actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
-  if (session.record.media.some((media) => media.type !== 'photo')) {
+  if (
+    [...session.record.media, ...(session.quoted?.record.media ?? [])].some(
+      (media) => media.type !== 'photo',
+    )
+  ) {
     actions.append(
       node('p', 'stt-sheet-note', '推文卡片不包含视频或 GIF，仅保留正文、照片和来源。'),
     );
   }
-  const details = actions.querySelector<HTMLDetailsElement>('.stt-file-details');
-  if (details) details.open = filenameOpen;
-  const strip = actions.querySelector<HTMLElement>('.stt-media-strip');
-  if (strip) strip.scrollLeft = stripScroll;
+  for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
+    const details = group.querySelector<HTMLDetailsElement>('.stt-file-details');
+    if (details) details.open = expandedFiles.has(group.dataset.tweetId);
+  }
+  for (const strip of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-strip'))) {
+    strip.scrollLeft = stripPositions.get(strip.dataset.tweetId) ?? 0;
+  }
   if (scroll) scroll.scrollTop = scrollTop;
   if (!focusKey) return;
   const target = Array.from(actions.querySelectorAll<HTMLElement>('[data-stt-focus-key]')).find(

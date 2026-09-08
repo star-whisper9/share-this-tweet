@@ -295,7 +295,26 @@ function renderRecordDetail(): void {
   update('[data-record-saved-at]', formatRecordDate(record.savedAt));
   const link = document.querySelector<HTMLAnchorElement>('[data-record-link]');
   if (link) link.href = record.url;
-  update('[data-record-text]', record.text || '这条推文没有正文。');
+  const quote = record.quote;
+  update(
+    '[data-record-text]',
+    [
+      record.text || '这条推文没有正文。',
+      quote
+        ? [
+            '引用推文',
+            quote.record ? `${quote.record.author.name} · @${quote.record.author.handle}` : '',
+            quote.record?.text ??
+              (quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容'),
+            quote.tweetId ? `https://x.com/i/status/${quote.tweetId}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+  );
   const outputs = getRecordOutputs(record.tweetId);
   const outputLabels: Record<string, string> = {
     'original-media': '原始媒体',

@@ -1,5 +1,5 @@
 import { normalizeTweetCandidate } from '../shared/tweet-normalizer.js';
-import { mergeTweetRecords, type TweetRecord } from '../shared/model.js';
+import { mergeTweetRecords, withoutQuote, type TweetRecord } from '../shared/model.js';
 
 interface Waiter {
   resolve: (record: TweetRecord) => void;
@@ -44,6 +44,7 @@ export class TweetSource {
   }
 
   ingest(payload: unknown): void {
+    const changed = new Set<string>();
     const candidates = Array.isArray(payload) ? payload : [payload];
     for (const candidate of candidates) {
       const record = normalizeTweetCandidate(candidate);
@@ -51,6 +52,36 @@ export class TweetSource {
       const existing = this.records.get(record.tweetId);
       const merged = existing ? mergeTweetRecords(existing, record) : record;
       this.records.set(record.tweetId, merged);
+      changed.add(record.tweetId);
+    }
+    // Resolve references after collecting the whole response, independent of candidate order.
+    for (const [id, record] of this.records) {
+      const quote = record.quote;
+      const target = quote?.tweetId ? this.records.get(quote.tweetId) : undefined;
+      if (
+        quote &&
+        target &&
+        target.tweetId !== id &&
+        quote.status !== 'unavailable' &&
+        (changed.has(id) || changed.has(target.tweetId))
+      ) {
+        changed.add(id);
+        this.records.set(
+          id,
+          mergeTweetRecords(record, {
+            ...record,
+            quote: {
+              tweetId: target.tweetId,
+              url: target.url,
+              status: 'available',
+              record: withoutQuote(target),
+            },
+          }),
+        );
+      }
+    }
+    for (const id of changed) {
+      const merged = this.records.get(id)!;
       for (const listener of this.listeners) listener(merged);
       const waiters = this.waiters.get(merged.tweetId);
       if (!waiters) continue;

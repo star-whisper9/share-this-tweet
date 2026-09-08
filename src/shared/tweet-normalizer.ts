@@ -1,4 +1,4 @@
-import type { MediaRecord, MediaVariant, TweetRecord } from './model.js';
+import type { MediaRecord, MediaVariant, TweetRecord, TweetQuote } from './model.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -112,6 +112,10 @@ function unwrapTweet(value: JsonObject): JsonObject {
 }
 
 export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undefined {
+  return normalizeCandidate(candidate, true);
+}
+
+function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRecord | undefined {
   const input = asObject(candidate);
   if (!input) return undefined;
 
@@ -164,8 +168,9 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
   )
     .map((item, index) => normalizeMedia(item, index + 1))
     .filter((item): item is MediaRecord => item !== undefined);
+  const note = getObject(getObject(getObject(tweet, 'note_tweet'), 'note_tweet_results'), 'result');
   const text = removeMediaEntityUrls(
-    getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
+    getString(note, 'text') ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
     legacy,
   );
   const urlHandle = handle.replace(/^@+/, '');
@@ -179,5 +184,30 @@ export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undef
     author: { id: authorId, handle, name, avatarUrl },
     publishedAt: normalizePublishedAt(getString(legacy, 'created_at')),
     media,
+    ...(includeQuote ? quoteFields(tweet, legacy, tweetId) : {}),
+  };
+}
+
+function quoteFields(
+  tweet: JsonObject,
+  legacy: JsonObject,
+  parentId: string,
+): { quote?: TweetQuote } {
+  const result =
+    getObject(getObject(tweet, 'quoted_status_result'), 'result') ??
+    getObject(legacy, 'quoted_status');
+  const record = result ? normalizeCandidate(result, false) : undefined;
+  const target = record?.tweetId ?? getString(legacy, 'quoted_status_id_str');
+  if (target === parentId) return {};
+  if (!target && !result && legacy.is_quote_status !== true) return {};
+  const tweetId = target && /^\d+$/.test(target) ? target : undefined;
+  const unavailable =
+    result && ['TweetUnavailable', 'TweetTombstone'].includes(String(result.__typename));
+  return {
+    quote: {
+      ...(tweetId ? { tweetId, url: record?.url ?? `https://x.com/i/status/${tweetId}` } : {}),
+      status: record ? 'available' : unavailable ? 'unavailable' : 'pending',
+      ...(record ? { record } : {}),
+    },
   };
 }

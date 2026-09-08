@@ -767,3 +767,18 @@
     grid-template-columns: 1fr;
   }
 }
+
+.stt-quote-summary {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--stt-border);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.stt-quote-summary summary {
+  cursor: pointer;
+  min-height: 32px;
+}
+.stt-sheet p.stt-quote-text {
+  white-space: pre-wrap;
+}

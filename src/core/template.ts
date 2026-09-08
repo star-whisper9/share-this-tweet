@@ -30,6 +30,28 @@ type TemplateValue = keyof {
 };
 
 function getTemplateValue(field: string, context: TemplateContext): string {
+  if (field.startsWith('quote.')) {
+    const nested = field.slice(6);
+    const quoted = context.tweet.quote;
+    // Validate even absent optional contexts so misspelled variables do not silently disappear.
+    if (
+      ![
+        'tweet.id',
+        'tweet.url',
+        'tweet.text',
+        'tweet.publishedAt',
+        'author.id',
+        'author.name',
+        'author.handle',
+        'author.avatar',
+      ].includes(nested)
+    ) {
+      throw new TemplateError(`未知模板字段：{${field}}`);
+    }
+    if (nested === 'tweet.id') return quoted?.tweetId ?? '';
+    if (nested === 'tweet.url') return quoted?.url ?? '';
+    return quoted?.record ? getTemplateValue(nested, { tweet: quoted.record }) : '';
+  }
   switch (field as TemplateValue) {
     case 'tweet.id':
       return context.tweet.tweetId;
@@ -71,10 +93,14 @@ function formatTemplateValue(
     return value;
   }
 
-  if (field !== 'tweet.publishedAt' || format !== 'YYYY-MM-DD') {
+  if (
+    !['tweet.publishedAt', 'quote.tweet.publishedAt'].includes(field) ||
+    format !== 'YYYY-MM-DD'
+  ) {
     throw new TemplateError(`不支持的模板格式：{${field}:${format}}`);
   }
 
+  if (!value && field.startsWith('quote.')) return '';
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) throw new TemplateError(`日期字段无法格式化：{${field}:${format}}`);
   const date = new Date(timestamp);

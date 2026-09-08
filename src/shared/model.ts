@@ -22,6 +22,18 @@ export interface TweetAuthor {
   avatarUrl?: string;
 }
 
+export interface TweetQuote {
+  tweetId?: string;
+  url?: string;
+  status: 'pending' | 'unavailable' | 'available';
+  record?: Omit<TweetRecord, 'quote'>;
+}
+
+export function withoutQuote(record: TweetRecord): Omit<TweetRecord, 'quote'> {
+  const { quote: _quote, ...content } = record;
+  return content;
+}
+
 export interface TweetRecord {
   tweetId: string;
   url: string;
@@ -29,6 +41,7 @@ export interface TweetRecord {
   author: TweetAuthor;
   publishedAt?: string;
   media: MediaRecord[];
+  quote?: TweetQuote;
 }
 
 export function normalizeHandle(handle: string): string {
@@ -69,6 +82,7 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
   const authorHandle = preferValue(current.author.handle, incoming.author.handle) ?? '';
   const authorName = preferValue(current.author.name, incoming.author.name) ?? authorHandle;
 
+  if (current.tweetId !== incoming.tweetId) throw new Error('Cannot merge different tweets');
   return {
     tweetId: current.tweetId,
     url:
@@ -84,5 +98,28 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
     },
     publishedAt: current.publishedAt ?? incoming.publishedAt,
     media: Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index),
+    ...(current.quote || incoming.quote
+      ? { quote: mergeQuote(current.quote, incoming.quote) }
+      : {}),
+  };
+}
+
+function mergeQuote(current?: TweetQuote, incoming?: TweetQuote): TweetQuote | undefined {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  if (current.tweetId && incoming.tweetId && current.tweetId !== incoming.tweetId) return current;
+  const record =
+    current.record && incoming.record
+      ? withoutQuote(mergeTweetRecords(current.record, incoming.record))
+      : (current.record ?? incoming.record);
+  return {
+    tweetId: current.tweetId ?? incoming.tweetId,
+    url: record?.url ?? current.url ?? incoming.url,
+    status: record
+      ? 'available'
+      : incoming.status === 'unavailable'
+        ? 'unavailable'
+        : current.status,
+    ...(record ? { record } : {}),
   };
 }

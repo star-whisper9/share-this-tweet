@@ -126,6 +126,42 @@ export class ShareSheet {
     if (expander)
       expander.hidden =
         (record.text || '').length < 70 && (record.text || '').split('\n').length < 3;
+    let quote = summary.querySelector<HTMLElement>('.stt-quote-summary');
+    if (!record.quote) quote?.remove();
+    else {
+      if (!quote) {
+        quote = node('div', 'stt-quote-summary');
+        summary.append(quote);
+      }
+      quote.replaceChildren(node('strong', '', '引用推文'));
+      const quoted = record.quote.record;
+      if (quoted) {
+        quote.append(
+          node('p', '', `${quoted.author.name} · @${quoted.author.handle.replace(/^@+/, '')}`),
+        );
+        const details = node('details', '');
+        details.append(
+          node('summary', '', '引用正文'),
+          node('p', 'stt-quote-text', quoted.text || '这条推文没有正文。'),
+        );
+        details.open = quoted.text.length < 160;
+        quote.append(details);
+      } else
+        quote.append(
+          node(
+            'p',
+            '',
+            record.quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容',
+          ),
+        );
+      if (record.quote.tweetId) {
+        const link = node('a', 'stt-source-link', `查看引用 · ${record.quote.tweetId}`);
+        link.href = `https://x.com/i/status/${encodeURIComponent(record.quote.tweetId)}`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        quote.append(link);
+      }
+    }
     this.trigger.removeAttribute('aria-busy');
   }
 

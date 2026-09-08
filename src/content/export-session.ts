@@ -46,6 +46,7 @@ function errorMessage(error: unknown): string {
 /** State and output orchestration for one tweet. It never reads or writes UI DOM. */
 export class ExportSession {
   readonly selection = new MediaSelection();
+  quoted?: ExportSession;
   private readonly actions = new Map<string, ActionState>();
   private active = true;
   private batchRunning = false;
@@ -65,6 +66,24 @@ export class ExportSession {
     this.tweet = record;
     this.preferences = settings;
     this.selection.reconcile(record.media);
+    this.syncQuote();
+  }
+
+  private syncQuote(): void {
+    const quote = this.tweet.quote?.record;
+    if (!quote) {
+      this.quoted?.dispose();
+      this.quoted = undefined;
+      return;
+    }
+    if (this.quoted?.record.tweetId === quote.tweetId) this.quoted.updateRecord(quote);
+    else {
+      this.quoted?.dispose();
+      this.quoted = new ExportSession(quote, this.preferences, () => {
+        if (this.quoted) this.currentStatus = { ...this.quoted.status };
+        this.changed();
+      });
+    }
   }
 
   get status(): Readonly<SheetStatus> {
@@ -104,11 +123,13 @@ export class ExportSession {
     if (JSON.stringify(record) !== JSON.stringify(this.tweet)) this.invalidateCard();
     this.tweet = record;
     this.selection.reconcile(record.media);
+    this.syncQuote();
   }
 
   updateSettings(settings: ExtensionSettings): void {
     if (settings.filenameTemplate !== this.preferences.filenameTemplate) this.invalidateCard();
     this.preferences = settings;
+    this.quoted?.updateSettings(settings);
   }
 
   private invalidateCard(): void {
@@ -119,6 +140,7 @@ export class ExportSession {
 
   dispose(): void {
     this.active = false;
+    this.quoted?.dispose();
     this.cardFile = undefined;
     this.cardPending = undefined;
     this.resources.dispose();

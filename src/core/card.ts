@@ -279,11 +279,11 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-export async function renderTweetCard(
+async function renderCardCanvas(
   record: TweetRecord,
   mediaInput: MediaRecord | MediaRecord[],
-  options: { theme?: CardTheme; resources?: ImageResources } = {},
-): Promise<TweetCardResult> {
+  options: { theme?: CardTheme; resources?: ImageResources; cardWidth?: number } = {},
+): Promise<HTMLCanvasElement> {
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
   if (media.some((item) => item.type !== 'photo')) {
     throw new Error('推文卡片目前只支持照片');
@@ -296,6 +296,7 @@ export async function renderTweetCard(
   const images: HTMLImageElement[] = [];
   let canvas: HTMLCanvasElement | undefined;
   let avatar: HTMLImageElement | undefined;
+  let completed = false;
   try {
     // Two photos at a time bound concurrent decoding. Settle all started work before cleanup.
     const results = await Promise.allSettled([
@@ -329,7 +330,10 @@ export async function renderTweetCard(
       CARD_MIN_WIDTH,
       Math.min(
         CARD_MAX_WIDTH,
-        images.length ? Math.max(...images.map((image) => image.naturalWidth)) : CARD_TEXT_WIDTH,
+        options.cardWidth ??
+          (images.length
+            ? Math.max(...images.map((image) => image.naturalWidth))
+            : CARD_TEXT_WIDTH),
       ),
     );
     const bodyFontSize = Math.max(18, Math.min(30, Math.round(estimatedWidth * 0.024)));
@@ -337,6 +341,7 @@ export async function renderTweetCard(
     const layout = calculateTweetCardLayout({
       images: images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight })),
       text: record.text,
+      cardWidth: options.cardWidth,
       measureText: (text) => context.measureText(text),
     });
     const pixelWidth = layout.width * CARD_RENDER_SCALE;
@@ -433,12 +438,92 @@ export async function renderTweetCard(
     }
 
     resources.checkActive();
-    const blob = await canvasToBlob(canvas);
-    return { blob, width: canvas.width, height: canvas.height };
+    completed = true;
+    return canvas;
   } finally {
     for (const image of images) releaseImage(image);
     if (avatar) releaseImage(avatar);
-    if (canvas) {
+    if (canvas && !completed) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    if (!options.resources) resources.dispose();
+  }
+}
+
+/** Compose exactly one quoted post, without re-encoding intermediate canvases. */
+export async function renderTweetCard(
+  record: TweetRecord,
+  mediaInput: MediaRecord | MediaRecord[],
+  options: { theme?: CardTheme; resources?: ImageResources } = {},
+): Promise<TweetCardResult> {
+  const resources = options.resources ?? new ImageResources();
+  const theme = options.theme ?? detectCardTheme();
+  const canvases: HTMLCanvasElement[] = [];
+  try {
+    const main = await renderCardCanvas(record, mediaInput, { theme, resources });
+    canvases.push(main);
+    let output = main;
+    if (record.quote) {
+      const quote = record.quote;
+      const inset = 24 * CARD_RENDER_SCALE;
+      const heading = 36 * CARD_RENDER_SCALE;
+      const quoted = quote.record
+        ? await renderCardCanvas(
+            quote.record,
+            quote.record.media.filter((item) => item.type === 'photo'),
+            { theme, resources, cardWidth: (main.width - inset * 2) / CARD_RENDER_SCALE },
+          )
+        : undefined;
+      if (quoted) canvases.push(quoted);
+      // Very narrow cards may require fitting the minimum-width quoted card to the container.
+      const quoteWidth = main.width - inset * 2;
+      const quoteHeight = quoted
+        ? Math.ceil((quoted.height * quoteWidth) / quoted.width)
+        : 100 * CARD_RENDER_SCALE;
+      const height = main.height + heading + quoteHeight + inset;
+      if (height > 16384 || main.width * height > 32000000)
+        throw new Error('引用内容超出卡片尺寸限制，无法完整生成。');
+      output = document.createElement('canvas');
+      canvases.push(output);
+      output.width = main.width;
+      output.height = height;
+      const context = output.getContext('2d');
+      if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
+      const palette = CARD_PALETTES[theme];
+      context.fillStyle = palette.background;
+      context.fillRect(0, 0, output.width, output.height);
+      context.drawImage(main, 0, 0);
+      context.fillStyle = palette.muted;
+      context.font = `600 ${14 * CARD_RENDER_SCALE}px ${CARD_FONT_FAMILY}`;
+      context.fillText('引用推文', inset, main.height + 22 * CARD_RENDER_SCALE);
+      const y = main.height + heading;
+      if (quoted) context.drawImage(quoted, inset, y, quoteWidth, quoteHeight);
+      else {
+        context.font = `400 ${14 * CARD_RENDER_SCALE}px ${CARD_FONT_FAMILY}`;
+        context.fillText(
+          quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容',
+          inset + 16,
+          y + 40,
+          quoteWidth - 32,
+        );
+        if (quote.tweetId)
+          context.fillText(
+            `https://x.com/i/status/${quote.tweetId}`,
+            inset + 16,
+            y + 84,
+            quoteWidth - 32,
+          );
+      }
+      context.strokeStyle = palette.border;
+      context.lineWidth = CARD_RENDER_SCALE;
+      context.strokeRect(inset, y, quoteWidth, quoteHeight);
+    }
+    resources.checkActive();
+    const blob = await canvasToBlob(output);
+    return { blob, width: output.width, height: output.height };
+  } finally {
+    for (const canvas of canvases) {
       canvas.width = 0;
       canvas.height = 0;
     }

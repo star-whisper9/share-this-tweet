@@ -1,4 +1,4 @@
-import type { TweetRecord } from '../shared/model.js';
+import { mergeTweetRecords, type TweetRecord } from '../shared/model.js';
 import type {
   OutputRecord,
   OutputRecordInput,
@@ -110,11 +110,15 @@ async function withDatabase<T>(operation: (database: IDBDatabase) => Promise<T>)
 }
 
 export async function upsertTweetRecord(record: TweetRecord): Promise<StoredTweetRecord> {
-  const stored: StoredTweetRecord = { ...record, savedAt: new Date().toISOString() };
+  let stored: StoredTweetRecord = { ...record, savedAt: new Date().toISOString() };
   await withDatabase(async (database) => {
     const transaction = database.transaction(TWEET_RECORDS_STORE, 'readwrite');
     const complete = transactionComplete(transaction);
-    await requestResult(transaction.objectStore(TWEET_RECORDS_STORE).put(stored));
+    const store = transaction.objectStore(TWEET_RECORDS_STORE);
+    const existing = (await requestResult(store.get(record.tweetId))) as
+      StoredTweetRecord | undefined;
+    if (existing) stored = { ...mergeTweetRecords(existing, record), savedAt: stored.savedAt };
+    await requestResult(store.put(stored));
     await complete;
   });
   return stored;
@@ -208,6 +212,7 @@ function isStoredTweetRecord(value: unknown): value is StoredTweetRecord {
     author?: unknown;
     media?: unknown;
     savedAt?: unknown;
+    quote?: unknown;
   };
   return (
     typeof record.tweetId === 'string' &&
@@ -216,7 +221,51 @@ function isStoredTweetRecord(value: unknown): value is StoredTweetRecord {
     typeof record.author === 'object' &&
     record.author !== null &&
     Array.isArray(record.media) &&
-    typeof record.savedAt === 'string'
+    typeof record.savedAt === 'string' &&
+    isValidQuote(record.quote, record.tweetId)
+  );
+}
+
+function isValidQuote(value: unknown, parentId: string): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object') return false;
+  const quote = value as Record<string, unknown>;
+  if (!['available', 'pending', 'unavailable'].includes(String(quote.status))) return false;
+  if (
+    quote.tweetId !== undefined &&
+    (typeof quote.tweetId !== 'string' ||
+      !/^\d+$/.test(quote.tweetId) ||
+      quote.tweetId === parentId)
+  )
+    return false;
+  if (
+    quote.url !== undefined &&
+    (typeof quote.url !== 'string' || !/^https:\/\/(?:x\.com|twitter\.com)\//.test(quote.url))
+  )
+    return false;
+  if (quote.status !== 'available') return quote.record === undefined;
+  if (!quote.record || typeof quote.record !== 'object') return false;
+  const record = quote.record as Record<string, unknown>;
+  const author = record.author as Record<string, unknown> | undefined;
+  return (
+    record.quote === undefined &&
+    record.tweetId === quote.tweetId &&
+    typeof record.tweetId === 'string' &&
+    typeof record.url === 'string' &&
+    typeof record.text === 'string' &&
+    !!author &&
+    ['id', 'handle', 'name'].every((key) => typeof author[key] === 'string') &&
+    Array.isArray(record.media) &&
+    record.media.every((item: unknown) => {
+      if (!item || typeof item !== 'object') return false;
+      const media = item as Record<string, unknown>;
+      return (
+        typeof media.index === 'number' &&
+        Number.isInteger(media.index) &&
+        media.index > 0 &&
+        ['photo', 'video', 'animated_gif'].includes(String(media.type))
+      );
+    })
   );
 }
 

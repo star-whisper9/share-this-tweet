@@ -13,16 +13,21 @@ import {
 
 const directions: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
 
-export function appendMediaActions(actions: HTMLElement, session: ExportSession): void {
+export function appendMediaActions(
+  actions: HTMLElement,
+  session: ExportSession,
+  headingLabel = '所选媒体',
+): void {
   const { record, selection } = session;
   if (record.media.length === 0) return;
   const heading = node('div', 'stt-section-label');
-  heading.append(node('span', '', '所选媒体'));
+  heading.append(node('span', '', headingLabel));
   if (record.media.length > 1)
     heading.append(
       node('span', 'stt-selection-count', `已选 ${selection.size} / ${record.media.length}`),
     );
   const strip = node('div', 'stt-media-strip');
+  strip.dataset.tweetId = record.tweetId;
   strip.setAttribute('role', 'group');
   strip.setAttribute('aria-label', '选择媒体');
   for (const media of record.media) {
@@ -30,7 +35,7 @@ export function appendMediaActions(actions: HTMLElement, session: ExportSession)
     const label = { photo: '照片', animated_gif: 'GIF', video: '视频' }[media.type];
     const choice = node('button', 'stt-media-choice');
     choice.type = 'button';
-    choice.dataset.sttFocusKey = `select-${media.index}`;
+    choice.dataset.sttFocusKey = `select-${record.tweetId}-${media.index}`;
     choice.disabled = session.isSavingBatch;
     choice.setAttribute('aria-pressed', String(selected));
     choice.setAttribute('aria-label', `${label} ${media.index}${selected ? '，已选中' : ''}`);
@@ -78,7 +83,7 @@ function frameActions(session: ExportSession, media: MediaRecord): HTMLElement {
           error: `重试${direction}画框`,
         };
     const button = actionButton({
-      key: `frame-${media.index}-${orientation}`,
+      key: `frame-${session.record.tweetId}-${media.index}-${orientation}`,
       label: actionLabel(state, labels),
       image: 'frame',
       state,
@@ -99,6 +104,7 @@ function frameActions(session: ExportSession, media: MediaRecord): HTMLElement {
 function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
   const { selection, record, settings } = session;
   const wrapper = node('div', 'stt-media-action');
+  wrapper.dataset.tweetId = record.tweetId;
   const batch = selection.size > 1;
   const photo = media.type === 'photo';
   const state = session.mediaAction('original');
@@ -134,7 +140,9 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
         error: `重试保存${mediaLabel}`,
       };
   const button = actionButton({
-    key: batch ? 'download-selected-original' : `download-${media.index}`,
+    key: batch
+      ? `download-selected-${record.tweetId}`
+      : `download-${record.tweetId}-${media.index}`,
     label: actionLabel(state, labels),
     image: 'download',
     state,

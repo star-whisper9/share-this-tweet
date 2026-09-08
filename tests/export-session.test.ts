@@ -178,3 +178,30 @@ describe('export session', () => {
     expect(session.status.state).toBe('error');
   });
 });
+
+it('exports quote media with its own identity and cancels child work with the parent', async () => {
+  const quoted = {
+    ...record,
+    tweetId: '99',
+    url: 'https://x.com/bob/status/99',
+    author: { id: '8', name: 'Bob', handle: 'bob' },
+    media: [photo(1)],
+  };
+  const parent = new ExportSession(
+    {
+      ...record,
+      media: [photo(1)],
+      quote: { tweetId: '99', url: quoted.url, status: 'available', record: quoted },
+    },
+    settings,
+  );
+  await parent.quoted!.saveSelected('framed');
+  expect(vi.mocked(recordOutput).mock.calls[0][0].tweetId).toBe('99');
+  expect(vi.mocked(downloadBlob).mock.calls[0][1]).toBe('99_1_framed.jpg');
+  expect(parent.selection.size).toBe(1);
+  parent.quoted!.toggleMedia(1);
+  expect(parent.selection.size).toBe(1);
+  parent.dispose();
+  await parent.quoted!.saveSelected('original');
+  expect(downloadMedia).not.toHaveBeenCalled();
+});
