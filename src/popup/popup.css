@@ -40,7 +40,7 @@ body {
 .popup-header img {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 0.75rem;
+  object-fit: contain;
 }
 
 .popup-header h1 {

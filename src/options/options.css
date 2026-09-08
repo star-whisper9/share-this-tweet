@@ -119,8 +119,7 @@ svg {
 .brand-mark img {
   width: 29px;
   height: 29px;
-  border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
 }
 main {
   max-width: 1120px;

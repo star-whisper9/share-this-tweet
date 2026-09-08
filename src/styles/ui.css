@@ -177,8 +177,7 @@
 .stt-brand-icon {
   width: 25px;
   height: 25px;
-  border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
 }
 .stt-sheet p.stt-brand-name {
   font-size: 10px;
