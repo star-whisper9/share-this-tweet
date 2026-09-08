@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "分享有据 · Share This Tweet",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Save and share X posts with their source context.",
   "icons": {
     "16": "/icons/icon-16.png",

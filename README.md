@@ -1,6 +1,21 @@
 # 分享有据 · Share This Tweet
 
-面向 Firefox 的 X 推文分享增强扩展，当前 `v0.2.0` 功能实现已完成。
+面向 Firefox 的 X 推文分享增强扩展，当前版本 **v0.2.1**（2026-09-08）。
+
+## v0.2.1
+
+本版修复推文信息偶发读取失败，支持纯文字卡片，优化图片缓存、画框文件体积及移动端界面。画框使用 JPEG／透明 WebP，卡片保持高分辨率 PNG；所有客户端均提供复制文本和保存卡片。
+
+完整变更见 [CHANGELOG](CHANGELOG.md)。
+
+## 本地构建与加载
+
+```sh
+npm ci
+npm run check
+```
+
+构建结果位于 `dist/`。桌面 Firefox 可在 `about:debugging#/runtime/this-firefox` 中选择“临时载入附加组件”，加载 `dist/manifest.json`。临时加载用于开发验证；普通安装需要经过 Firefox 签名的扩展包。
 
 ## 当前状态
 
