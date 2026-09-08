@@ -330,7 +330,10 @@ export class ShareEnhancerController {
       this.applyTweetRecord(record);
     } catch (error) {
       if (requestId !== this.recordRequestId || this.currentTweetId !== tweetId) return;
-      this.setSheetStatus('error', '无法获取当前推文数据，请刷新页面后重试。');
+      this.setSheetStatus(
+        'error',
+        error instanceof Error ? error.message : '无法获取当前推文数据，请重新加载页面。',
+      );
       console.error('分享有据 · Share This Tweet: failed to resolve tweet record', error);
     } finally {
       if (requestId === this.recordRequestId) this.trigger?.removeAttribute('aria-busy');
@@ -390,6 +393,12 @@ export class ShareEnhancerController {
     if (status) {
       status.textContent = message;
       status.hidden = !message;
+      if (state === 'error' && !this.currentRecord) {
+        const reload = node('button', 'stt-source-link', '重新加载页面');
+        reload.type = 'button';
+        reload.addEventListener('click', () => location.reload());
+        status.append(document.createTextNode(' '), reload);
+      }
     }
   }
 

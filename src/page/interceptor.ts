@@ -1,4 +1,4 @@
-const TWEET_DATA_EVENT = 'share-this-tweet:tweet-data';
+import { CAPTURE_READY_EVENT, TWEET_DATA_EVENT } from '../shared/capture-protocol.js';
 const MAX_NODES = 40000;
 
 type JsonObject = Record<string, unknown>;
@@ -59,28 +59,66 @@ function postTweetData(payload: unknown): void {
 }
 
 function processResponseText(text: string): void {
-  try {
-    postTweetData(JSON.parse(text));
-  } catch {
-    // Most X responses are not JSON. Ignore those responses by design.
-  }
+  postTweetData(JSON.parse(text));
 }
 
-const originalSend = XMLHttpRequest.prototype.send;
-XMLHttpRequest.prototype.send = function (...args: Parameters<XMLHttpRequest['send']>) {
-  this.addEventListener('readystatechange', () => {
-    if (this.readyState !== XMLHttpRequest.DONE || this.status < 200 || this.status >= 300) return;
-    if (!this.getResponseHeader('Content-Type')?.includes('json')) return;
-    if (typeof this.responseText === 'string') processResponseText(this.responseText);
-  });
-  return originalSend.apply(this, args);
-};
+function reportCaptureError(transport: string, error: unknown): void {
+  // Do not log response bodies, URLs, or credentials from the host page.
+  console.error('分享有据: 响应读取失败', transport, error instanceof Error ? error.name : 'Error');
+}
 
-const originalFetch = window.fetch.bind(window);
-window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
-  const response = await originalFetch(...args);
-  if (response.headers.get('Content-Type')?.includes('json')) {
-    void response.clone().text().then(processResponseText);
-  }
-  return response;
-};
+function installInterceptor(): void {
+  const installed = Symbol.for('share-this-tweet:interceptor-installed');
+  const page = window as unknown as Record<symbol, unknown>;
+  if (page[installed]) return;
+
+  const observed = new WeakSet<XMLHttpRequest>();
+  const originalSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (...args: Parameters<XMLHttpRequest['send']>) {
+    // XHR instances can be reused. Install exactly one listener per instance.
+    if (!observed.has(this)) {
+      observed.add(this);
+      this.addEventListener('load', () => {
+        try {
+          if (this.status < 200 || this.status >= 300) return;
+          if (!this.getResponseHeader('Content-Type')?.toLowerCase().includes('json')) return;
+          if (this.responseType === 'json') {
+            postTweetData(this.response);
+          } else if (this.responseType === '' || this.responseType === 'text') {
+            processResponseText(this.responseText);
+          }
+        } catch (error) {
+          reportCaptureError('XHR', error);
+        }
+      });
+    }
+    return originalSend.apply(this, args);
+  };
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
+    const response = await originalFetch(...args);
+    try {
+      if (response.ok && response.headers.get('Content-Type')?.toLowerCase().includes('json')) {
+        void response
+          .clone()
+          .text()
+          .then(processResponseText)
+          .catch((error: unknown) => {
+            reportCaptureError('fetch', error);
+          });
+      }
+    } catch (error) {
+      reportCaptureError('fetch', error);
+    }
+    return response;
+  };
+  page[installed] = true;
+}
+
+try {
+  installInterceptor();
+  window.dispatchEvent(new Event(CAPTURE_READY_EVENT));
+} catch (error) {
+  reportCaptureError('install', error);
+}

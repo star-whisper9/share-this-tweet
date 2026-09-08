@@ -1,27 +1,14 @@
 import { ShareEnhancerController } from './ui.js';
-import { TWEET_DATA_EVENT, TweetSource } from './tweet-source.js';
-
-const tweetSource = new TweetSource();
-
-window.addEventListener(TWEET_DATA_EVENT, (event) => {
-  const detail = (event as CustomEvent<string>).detail;
-  if (typeof detail !== 'string') return;
-  try {
-    tweetSource.ingestSerialized(detail);
-  } catch (error) {
-    console.error('分享有据 · Share This Tweet: failed to ingest tweet data', error);
-  }
-});
-
-function injectPageInterceptor(): void {
-  const script = document.createElement('script');
-  script.src = browser.runtime.getURL('/page/interceptor.js');
-  script.async = false;
-  script.addEventListener('load', () => script.remove(), { once: true });
-  (document.head ?? document.documentElement).append(script);
-}
+import { TweetSource } from './tweet-source.js';
+import { startTweetCapture } from './capture.js';
 
 if (location.hostname === 'x.com') {
-  injectPageInterceptor();
-  new ShareEnhancerController(tweetSource).start();
+  const tweetSource = new TweetSource();
+  startTweetCapture(tweetSource);
+  const startUI = (): void => new ShareEnhancerController(tweetSource).start();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startUI, { once: true });
+  } else {
+    startUI();
+  }
 }

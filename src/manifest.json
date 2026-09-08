@@ -45,7 +45,7 @@
       "matches": ["https://x.com/*"],
       "js": ["/content/bootstrap.js"],
       "css": ["/styles/ui.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "options_ui": {
