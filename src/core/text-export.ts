@@ -2,12 +2,12 @@ import type { TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
 
 export const DEFAULT_TEXT_TEMPLATE =
-  '{tweet.text}\n\n── @{author.handle}\n{tweet.url}\nTweet ID: {tweet.id}';
+  '{tweet.text}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
 export function buildTweetText(record: TweetRecord, template = DEFAULT_TEXT_TEMPLATE): string {
   const main = renderTemplate(template, { tweet: record });
   const quote = record.quote;
-  if (!quote || template.includes('{quote.')) return main;
+  if (!quote || template.includes('{quote.') || template.includes('{?quote.')) return main;
   const quoted = quote.record;
   const content = quoted
     ? renderTemplate(DEFAULT_TEXT_TEMPLATE, { tweet: quoted })

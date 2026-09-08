@@ -1,12 +1,6 @@
-import type { MediaRecord, TweetRecord } from '../shared/model.js';
-
-export interface TemplateContext {
-  tweet: TweetRecord;
-  media?: MediaRecord;
-  extension?: string;
-  // Card output has index 0 when no photo is present; it is not a media item.
-  card?: boolean;
-}
+import { TEMPLATE_FIELDS, DATE_FORMATS, type TemplateContext } from './template-fields.js';
+export type { TemplateContext } from './template-fields.js';
+export { TEMPLATE_FIELDS, DATE_FORMATS, fieldsForScope } from './template-fields.js';
 
 export class TemplateError extends Error {
   constructor(message: string) {
@@ -14,115 +8,67 @@ export class TemplateError extends Error {
     this.name = 'TemplateError';
   }
 }
+const fields = new Map(TEMPLATE_FIELDS.map((field) => [field.name, field]));
 
-type TemplateValue = keyof {
-  'tweet.id': string;
-  'tweet.url': string;
-  'tweet.text': string;
-  'tweet.publishedAt': string;
-  'author.id': string;
-  'author.handle': string;
-  'author.name': string;
-  'author.avatar': string;
-  'media.index': string;
-  'media.type': string;
-  extension: string;
-};
-
-function getTemplateValue(field: string, context: TemplateContext): string {
-  if (field.startsWith('quote.')) {
-    const nested = field.slice(6);
-    const quoted = context.tweet.quote;
-    // Validate even absent optional contexts so misspelled variables do not silently disappear.
-    if (
-      ![
-        'tweet.id',
-        'tweet.url',
-        'tweet.text',
-        'tweet.publishedAt',
-        'author.id',
-        'author.name',
-        'author.handle',
-        'author.avatar',
-      ].includes(nested)
-    ) {
-      throw new TemplateError(`未知模板字段：{${field}}`);
-    }
-    if (nested === 'tweet.id') return quoted?.tweetId ?? '';
-    if (nested === 'tweet.url') return quoted?.url ?? '';
-    return quoted?.record ? getTemplateValue(nested, { tweet: quoted.record }) : '';
-  }
-  switch (field as TemplateValue) {
-    case 'tweet.id':
-      return context.tweet.tweetId;
-    case 'tweet.url':
-      return context.tweet.url;
-    case 'tweet.text':
-      return context.tweet.text;
-    case 'tweet.publishedAt':
-      return context.tweet.publishedAt ?? '';
-    case 'author.id':
-      return context.tweet.author.id;
-    case 'author.handle':
-      return context.tweet.author.handle.replace(/^@+/, '');
-    case 'author.name':
-      return context.tweet.author.name;
-    case 'author.avatar':
-      return context.tweet.author.avatarUrl ?? '';
-    case 'media.index':
-      if (!context.media && context.card) return '0';
-      if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
-      return String(context.media.index);
-    case 'media.type':
-      if (!context.media) throw new TemplateError(`模板字段需要媒体上下文：{${field}}`);
-      return context.media.type;
-    case 'extension':
-      return context.extension ?? '';
-    default:
-      throw new TemplateError(`未知模板字段：{${field}}`);
-  }
-}
-
-function formatTemplateValue(
-  field: string,
-  format: string | undefined,
-  context: TemplateContext,
-): string {
-  const value = getTemplateValue(field, context);
-  if (!format) {
-    return value;
-  }
-
+function valueFor(expression: string, context: TemplateContext, marker = true): string {
+  const [formatted, ...defaults] = expression.split('|');
+  if (defaults.length > 1) throw new TemplateError('默认值不能包含 |');
+  const separator = formatted.indexOf(':');
+  const name = separator < 0 ? formatted : formatted.slice(0, separator);
+  const format = separator < 0 ? undefined : formatted.slice(separator + 1);
+  const field = fields.get(name);
+  if (!field) throw new TemplateError(`未知模板字段：{${name}}`);
   if (
-    !['tweet.publishedAt', 'quote.tweet.publishedAt'].includes(field) ||
-    format !== 'YYYY-MM-DD'
-  ) {
-    throw new TemplateError(`不支持的模板格式：{${field}:${format}}`);
+    format !== undefined &&
+    (!field.date || !(DATE_FORMATS as readonly string[]).includes(format))
+  )
+    throw new TemplateError(`不支持的模板格式：{${formatted}}`);
+  if (field.media && !context.media && !(name === 'media.index' && context.card))
+    throw new TemplateError(`模板字段需要媒体上下文：{${name}}`);
+  const raw = field.read(context);
+  if (marker && name === 'author.avatar' && context.avatarMarker) return context.avatarMarker;
+  let value = raw === undefined ? '' : String(raw);
+  if (value && format) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) throw new TemplateError(`日期字段无法格式化：{${name}}`);
+    const iso = date.toISOString();
+    value =
+      format === 'YYYYMMDD'
+        ? iso.slice(0, 10).replace(/-/g, '')
+        : format === 'YYYY-MM-DD'
+          ? iso.slice(0, 10)
+          : iso.slice(0, 19).replace('T', ' ');
   }
-
-  if (!value && field.startsWith('quote.')) return '';
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) throw new TemplateError(`日期字段无法格式化：{${field}:${format}}`);
-  const date = new Date(timestamp);
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${date.getUTCFullYear()}-${month}-${day}`;
+  return value || defaults[0] || '';
 }
 
-function renderPlaceholder(placeholder: string, context: TemplateContext): string {
-  const separator = placeholder.indexOf(':');
-  const field = separator === -1 ? placeholder : placeholder.slice(0, separator);
-  const format = separator === -1 ? undefined : placeholder.slice(separator + 1);
-  if (field.length === 0 || format === '') throw new TemplateError('模板占位符不能为空');
-  return formatTemplateValue(field, format, context);
-}
-
+/** Optional blocks are deliberately non-nesting and never evaluate JavaScript. */
 export function renderTemplate(template: string, context: TemplateContext): string {
-  return parseTemplate(template)
-    .map((segment) =>
-      segment.type === 'literal' ? segment.value : renderPlaceholder(segment.value, context),
-    )
-    .join('');
+  let condition: string | undefined;
+  let visible = true;
+  const result: string[] = [];
+  for (const segment of parseTemplate(template)) {
+    if (segment.type === 'literal') {
+      if (visible) result.push(segment.value);
+      continue;
+    }
+    const expression = segment.value;
+    if (expression.startsWith('?')) {
+      if (condition !== undefined) throw new TemplateError('可选区块不能嵌套');
+      condition = expression.slice(1);
+      if (!fields.has(condition)) throw new TemplateError(`未知区块字段：${condition}`);
+      visible = valueFor(condition, context, false) !== '';
+    } else if (expression.startsWith('/')) {
+      if (condition !== expression.slice(1)) throw new TemplateError('可选区块结束标记不匹配');
+      condition = undefined;
+      visible = true;
+    } else {
+      const value = valueFor(expression, context);
+      if (visible) result.push(value);
+    }
+  }
+  if (condition !== undefined) throw new TemplateError('可选区块缺少结束标记');
+  return result.join('');
 }
 
 export interface TemplateSegment {

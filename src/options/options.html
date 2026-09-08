@@ -129,17 +129,18 @@
                 </summary>
                 <div class="template-editor-body">
                   <label for="frame-template">画框左侧模板</label>
-                  <input
+                  <textarea
                     id="frame-template"
                     name="frameTemplate"
                     data-setting="frameTemplate"
                     spellcheck="false"
                     autocomplete="off"
                     aria-describedby="frame-help frame-error"
-                  />
+                    rows="3"
+                  ></textarea>
                   <p class="field-help" id="frame-help">
-                    这里只编辑画框左侧文字。右侧的 Tweet ID 和 @handle
-                    不提供修改，始终用于保留出处。
+                    支持按 Enter 换行，长行会按图像宽度自动折行。这里只编辑画框左侧文字。右侧的
+                    纯数字 ID 和扩展标识固定显示，用于保留出处。
                   </p>
                   <div
                     class="token-list"
@@ -168,13 +169,15 @@
                 <div class="print-caption">
                   <strong data-preview="frame"></strong>
                   <span class="print-source" aria-label="固定溯源信息">
-                    <span>tweet id: 1234567890</span>
-                    <span>@example</span>
+                    <span>1234567890</span>
+                    <span class="print-brand"
+                      ><img src="../icons/icon-48.png" alt="" />分享有据</span
+                    >
                   </span>
                 </div>
               </div>
               <p class="preview-description">
-                左侧为模板预览；右侧 Tweet ID 和 @handle 为固定溯源信息，画框排版仅供示意。
+                左侧为模板预览；右侧纯数字 ID 和扩展标识为固定溯源信息，画框排版仅供示意。
               </p>
             </aside>
           </section>

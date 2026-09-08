@@ -1,13 +1,13 @@
 import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
-import { normalizeHandle } from '../shared/model.js';
-import { parseTemplate, renderTemplate } from './template.js';
+import { renderTemplate } from './template.js';
 
 export const DEFAULT_FRAME_TEMPLATE = '{author.name}';
 export type FrameOrientation = 'top' | 'bottom';
 export const DEFAULT_FRAME_ORIENTATION: FrameOrientation = 'bottom';
 export const FRAME_ORIENTATIONS: FrameOrientation[] = ['top', 'bottom'];
 const FRAME_AVATAR_MARKER = '\uE000';
+const FRAME_BRAND_MARKER = '\uE001';
 const FRAME_FONT_FAMILY = '"SF Pro Display", "Helvetica Neue", system-ui, sans-serif';
 const FRAME_BACKGROUND = '#fbfaf7';
 const FRAME_BORDER = '#dfe3e8';
@@ -135,18 +135,11 @@ function getFrameText(
   extension = 'jpg',
 ): string {
   const context = { tweet: record, media, extension };
-  return parseTemplate(template)
-    .map((segment) => {
-      if (segment.type === 'literal') return segment.value;
-      if (segment.value === 'author.avatar') return FRAME_AVATAR_MARKER;
-      return renderTemplate(`{${segment.value}}`, context);
-    })
-    .join('')
-    .trim();
+  return renderTemplate(template, { ...context, avatarMarker: FRAME_AVATAR_MARKER }).trim();
 }
 
 function getSourceLines(record: TweetRecord): string[] {
-  return [`tweet id: ${record.tweetId}`, normalizeHandle(record.author.handle)];
+  return [record.tweetId, `${FRAME_BRAND_MARKER}分享有据`];
 }
 
 function createFrameTextMeasurer(
@@ -156,7 +149,7 @@ function createFrameTextMeasurer(
   const avatarWidth = fontSize * 1.25 + fontSize * 0.3;
   return (text) => ({
     width: text
-      .split(FRAME_AVATAR_MARKER)
+      .split(/[\uE000\uE001]/)
       .reduce(
         (width, part, index, parts) =>
           width + context.measureText(part).width + (index < parts.length - 1 ? avatarWidth : 0),
@@ -189,24 +182,30 @@ function drawHorizontalTextLine(
   y: number,
   fontSize: number,
   avatarImage?: HTMLImageElement,
+  brandImage?: HTMLImageElement,
 ): void {
-  if (!line.includes(FRAME_AVATAR_MARKER)) {
+  if (!/[\uE000\uE001]/.test(line)) {
     context.fillText(line, x, y);
     return;
   }
-  let cursor = x;
+  context.save();
+  let cursor =
+    context.textAlign === 'right' ? x - createFrameTextMeasurer(context, fontSize)(line).width : x;
+  context.textAlign = 'left';
   for (const character of [...line]) {
-    if (character !== FRAME_AVATAR_MARKER) {
+    if (character !== FRAME_AVATAR_MARKER && character !== FRAME_BRAND_MARKER) {
       context.fillText(character, cursor, y);
       cursor += context.measureText(character).width;
       continue;
     }
     const size = fontSize * 1.25;
     const top = y - size / 2;
-    if (avatarImage) context.drawImage(avatarImage, cursor, top, size, size);
+    const picture = character === FRAME_BRAND_MARKER ? brandImage : avatarImage;
+    if (picture) context.drawImage(picture, cursor, top, size, size);
     else drawAvatarFallback(context, cursor, top, size);
     cursor += size + fontSize * 0.3;
   }
+  context.restore();
 }
 
 /** Read bounded strips rather than allocating a second full-size RGBA image. */
@@ -254,9 +253,13 @@ export async function renderPhotoFrame(
   if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
   let image: HTMLImageElement | undefined;
   let avatarImage: HTMLImageElement | undefined;
+  let brandImage: HTMLImageElement | undefined;
   const canvas = document.createElement('canvas');
   try {
     const loaded = await Promise.allSettled([
+      resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((value) => {
+        brandImage = value;
+      }),
       resources.load(media.originalUrl).then((value) => {
         image = value;
       }),
@@ -334,23 +337,36 @@ export async function renderPhotoFrame(
           frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
           layout.fontSize,
           avatarImage,
+          brandImage,
         );
       });
       context.textAlign = 'right';
       layout.rightLines.forEach((line, index) => {
-        context.globalAlpha = index === 0 ? 0.62 : 0.9;
+        context.globalAlpha = 0.55;
+        context.fillStyle = '#687582';
         context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-        context.fillText(
+        drawHorizontalTextLine(
+          context,
           line,
           canvas.width - layout.paddingX,
           frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+          layout.fontSize,
+          avatarImage,
+          brandImage,
         );
       });
       context.globalAlpha = 1;
     } else {
       const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+      const measureText = createFrameTextMeasurer(context, layout.fontSize);
+      const sourceLineCount = sourceLines.flatMap((line) =>
+        wrapFrameText(line, canvas.width - layout.paddingX * 2, measureText),
+      ).length;
+      const sourceStart = layout.leftLines.length - sourceLineCount;
       context.textAlign = 'left';
       layout.leftLines.forEach((line, index) => {
+        context.globalAlpha = index >= sourceStart ? 0.55 : 1;
+        context.fillStyle = index >= sourceStart ? '#687582' : '#1f2933';
         drawHorizontalTextLine(
           context,
           line,
@@ -358,6 +374,7 @@ export async function renderPhotoFrame(
           frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
           layout.fontSize,
           avatarImage,
+          brandImage,
         );
       });
     }
@@ -373,6 +390,7 @@ export async function renderPhotoFrame(
   } finally {
     if (image) releaseImage(image);
     if (avatarImage) releaseImage(avatarImage);
+    if (brandImage) releaseImage(brandImage);
     canvas.width = 0;
     canvas.height = 0;
   }

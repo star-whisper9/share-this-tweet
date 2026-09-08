@@ -183,7 +183,7 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       ? imageRects[0]!.height
       : Math.max(0, ...imageRects.map((rect) => rect.y + rect.height));
   const imageY = padding + headerHeight + textHeight + (input.images.length ? gap : 0);
-  const footerHeight = input.images.length ? 30 : 50;
+  const footerHeight = 0;
   const height = Math.ceil(imageY + imageAreaHeight + gap + footerHeight + padding);
   return {
     width,
@@ -409,34 +409,6 @@ async function renderCardCanvas(
       drawContainedImage(context, image, { ...rect, y: rect.y + layout.imageY }, palette);
     });
 
-    const footerY = layout.height - layout.padding - layout.footerHeight;
-    context.fillStyle = palette.muted;
-    context.font = `500 ${Math.max(13, Math.round(bodyFontSize * 0.62))}px ${CARD_FONT_FAMILY}`;
-    context.textBaseline = 'middle';
-    context.textAlign = 'left';
-    context.fillText(
-      `Tweet ID ${record.tweetId}`,
-      layout.padding,
-      footerY + layout.footerHeight / 2,
-    );
-    context.textAlign = 'right';
-    context.fillText(
-      normalizeHandle(record.author.handle),
-      layout.width - layout.padding,
-      footerY + layout.footerHeight / 2,
-    );
-
-    if (media.length === 0) {
-      context.textAlign = 'left';
-      context.font = `400 ${Math.max(13, Math.round(bodyFontSize * 0.62))}px ${CARD_FONT_FAMILY}`;
-      context.fillText(
-        record.url,
-        layout.padding,
-        footerY + layout.footerHeight - 4,
-        layout.contentWidth,
-      );
-    }
-
     resources.checkActive();
     completed = true;
     return canvas;
@@ -460,6 +432,7 @@ export async function renderTweetCard(
   const resources = options.resources ?? new ImageResources();
   const theme = options.theme ?? detectCardTheme();
   const canvases: HTMLCanvasElement[] = [];
+  let brand: HTMLImageElement | undefined;
   try {
     const main = await renderCardCanvas(record, mediaInput, { theme, resources });
     canvases.push(main);
@@ -519,10 +492,57 @@ export async function renderTweetCard(
       context.lineWidth = CARD_RENDER_SCALE;
       context.strokeRect(inset, y, quoteWidth, quoteHeight);
     }
+    brand = await resources.load(browser.runtime.getURL('/icons/icon-48.png'));
+    const footer = document.createElement('canvas');
+    canvases.push(footer);
+    const context = footer.getContext('2d');
+    if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
+    const scale = CARD_RENDER_SCALE;
+    const padding = 20 * scale;
+    const font = `400 ${11 * scale}px ${CARD_FONT_FAMILY}`;
+    context.font = font;
+    const sources = [record, ...(record.quote ? [record.quote] : [])];
+    const lines = sources.flatMap((source, index) => {
+      const id = source.tweetId;
+      const url = source.url ?? (id ? `https://x.com/i/status/${id}` : '来源未获取');
+      return wrapCardText(
+        `${sources.length > 1 ? `[${index + 1}] ` : ''}${url}`,
+        output.width - padding * 2,
+        (value) => context.measureText(value),
+      );
+    });
+    const lineHeight = 16 * scale;
+    const footHeight = padding + lines.length * lineHeight + 26 * scale;
+    const height = output.height + footHeight;
+    if (height > 16384 || output.width * height > 32000000)
+      throw new Error('溯源脚注超出卡片尺寸限制，无法完整生成。');
+    footer.width = output.width;
+    footer.height = height;
+    const palette = CARD_PALETTES[theme];
+    context.fillStyle = palette.background;
+    context.fillRect(0, 0, footer.width, footer.height);
+    context.drawImage(output, 0, 0);
+    context.globalAlpha = 0.55;
+    context.strokeStyle = palette.border;
+    context.beginPath();
+    context.moveTo(padding, output.height);
+    context.lineTo(footer.width - padding, output.height);
+    context.stroke();
+    context.fillStyle = palette.muted;
+    context.font = font;
+    context.textBaseline = 'top';
+    lines.forEach((line, index) =>
+      context.fillText(line, padding, output.height + 10 * scale + index * lineHeight),
+    );
+    const brandY = height - 22 * scale;
+    context.drawImage(brand, padding, brandY, 12 * scale, 12 * scale);
+    context.fillText('分享有据', padding + 17 * scale, brandY);
+    output = footer;
     resources.checkActive();
     const blob = await canvasToBlob(output);
     return { blob, width: output.width, height: output.height };
   } finally {
+    if (brand) releaseImage(brand);
     for (const canvas of canvases) {
       canvas.width = 0;
       canvas.height = 0;

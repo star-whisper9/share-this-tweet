@@ -13,6 +13,8 @@ export interface MediaRecord {
   variants?: MediaVariant[];
   width?: number;
   height?: number;
+  altText?: string;
+  durationMs?: number;
 }
 
 export interface TweetAuthor {
@@ -20,6 +22,10 @@ export interface TweetAuthor {
   handle: string;
   name: string;
   avatarUrl?: string;
+  description?: string;
+  location?: string;
+  url?: string;
+  createdAt?: string;
 }
 
 export interface TweetQuote {
@@ -42,6 +48,13 @@ export interface TweetRecord {
   publishedAt?: string;
   media: MediaRecord[];
   quote?: TweetQuote;
+  language?: string;
+  replyToTweetId?: string;
+  replyToUserId?: string;
+  sensitive?: boolean;
+  editIds?: string[];
+  observedAt?: string;
+  textSource?: 'partial' | 'full' | 'note';
 }
 
 export function normalizeHandle(handle: string): string {
@@ -69,32 +82,63 @@ function mergeMediaRecords(current: MediaRecord, incoming: MediaRecord): MediaRe
     width: current.width ?? incoming.width,
     height: current.height ?? incoming.height,
     variants: Array.from(variants.values()),
+    altText: incoming.altText ?? current.altText,
+    durationMs: incoming.durationMs ?? current.durationMs,
   };
 }
 
 export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): TweetRecord {
+  const newer =
+    !!incoming.observedAt && (!current.observedAt || incoming.observedAt >= current.observedAt);
   const mediaByIndex = new Map(current.media.map((media) => [media.index, media]));
   for (const media of incoming.media) {
     const existing = mediaByIndex.get(media.index);
-    mediaByIndex.set(media.index, existing ? mergeMediaRecords(existing, media) : media);
+    mediaByIndex.set(
+      media.index,
+      existing
+        ? newer
+          ? mergeMediaRecords(existing, media)
+          : mergeMediaRecords(media, existing)
+        : media,
+    );
   }
 
-  const authorHandle = preferValue(current.author.handle, incoming.author.handle) ?? '';
-  const authorName = preferValue(current.author.name, incoming.author.name) ?? authorHandle;
+  const preferred = newer ? incoming : current;
+  const fallback = newer ? current : incoming;
+  const authorHandle = preferValue(preferred.author.handle, fallback.author.handle) ?? '';
+  const authorName = preferValue(preferred.author.name, fallback.author.name) ?? authorHandle;
 
   if (current.tweetId !== incoming.tweetId) throw new Error('Cannot merge different tweets');
+  if (current.author.id && incoming.author.id && current.author.id !== incoming.author.id)
+    throw new Error('Conflicting tweet author identity');
+  const rank = { partial: 0, full: 1, note: 2 };
+  const currentRank = rank[current.textSource ?? 'partial'];
+  const incomingRank = rank[incoming.textSource ?? 'partial'];
+  const useIncomingText =
+    incomingRank > currentRank || (incomingRank === currentRank && (newer || !current.text));
   return {
     tweetId: current.tweetId,
     url:
       current.url.includes('/i/status/') && !incoming.url.includes('/i/status/')
         ? incoming.url
         : current.url,
-    text: current.text.length >= incoming.text.length ? current.text : incoming.text,
+    text: useIncomingText ? incoming.text : current.text,
+    textSource: useIncomingText ? incoming.textSource : current.textSource,
+    observedAt: preferred.observedAt ?? fallback.observedAt,
+    language: preferred.language ?? fallback.language,
+    replyToTweetId: preferred.replyToTweetId ?? fallback.replyToTweetId,
+    replyToUserId: preferred.replyToUserId ?? fallback.replyToUserId,
+    sensitive: preferred.sensitive ?? fallback.sensitive,
+    editIds: preferred.editIds ?? fallback.editIds,
     author: {
       id: preferValue(current.author.id, incoming.author.id) ?? '',
       handle: authorHandle,
       name: authorName,
-      avatarUrl: preferValue(current.author.avatarUrl, incoming.author.avatarUrl),
+      avatarUrl: preferValue(preferred.author.avatarUrl, fallback.author.avatarUrl),
+      description: preferred.author.description ?? fallback.author.description,
+      location: preferred.author.location ?? fallback.author.location,
+      url: preferred.author.url ?? fallback.author.url,
+      createdAt: preferred.author.createdAt ?? fallback.author.createdAt,
     },
     publishedAt: current.publishedAt ?? incoming.publishedAt,
     media: Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index),

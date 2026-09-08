@@ -22,6 +22,24 @@ function getString(value: unknown, key: string): string | undefined {
   return typeof result === 'string' && result.length > 0 ? result : undefined;
 }
 
+function optionalText(value: unknown, key: string): string | undefined {
+  const text = asObject(value)?.[key];
+  return typeof text === 'string' && text.length <= 100000 ? text : undefined;
+}
+function webUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 4096) return undefined;
+  try {
+    const url = new URL(value);
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function positiveNumber(value: unknown, key: string): number | undefined {
+  const number = getNumber(value, key);
+  return number !== undefined && number >= 0 ? number : undefined;
+}
+
 function getNumber(value: unknown, key: string): number | undefined {
   const result = asObject(value)?.[key];
   return typeof result === 'number' && Number.isFinite(result) ? result : undefined;
@@ -60,7 +78,8 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
       type: 'photo',
       originalUrl: getOriginalPhotoUrl(url),
       width: getNumber(originalInfo, 'width'),
-      height: getNumber(originalInfo, 'height'),
+      height: positiveNumber(originalInfo, 'height'),
+      altText: optionalText(value, 'ext_alt_text'),
     };
   }
 
@@ -81,8 +100,16 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
     index,
     type,
     variants,
-    width: getNumber(getObject(videoInfo, 'original_info'), 'width'),
-    height: getNumber(getObject(videoInfo, 'original_info'), 'height'),
+    width: positiveNumber(
+      getObject(value, 'original_info') ?? getObject(videoInfo, 'original_info'),
+      'width',
+    ),
+    height: positiveNumber(
+      getObject(value, 'original_info') ?? getObject(videoInfo, 'original_info'),
+      'height',
+    ),
+    durationMs: positiveNumber(videoInfo, 'duration_millis'),
+    altText: optionalText(value, 'ext_alt_text'),
   };
 }
 
@@ -173,6 +200,15 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
     getString(note, 'text') ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
     legacy,
   );
+  const authorData = user ?? userResultLegacy;
+  const expandedAuthorUrl = getString(
+    (getArray(getObject(getObject(authorData, 'entities'), 'url'), 'urls') ?? [])[0],
+    'expanded_url',
+  );
+  const editControl = getObject(tweet, 'edit_control') ?? getObject(legacy, 'edit_control');
+  const editIds = getArray(editControl, 'edit_tweet_ids');
+  const replyId = getString(legacy, 'in_reply_to_status_id_str');
+  const replyUser = getString(legacy, 'in_reply_to_user_id_str');
   const urlHandle = handle.replace(/^@+/, '');
 
   return {
@@ -181,7 +217,33 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
       ? `https://x.com/${urlHandle}/status/${tweetId}`
       : `https://x.com/i/status/${tweetId}`,
     text,
-    author: { id: authorId, handle, name, avatarUrl },
+    author: {
+      id: authorId,
+      handle,
+      name,
+      avatarUrl,
+      description: optionalText(authorData, 'description'),
+      location: optionalText(authorData, 'location'),
+      url: webUrl(expandedAuthorUrl ?? getString(authorData, 'url')),
+      createdAt: normalizePublishedAt(getString(authorData, 'created_at')),
+    },
+    observedAt: new Date().toISOString(),
+    textSource: getString(note, 'text')
+      ? 'note'
+      : legacy.truncated === true || typeof legacy.full_text !== 'string'
+        ? 'partial'
+        : 'full',
+    language: getString(legacy, 'lang'),
+    replyToTweetId: replyId && /^\d+$/.test(replyId) ? replyId : undefined,
+    replyToUserId: replyUser && /^\d+$/.test(replyUser) ? replyUser : undefined,
+    sensitive:
+      typeof legacy.possibly_sensitive === 'boolean' ? legacy.possibly_sensitive : undefined,
+    editIds:
+      editIds &&
+      editIds.length <= 100 &&
+      editIds.every((id) => typeof id === 'string' && /^\d+$/.test(id))
+        ? (editIds as string[])
+        : undefined,
     publishedAt: normalizePublishedAt(getString(legacy, 'created_at')),
     media,
     ...(includeQuote ? quoteFields(tweet, legacy, tweetId) : {}),

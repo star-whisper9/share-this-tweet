@@ -1,3 +1,4 @@
+import { mountTemplateGuide } from './template-guide.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
 import { buildTweetText } from '../core/text-export.js';
@@ -18,8 +19,6 @@ import {
   type ExtensionSettings,
 } from '../shared/settings.js';
 
-// Intentionally keeps the existing settings shape and template engine.
-// Text variables are discovered from DEFAULT_SETTINGS, not an assumed grammar.
 type SettingKey = 'filenameTemplate' | 'frameTemplate' | 'textTemplate';
 type Tab = 'frame' | 'filename' | 'text' | 'records';
 type SettingsTab = Exclude<Tab, 'records'>;
@@ -43,7 +42,7 @@ const resetButton = document.querySelector<HTMLButtonElement>('[data-reset]');
 const confirmation = document.querySelector<HTMLElement>('[data-reset-confirm]');
 const inputs = {
   filenameTemplate: document.querySelector<HTMLInputElement>('[data-setting="filenameTemplate"]'),
-  frameTemplate: document.querySelector<HTMLInputElement>('[data-setting="frameTemplate"]'),
+  frameTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="frameTemplate"]'),
   textTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="textTemplate"]'),
 };
 const previews = {
@@ -79,15 +78,20 @@ const sampleMedia: MediaRecord = {
 const presets: Record<SettingKey, Preset[]> = {
   frameTemplate: [
     { label: '经典署名', description: '左侧显示作者名称', value: DEFAULT_SETTINGS.frameTemplate },
-    { label: '标记出处', description: '左侧显示来源文字和账号', value: '来源：{author.handle}' },
-    { label: '仅账号', description: '左侧显示推主账号', value: '{author.handle}' },
+    { label: '头像与署名', description: '作者头像和名称', value: '{author.avatar} {author.name}' },
+    { label: '仅账号', description: '左侧显示推主账号', value: '@{author.handle}' },
   ],
   filenameTemplate: [
-    { label: '完整信息', description: '使用默认规则', value: DEFAULT_SETTINGS.filenameTemplate },
     {
-      label: '简洁命名',
-      description: '账号 + 编号',
-      value: 'X_{author.handle}_{tweet.id}_{media.index}.{extension}',
+      label: '账号与编号',
+      description: '易查找且避免重名',
+      value: DEFAULT_SETTINGS.filenameTemplate,
+    },
+    {
+      label: '按日期归档',
+      description: 'UTC 日期 + 账号 + 编号',
+      value:
+        '{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}',
     },
     {
       label: '仅编号',
@@ -96,7 +100,17 @@ const presets: Record<SettingKey, Preset[]> = {
     },
   ],
   textTemplate: [
-    { label: '正文与来源', description: '沿用完整默认模板', value: DEFAULT_SETTINGS.textTemplate },
+    {
+      label: '正文与来源',
+      description: '正文、署名与原推链接',
+      value: DEFAULT_SETTINGS.textTemplate,
+    },
+    { label: '简洁转发', description: '正文和链接', value: '{tweet.text}\n\n{tweet.url}' },
+    {
+      label: '来源索引',
+      description: '作者、日期和链接',
+      value: '{author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD}\n{tweet.url}',
+    },
     { label: '我的排版', description: '自己安排文字与出处' },
   ],
 };
@@ -200,6 +214,7 @@ function updatePresetSelection(settings: ExtensionSettings): void {
   }
 }
 function updateDraft(announce = true): void {
+  for (const key of keys) inputs[key]?.dispatchEvent(new Event('templatechange'));
   const settings = readSettings();
   const valid = validateAndPreview(settings);
   dirty =
@@ -225,23 +240,6 @@ function openEditor(name: SettingKey, focus = true): void {
   const editor = document.querySelector<HTMLDetailsElement>(`[data-editor="${name}"]`);
   if (editor) editor.open = true;
   if (focus) inputs[name]?.focus();
-}
-function tokenLabel(token: string): string {
-  const labels: Record<string, string> = {
-    '{author.name}': '作者昵称',
-    '{author.handle}': '推主账号',
-    '{author.id}': '推主 ID',
-    '{author.avatar}': '作者头像',
-    '{tweet.id}': '推文 ID',
-    '{tweet.text}': '推文正文',
-    '{tweet.url}': '原文链接',
-    '{text}': '推文正文',
-    '{url}': '原文链接',
-    '{tweetId}': '推文 ID',
-    '{media.index}': '媒体序号',
-    '{extension}': '扩展名',
-  };
-  return labels[token] ?? token;
 }
 
 function setRecordStatus(message: string): void {
@@ -494,32 +492,10 @@ function buildControls(): void {
       });
       container?.append(button);
     });
-    const discovered = DEFAULT_SETTINGS[name].match(/\{[^{}]+\}/g) ?? [];
-    const extras =
-      name === 'filenameTemplate'
-        ? ['{author.handle}', '{tweet.id}', '{media.index}', '{extension}']
-        : name === 'frameTemplate'
-          ? ['{author.handle}', '{author.avatar}']
-          : [];
-    const tokenContainer = document.querySelector(`[data-tokens="${name}"]`);
-    for (const token of new Set([...discovered, ...extras])) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'token';
-      button.textContent = `+ ${tokenLabel(token)}`;
-      button.title = token;
-      button.setAttribute('aria-label', `插入${tokenLabel(token)} ${token}`);
-      button.addEventListener('click', () => {
-        const input = inputs[name];
-        if (!input || !ready || saving) return;
-        const start = input.selectionStart ?? input.value.length;
-        const end = input.selectionEnd ?? start;
-        input.setRangeText(token, start, end, 'end');
-        input.focus();
-        updateDraft();
-      });
-      tokenContainer?.append(button);
-    }
+    const tokenContainer = document.querySelector<HTMLElement>(`[data-tokens="${name}"]`);
+    const input = inputs[name];
+    if (tokenContainer && input)
+      mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft);
   }
 }
 for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {

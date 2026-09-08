@@ -52,5 +52,10 @@
     "page": "options/options.html",
     "open_in_tab": true
   },
-  "web_accessible_resources": ["/page/interceptor.js", "/icons/x.svg", "/icons/x.png"]
+  "web_accessible_resources": [
+    "/page/interceptor.js",
+    "/icons/x.svg",
+    "/icons/x.png",
+    "/icons/icon-48.png"
+  ]
 }

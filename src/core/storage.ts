@@ -1,3 +1,4 @@
+import { validMetadata } from '../shared/metadata-validation.js';
 import { mergeTweetRecords, type TweetRecord } from '../shared/model.js';
 import type {
   OutputRecord,
@@ -222,7 +223,8 @@ function isStoredTweetRecord(value: unknown): value is StoredTweetRecord {
     record.author !== null &&
     Array.isArray(record.media) &&
     typeof record.savedAt === 'string' &&
-    isValidQuote(record.quote, record.tweetId)
+    isValidQuote(record.quote, record.tweetId) &&
+    validMetadata(record)
   );
 }
 
@@ -248,6 +250,7 @@ function isValidQuote(value: unknown, parentId: string): boolean {
   const record = quote.record as Record<string, unknown>;
   const author = record.author as Record<string, unknown> | undefined;
   return (
+    validMetadata(record) &&
     record.quote === undefined &&
     record.tweetId === quote.tweetId &&
     typeof record.tweetId === 'string' &&
