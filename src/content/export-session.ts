@@ -1,6 +1,6 @@
 import { buildCardFilename, buildFrameFilename, buildMediaFilename } from '../core/filename.js';
 import { ImageResources } from '../core/image-resources.js';
-import { detectCardTheme, renderTweetCard } from '../core/card.js';
+import { detectCardTheme, renderTweetCard, type CardTheme } from '../core/card.js';
 import { downloadBlob, downloadMedia } from '../core/download.js';
 import { renderPhotoFrame, type FrameOrientation } from '../core/frame.js';
 import { copyTweetText } from '../core/text-export.js';
@@ -27,6 +27,7 @@ interface ActionMessages {
   failure: string;
 }
 interface ExportContext {
+  theme: CardTheme;
   record: TweetRecord;
   settings: ExtensionSettings;
 }
@@ -169,7 +170,7 @@ export class ExportSession {
     operation: (context: ExportContext) => Promise<string | undefined>,
   ): Promise<void> {
     if (!this.active || this.actions.get(key)?.status === 'loading') return;
-    const context = { record: this.record, settings: this.settings };
+    const context = { record: this.record, settings: this.settings, theme: detectCardTheme() };
     this.actions.set(key, { status: 'loading' });
     this.setStatus('loading', messages.loading);
     try {
@@ -215,9 +216,8 @@ export class ExportSession {
     );
   }
 
-  private async getCard({ record, settings }: ExportContext): Promise<File> {
+  private async getCard({ record, settings, theme }: ExportContext): Promise<File> {
     const photos = record.media.filter((media) => media.type === 'photo');
-    const theme = detectCardTheme();
     const filename = buildCardFilename(record, photos[0], settings.filenameTemplate);
     const key = JSON.stringify([record, theme, filename]);
     if (this.cardKey === key && this.cardFile) return this.cardFile;
@@ -282,6 +282,7 @@ export class ExportSession {
         settings.frameTemplate,
         orientation,
         this.resources,
+        context.theme,
       );
       if (blob.type !== 'image/jpeg' && blob.type !== 'image/webp')
         throw new Error('画框输出格式不正确');

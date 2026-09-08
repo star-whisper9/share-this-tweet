@@ -686,7 +686,7 @@ textarea {
   display: grid;
   flex: 0 0 auto;
   gap: 2px;
-  color: #687582;
+  color: var(--frame-preview-muted, #687582);
   opacity: 0.55;
   font-size: 9px;
   line-height: 1.35;
@@ -1270,4 +1270,8 @@ textarea {
   width: 12px;
   height: 12px;
   object-fit: contain;
+}
+
+.print-caption {
+  border-top: 1px solid var(--frame-preview-border, #dfe3e8);
 }

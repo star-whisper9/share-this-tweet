@@ -1,3 +1,14 @@
+import {
+  IMAGE_PALETTES as CARD_PALETTES,
+  detectImageTheme as detectCardTheme,
+  type ImageTheme as CardTheme,
+  type ImagePalette as CardPalette,
+} from './image-theme.js';
+export {
+  detectImageTheme as detectCardTheme,
+  resolveImageTheme as resolveCardTheme,
+} from './image-theme.js';
+export type { ImageTheme as CardTheme } from './image-theme.js';
 import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
@@ -8,33 +19,6 @@ const CARD_MIN_WIDTH = 320;
 const CARD_TEXT_WIDTH = 800;
 const CARD_MAX_SINGLE_IMAGE_HEIGHT = 780;
 const CARD_RENDER_SCALE = 2;
-
-export type CardTheme = 'light' | 'dark';
-
-interface CardPalette {
-  background: string;
-  imageBackground: string;
-  text: string;
-  muted: string;
-  border: string;
-}
-
-const CARD_PALETTES: Record<CardTheme, CardPalette> = {
-  light: {
-    background: '#fbfaf7',
-    imageBackground: '#edf0f2',
-    text: '#17202a',
-    muted: '#687582',
-    border: '#dfe3e8',
-  },
-  dark: {
-    background: '#111820',
-    imageBackground: '#202b35',
-    text: '#f1f4f7',
-    muted: '#a9b6c2',
-    border: '#354352',
-  },
-};
 
 export interface CardTextMeasurement {
   measureText(text: string): { width: number };
@@ -199,24 +183,6 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     imageAreaHeight,
     footerHeight,
   };
-}
-
-export function resolveCardTheme(explicitMode: string | undefined, systemDark: boolean): CardTheme {
-  if (explicitMode?.toLowerCase().includes('dark')) return 'dark';
-  if (explicitMode?.toLowerCase().includes('light')) return 'light';
-  return systemDark ? 'dark' : 'light';
-}
-
-export function detectCardTheme(root: HTMLElement = document.documentElement): CardTheme {
-  const explicitMode = [
-    root.getAttribute('data-color-mode'),
-    root.getAttribute('data-theme'),
-    root.ownerDocument.body?.getAttribute('data-color-mode'),
-    root.ownerDocument.body?.getAttribute('data-theme'),
-  ].find((value) => value);
-  const systemDark =
-    typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
-  return resolveCardTheme(explicitMode ?? undefined, systemDark);
 }
 
 function drawAvatar(

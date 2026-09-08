@@ -1,3 +1,4 @@
+import { IMAGE_PALETTES, detectImageTheme, type ImageTheme } from './image-theme.js';
 import { ImageResources, loadAvatar, releaseImage } from './image-resources.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
@@ -9,8 +10,6 @@ export const FRAME_ORIENTATIONS: FrameOrientation[] = ['top', 'bottom'];
 const FRAME_AVATAR_MARKER = '\uE000';
 const FRAME_BRAND_MARKER = '\uE001';
 const FRAME_FONT_FAMILY = '"SF Pro Display", "Helvetica Neue", system-ui, sans-serif';
-const FRAME_BACKGROUND = '#fbfaf7';
-const FRAME_BORDER = '#dfe3e8';
 
 export interface FrameTextMeasurement {
   measureText(text: string): { width: number };
@@ -241,13 +240,30 @@ export function encodeFrame(canvas: HTMLCanvasElement, transparent: boolean): Pr
   });
 }
 
+/** Increase raster resolution for small sources without changing the logical frame layout. */
+export function frameOutputSize(
+  width: number,
+  height: number,
+): { width: number; height: number; scale: number } {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
+    throw new Error('无效的画框尺寸');
+  const scale = Math.max(1, 640 / width);
+  const outputWidth = Math.ceil(width * scale);
+  const outputHeight = Math.ceil(height * scale);
+  if (outputWidth > 16384 || outputHeight > 16384 || outputWidth * outputHeight > 32000000)
+    throw new Error('图片超出画框尺寸限制，无法完整生成。');
+  return { width: outputWidth, height: outputHeight, scale };
+}
+
 export async function renderPhotoFrame(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FRAME_TEMPLATE,
   orientation: FrameOrientation = DEFAULT_FRAME_ORIENTATION,
   resources = new ImageResources(),
+  theme: ImageTheme = detectImageTheme(),
 ): Promise<Blob> {
+  const palette = IMAGE_PALETTES[theme];
   if (media.type !== 'photo') throw new Error('只有照片支持生成画框');
   let userText = getFrameText(record, media, template);
   if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
@@ -301,25 +317,23 @@ export async function renderPhotoFrame(
       measureText: createFrameTextMeasurer(context, fontSize),
     });
 
-    if (
-      image.naturalWidth > 16384 ||
-      image.naturalHeight + layout.barHeight > 16384 ||
-      image.naturalWidth * (image.naturalHeight + layout.barHeight) > 32000000
-    ) {
-      throw new Error('图片超出画框尺寸限制，无法完整生成。');
-    }
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight + layout.barHeight;
+    const logicalWidth = image.naturalWidth;
+    const output = frameOutputSize(logicalWidth, image.naturalHeight + layout.barHeight);
+    canvas.width = output.width;
+    canvas.height = output.height;
+    context.scale(output.scale, output.scale);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
     const imageY = orientation === 'top' ? layout.barHeight : 0;
-    context.drawImage(image, 0, imageY, image.naturalWidth, image.naturalHeight);
-    context.fillStyle = FRAME_BACKGROUND;
+    context.drawImage(image, 0, imageY, logicalWidth, image.naturalHeight);
+    context.fillStyle = palette.background;
     context.fillRect(
       0,
       orientation === 'top' ? 0 : image.naturalHeight,
-      canvas.width,
+      logicalWidth,
       layout.barHeight,
     );
-    context.fillStyle = '#1f2933';
+    context.fillStyle = palette.text;
     context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
     // Each line occupies a fixed-height cell. Centering the glyph in that cell
     // keeps the same paddingY on both sides of a top or bottom frame, regardless
@@ -343,12 +357,12 @@ export async function renderPhotoFrame(
       context.textAlign = 'right';
       layout.rightLines.forEach((line, index) => {
         context.globalAlpha = 0.55;
-        context.fillStyle = '#687582';
+        context.fillStyle = palette.muted;
         context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
         drawHorizontalTextLine(
           context,
           line,
-          canvas.width - layout.paddingX,
+          logicalWidth - layout.paddingX,
           frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
           layout.fontSize,
           avatarImage,
@@ -360,13 +374,13 @@ export async function renderPhotoFrame(
       const frameY = orientation === 'top' ? 0 : image.naturalHeight;
       const measureText = createFrameTextMeasurer(context, layout.fontSize);
       const sourceLineCount = sourceLines.flatMap((line) =>
-        wrapFrameText(line, canvas.width - layout.paddingX * 2, measureText),
+        wrapFrameText(line, logicalWidth - layout.paddingX * 2, measureText),
       ).length;
       const sourceStart = layout.leftLines.length - sourceLineCount;
       context.textAlign = 'left';
       layout.leftLines.forEach((line, index) => {
         context.globalAlpha = index >= sourceStart ? 0.55 : 1;
-        context.fillStyle = index >= sourceStart ? '#687582' : '#1f2933';
+        context.fillStyle = index >= sourceStart ? palette.muted : palette.text;
         drawHorizontalTextLine(
           context,
           line,
@@ -380,10 +394,10 @@ export async function renderPhotoFrame(
     }
 
     context.globalAlpha = 1;
-    context.strokeStyle = FRAME_BORDER;
+    context.strokeStyle = palette.border;
     context.lineWidth = 1;
     const frameY = orientation === 'top' ? 0 : image.naturalHeight;
-    context.strokeRect(0.5, frameY + 0.5, canvas.width - 1, layout.barHeight - 1);
+    context.strokeRect(0.5, frameY + 0.5, logicalWidth - 1, layout.barHeight - 1);
 
     resources.checkActive();
     return await encodeFrame(canvas, transparent);

@@ -1,3 +1,4 @@
+import { IMAGE_PALETTES, detectImageTheme } from '../core/image-theme.js';
 import { mountTemplateGuide } from './template-guide.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
@@ -637,3 +638,15 @@ document.querySelector('[data-retry-load]')?.addEventListener('click', () => {
 });
 void initialize();
 void loadRecords();
+
+function updateFramePreviewTheme(): void {
+  const preview = document.querySelector<HTMLElement>('.print-caption');
+  if (!preview) return;
+  const palette = IMAGE_PALETTES[detectImageTheme()];
+  preview.style.backgroundColor = palette.background;
+  preview.style.color = palette.text;
+  preview.style.setProperty('--frame-preview-muted', palette.muted);
+  preview.style.setProperty('--frame-preview-border', palette.border);
+}
+updateFramePreviewTheme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateFramePreviewTheme);

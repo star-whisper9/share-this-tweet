@@ -1,3 +1,4 @@
+import { frameOutputSize } from '../src/core/frame.js';
 import { describe, expect, it } from 'vitest';
 import {
   calculateFrameLayout,
@@ -83,4 +84,13 @@ describe('frame encoding', () => {
       Error,
     );
   });
+});
+
+it('raises small-frame raster resolution proportionally while preserving large images', () => {
+  const small = frameOutputSize(320, 378);
+  expect(small.width).toBeGreaterThan(320);
+  expect(small.height / small.width).toBeCloseTo(378 / 320);
+  expect(small.scale).toBe(small.width / 320);
+  expect(frameOutputSize(1200, 900)).toEqual({ width: 1200, height: 900, scale: 1 });
+  expect(() => frameOutputSize(1, 10000)).toThrow(Error);
 });
