@@ -1,3 +1,5 @@
+import { decodeHtmlEntities } from './html-entities.js';
+
 export type TweetTranslation =
   | { status: 'unavailable' }
   | { status: 'invalid'; reason: 'empty' | 'malformed' | 'stale' }
@@ -74,7 +76,8 @@ export function normalizeTranslation(
   const data = source.data as Record<string, unknown>;
   if (typeof data.translation !== 'string' || data.translation.length > 100000)
     return { status: 'invalid', reason: 'malformed' };
-  if (!data.translation.trim()) return { status: 'invalid', reason: 'empty' };
+  const text = decodeHtmlEntities(data.translation).trim();
+  if (!text) return { status: 'invalid', reason: 'empty' };
   const sourceLanguage = shortString(data.source_language) ?? originalLanguage;
   const targetLanguage = shortString(data.destination_language);
   if (
@@ -85,7 +88,7 @@ export function normalizeTranslation(
     return { status: 'unavailable' };
   return {
     status: 'available',
-    text: data.translation.trim(),
+    text,
     originalText,
     sourceLanguage,
     targetLanguage,

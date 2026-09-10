@@ -40,6 +40,17 @@ it('accepts native embedded translations without replacing the original text', (
     originalText: record.text,
   });
 });
+it('decodes HTML entities in native translations', () => {
+  const translation = normalizeTranslation(
+    {
+      ...payload,
+      data: { ...payload.data, translation: '在 &lt;strings.h&gt; 中声明（&#60;）' },
+    },
+    record.text,
+  );
+
+  expect(translation).toMatchObject({ text: '在 <strings.h> 中声明（<）' });
+});
 it('warns only on unexpected data, keeping ordinary unavailable translations silent', () => {
   for (const data of [undefined, { is_available: false }])
     expect(translationWarning(normalizeTranslation(data, record.text))).toBeUndefined();
@@ -48,6 +59,12 @@ it('warns only on unexpected data, keeping ordinary unavailable translations sil
     record.text,
   );
   expect(empty).toEqual({ status: 'invalid', reason: 'empty' });
+  expect(
+    normalizeTranslation(
+      { ...payload, data: { ...payload.data, translation: '&#32;' } },
+      record.text,
+    ),
+  ).toEqual({ status: 'invalid', reason: 'empty' });
   expect(translationWarning(empty)).toBeDefined();
   expect(normalizeTranslation({ is_available: true }, record.text)).toEqual({
     status: 'invalid',

@@ -104,4 +104,14 @@ describe('normalizeTweetCandidate', () => {
 
     expect(record?.text).toBe('caption https://t.co/real-link');
   });
+
+  it('decodes HTML entities in tweet text exactly once', () => {
+    const record = normalizeTweetCandidate({
+      id_str: '101',
+      full_text: 'memcpy() is declared in &lt;strings.h&gt; &amp; written as &amp;lt;',
+      user: { id_str: '8', screen_name: 'alice', name: 'Alice' },
+    });
+
+    expect(record?.text).toBe('memcpy() is declared in <strings.h> & written as &lt;');
+  });
 });

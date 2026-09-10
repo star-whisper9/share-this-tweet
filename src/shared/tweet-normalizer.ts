@@ -1,3 +1,4 @@
+import { decodeHtmlEntities } from './html-entities.js';
 import { normalizeTranslation } from './translation.js';
 import type { MediaRecord, MediaVariant, TweetRecord, TweetQuote } from './model.js';
 
@@ -197,9 +198,11 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
     .map((item, index) => normalizeMedia(item, index + 1))
     .filter((item): item is MediaRecord => item !== undefined);
   const note = getObject(getObject(getObject(tweet, 'note_tweet'), 'note_tweet_results'), 'result');
-  const text = removeMediaEntityUrls(
-    getString(note, 'text') ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
-    legacy,
+  const text = decodeHtmlEntities(
+    removeMediaEntityUrls(
+      getString(note, 'text') ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
+      legacy,
+    ),
   );
   const authorData = user ?? userResultLegacy;
   const expandedAuthorUrl = getString(
