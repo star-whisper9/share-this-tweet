@@ -71,6 +71,53 @@ afterEach(() => {
 });
 
 describe('export session', () => {
+  it('saves a mixed selection with independently configured photo and video formats', async () => {
+    const session = mixedSession();
+    session.configureMedia({ photo: 'top', video: 'sourced' });
+    await session.saveSelected('configured');
+    expect(renderPhotoFrame).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(renderPhotoFrame).mock.calls.every((call) => call[3] === 'top')).toBe(true);
+    expect(downloadMedia).toHaveBeenCalledWith(
+      video,
+      '42_2_source.mp4',
+      expect.objectContaining({ media: { index: 2, type: 'video' } }),
+    );
+    expect(vi.mocked(recordOutput).mock.calls.map(([output]) => output.outputType)).toEqual([
+      'framed-image',
+      'sourced-media',
+      'framed-image',
+    ]);
+    expect(session.mediaAction('configured').status).toBe('success');
+    session.configureMedia({ photo: 'original', video: 'original' });
+    expect(session.mediaAction('configured').status).toBe('idle');
+    await session.saveSelected('configured');
+    expect(
+      vi
+        .mocked(downloadMedia)
+        .mock.calls.slice(-3)
+        .every((call) => call[2] === undefined),
+    ).toBe(true);
+    expect(renderPhotoFrame).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the configured format and selection fixed during a single media download', async () => {
+    const pendingDownload = deferred<void>();
+    vi.mocked(downloadMedia).mockReturnValueOnce(pendingDownload.promise);
+    const session = new ExportSession({ ...record, media: [video] }, settings);
+    const pending = session.saveSelected('configured');
+    session.configureMedia({ video: 'original' });
+    session.toggleMedia(video.index);
+    await session.saveSelected('configured');
+    expect(session.mediaOptions.video).toBe('sourced');
+    expect(session.selection.has(video.index)).toBe(true);
+    expect(downloadMedia).toHaveBeenCalledOnce();
+    pendingDownload.resolve();
+    await pending;
+    expect(session.isSavingBatch).toBe(false);
+    session.configureMedia({ video: 'original' });
+    expect(session.mediaOptions.video).toBe('original');
+  });
+
   it('reuses a text-only card while recording each save', async () => {
     const session = new ExportSession(record, settings);
     await session.saveCard();

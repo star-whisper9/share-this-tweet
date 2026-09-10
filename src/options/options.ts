@@ -323,7 +323,7 @@ async function readSourceMedia(file: File): Promise<void> {
       return;
     }
     renderSourceMedia(source, file.name);
-    setSourceMediaStatus('已读取来源。文件未上传，也没有加入来源记录。');
+    setSourceMediaStatus('已读取到来源。');
   } catch (error) {
     if (sourceReadController !== controller) return;
     setSourceMediaStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`);

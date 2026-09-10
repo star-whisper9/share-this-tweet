@@ -26,7 +26,11 @@ export interface SheetStatus {
   message: string;
 }
 export type TweetAction = 'copy-text' | 'save-card';
-export type MediaMode = 'original' | 'framed' | 'sourced';
+export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
+export interface MediaSaveOptions {
+  photo: 'original' | FrameOrientation;
+  video: 'original' | 'sourced';
+}
 interface ActionMessages {
   loading: string;
   success: string;
@@ -67,6 +71,7 @@ export class ExportSession {
   private readonly resources = new ImageResources();
   private tweet: TweetRecord;
   private preferences: ExtensionSettings;
+  private mediaPreferences: MediaSaveOptions;
   private currentStatus: SheetStatus = { state: 'ready', message: '' };
 
   constructor(
@@ -76,6 +81,7 @@ export class ExportSession {
   ) {
     this.tweet = record;
     this.preferences = settings;
+    this.mediaPreferences = { photo: settings.frameOrientation, video: 'sourced' };
     this.selection.reconcile(record.media);
     this.syncQuote();
   }
@@ -113,6 +119,25 @@ export class ExportSession {
     return this.batchRunning;
   }
 
+  get mediaOptions(): Readonly<MediaSaveOptions> {
+    return this.mediaPreferences;
+  }
+
+  configureMedia(options: Partial<MediaSaveOptions>): void {
+    if (!this.active || this.isSavingBatch) return;
+    this.mediaPreferences = { ...this.mediaPreferences, ...options };
+    for (const key of this.actions.keys())
+      if (key.startsWith('configured:')) this.actions.delete(key);
+    this.changed();
+  }
+
+  private configuredKey(): string {
+    return `configured:${this.selection
+      .selected(this.record.media)
+      .map((item) => item.index)
+      .join(',')}:${this.mediaOptions.photo}:${this.mediaOptions.video}`;
+  }
+
   action(key: TweetAction): Readonly<ActionState> {
     return this.actions.get(key) ?? IDLE;
   }
@@ -122,6 +147,7 @@ export class ExportSession {
     orientation = this.settings.frameOrientation,
   ): Readonly<ActionState> {
     if (this.selection.size === 0 || this.selection.primary === undefined) return IDLE;
+    if (mode === 'configured') return this.actions.get(this.configuredKey()) ?? IDLE;
     const key =
       this.selection.size > 1
         ? batchKey(mode, orientation)
@@ -328,17 +354,24 @@ export class ExportSession {
     const selected = this.selection.selected(this.record.media);
     if (!this.active || this.isSavingBatch || selected.length === 0) return;
     const batch = selected.length > 1;
-    const key = batch
-      ? batchKey(mode, orientation)
-      : mediaKey(selected[0].index, mode, orientation);
+    const options = this.mediaOptions;
+    if (mode === 'configured' && options.photo !== 'original') orientation = options.photo;
+    const key =
+      mode === 'configured'
+        ? this.configuredKey()
+        : batch
+          ? batchKey(mode, orientation)
+          : mediaKey(selected[0].index, mode, orientation);
     if (this.actions.get(key)?.status === 'loading') return;
     const success =
-      mode === 'framed'
-        ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${directionLabels[orientation]}画框，视频和 GIF 原样保存。`
-        : mode === 'sourced'
-          ? `已交给浏览器保存，共 ${selected.length} 项媒体；视频和 GIF 已写入来源，照片原样保存。`
-          : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
-    this.batchRunning = batch;
+      mode === 'configured'
+        ? `已按所选方式保存，共 ${selected.length} 项媒体。`
+        : mode === 'framed'
+          ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${directionLabels[orientation]}画框，视频和 GIF 原样保存。`
+          : mode === 'sourced'
+            ? `已交给浏览器保存，共 ${selected.length} 项媒体；视频和 GIF 已写入来源，照片原样保存。`
+            : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
+    this.batchRunning = true;
     try {
       await this.run(
         key,
@@ -349,14 +382,20 @@ export class ExportSession {
           for (const [index, media] of selected.entries()) {
             if (!this.active) return;
             const itemMode =
-              mode === 'framed' && media.type === 'photo'
-                ? 'framed'
-                : mode === 'sourced' && media.type !== 'photo'
-                  ? 'sourced'
-                  : 'original';
+              mode === 'configured'
+                ? media.type === 'photo'
+                  ? options.photo === 'original'
+                    ? 'original'
+                    : 'framed'
+                  : options.video
+                : mode === 'framed' && media.type === 'photo'
+                  ? 'framed'
+                  : mode === 'sourced' && media.type !== 'photo'
+                    ? 'sourced'
+                    : 'original';
             const itemKey = mediaKey(media.index, itemMode, orientation);
             try {
-              const warning = await this.exportMedia(context, media, mode, orientation);
+              const warning = await this.exportMedia(context, media, itemMode, orientation);
               if (!this.active) return;
               if (warning) warnings.push(`第 ${media.index} 项：${warning}`);
               if (batch) this.actions.set(itemKey, { status: 'success' });
