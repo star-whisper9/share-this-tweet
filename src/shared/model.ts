@@ -11,6 +11,8 @@ export interface MediaRecord {
   index: number;
   type: MediaType;
   originalUrl?: string;
+  /** X-provided still preview for video and animated GIF media. */
+  previewUrl?: string;
   variants?: MediaVariant[];
   width?: number;
   height?: number;
@@ -81,6 +83,7 @@ function mergeMediaRecords(current: MediaRecord, incoming: MediaRecord): MediaRe
     ...current,
     ...incoming,
     originalUrl: preferValue(current.originalUrl, incoming.originalUrl),
+    previewUrl: preferValue(current.previewUrl, incoming.previewUrl),
     width: current.width ?? incoming.width,
     height: current.height ?? incoming.height,
     variants: Array.from(variants.values()),

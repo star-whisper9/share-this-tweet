@@ -45,11 +45,23 @@ export function validMetadata(value: Record<string, unknown>): boolean {
     if (!item || typeof item !== 'object') return false;
     const media = item as Record<string, unknown>;
     return (
-      text(media, ['altText']) &&
+      text(media, ['altText', 'previewUrl']) &&
+      validPreviewUrl(media.previewUrl) &&
       (media.durationMs === undefined ||
         (typeof media.durationMs === 'number' &&
           Number.isFinite(media.durationMs) &&
           media.durationMs >= 0))
     );
   });
+}
+
+function validPreviewUrl(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'string' || value.length > 4096) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'pbs.twimg.com';
+  } catch {
+    return false;
+  }
 }

@@ -41,4 +41,22 @@ describe('mergeTweetRecords', () => {
     expect(merged.author.handle).toBe('alice');
     expect(merged.url).toBe('https://x.com/alice/status/42');
   });
+
+  it('retains the existing dynamic-media preview while merging variants', () => {
+    const base = {
+      tweetId: '42',
+      url: 'https://x.com/alice/status/42',
+      text: '',
+      author: { id: '7', handle: 'alice', name: 'Alice' },
+      media: [
+        {
+          index: 1,
+          type: 'video' as const,
+          previewUrl: 'https://pbs.twimg.com/media/preview.jpg',
+        },
+      ],
+    };
+    const merged = mergeTweetRecords(base, { ...base, media: [{ index: 1, type: 'video' }] });
+    expect(merged.media[0]?.previewUrl).toBe('https://pbs.twimg.com/media/preview.jpg');
+  });
 });

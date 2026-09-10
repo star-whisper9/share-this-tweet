@@ -66,6 +66,17 @@ function normalizeAvatarUrl(url: string): string {
   return url.replace(/_(?:mini|normal|bigger)(?=\.[a-z0-9]+(?:$|\?))/i, '_400x400');
 }
 
+function normalizePreviewUrl(value: JsonObject): string | undefined {
+  const raw = getString(value, 'media_url_https') ?? getString(value, 'media_url');
+  if (!raw || raw.length > 4096) return undefined;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' && url.hostname === 'pbs.twimg.com' ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function normalizeMedia(media: unknown, index: number): MediaRecord | undefined {
   const value = asObject(media);
   const type = getString(value, 'type');
@@ -87,6 +98,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
 
   if (type !== 'video' && type !== 'animated_gif') return undefined;
   const videoInfo = getObject(value, 'video_info');
+  const previewUrl = normalizePreviewUrl(value);
   const variants: MediaVariant[] = (getArray(videoInfo, 'variants') ?? [])
     .map<MediaVariant | undefined>((candidate) => {
       const variant = asObject(candidate);
@@ -101,6 +113,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
   return {
     index,
     type,
+    previewUrl,
     variants,
     width: positiveNumber(
       getObject(value, 'original_info') ?? getObject(videoInfo, 'original_info'),

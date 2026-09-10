@@ -15,6 +15,7 @@ describe('normalizeTweetCandidate', () => {
             { type: 'photo', media_url_https: 'https://pbs.twimg.com/media/photo.jpg' },
             {
               type: 'video',
+              media_url_https: 'https://pbs.twimg.com/media/video-preview.jpg',
               video_info: {
                 variants: [
                   {
@@ -55,6 +56,7 @@ describe('normalizeTweetCandidate', () => {
       'https://pbs.twimg.com/media/photo.jpg?format=jpg&name=orig',
     );
     expect(record?.media[1].variants).toHaveLength(2);
+    expect(record?.media[1].previewUrl).toBe('https://pbs.twimg.com/media/video-preview.jpg');
     expect(record?.publishedAt).toBe('2026-09-07T10:00:00.000Z');
   });
 
@@ -67,6 +69,25 @@ describe('normalizeTweetCandidate', () => {
 
     expect(record?.author.handle).toBe('@bob');
     expect(normalizeTweetCandidate({ __typename: 'User', rest_id: '8' })).toBeUndefined();
+  });
+
+  it('does not persist an untrusted dynamic-media preview URL', () => {
+    const record = normalizeTweetCandidate({
+      id_str: '98',
+      full_text: 'legacy text',
+      user: { id_str: '8', screen_name: 'bob', name: 'Bob' },
+      extended_entities: {
+        media: [
+          {
+            type: 'video',
+            media_url_https: 'https://example.com/preview.jpg',
+            video_info: { variants: [] },
+          },
+        ],
+      },
+    });
+
+    expect(record?.media[0]?.previewUrl).toBeUndefined();
   });
 
   it('removes only the media entity short link from visible tweet text', () => {

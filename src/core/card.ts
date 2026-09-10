@@ -18,6 +18,7 @@ import {
   releaseImage,
   type LoadedAvatar,
 } from './image-resources.js';
+import { formatCardMediaDuration, getCardMediaPreview } from './card-media.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
 
@@ -74,6 +75,12 @@ export interface TweetCardResult {
   blob: Blob;
   width: number;
   height: number;
+}
+
+interface LoadedCardMedia {
+  media: MediaRecord;
+  preview: ReturnType<typeof getCardMediaPreview>;
+  image?: HTMLImageElement;
 }
 
 export function wrapCardText(
@@ -280,6 +287,76 @@ function drawContainedImage(
   context.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1);
 }
 
+function drawMediaPlaceholder(
+  context: CanvasRenderingContext2D,
+  rect: CardImageRect,
+  palette: CardPalette,
+  media: MediaRecord,
+): void {
+  context.fillStyle = palette.imageBackground;
+  context.fillRect(rect.x, rect.y, rect.width, rect.height);
+  context.fillStyle = palette.muted;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.font = `400 ${Math.max(12, Math.round(Math.min(rect.width, rect.height) * 0.06))}px ${CARD_FONT_FAMILY}`;
+  context.fillText(
+    media.type === 'animated_gif' ? 'GIF 预览不可用' : '视频预览不可用',
+    rect.x + rect.width / 2,
+    rect.y + rect.height / 2,
+  );
+  context.strokeStyle = palette.border;
+  context.lineWidth = 1;
+  context.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1);
+}
+
+function drawMediaBadge(
+  context: CanvasRenderingContext2D,
+  rect: CardImageRect,
+  media: MediaRecord,
+  previewLoaded: boolean,
+): void {
+  const scale = Math.min(1, rect.width / 44, rect.height / 44);
+  context.save();
+  if (media.type === 'video' && previewLoaded) {
+    const radius = 22 * scale;
+    const x = rect.x + rect.width / 2;
+    const y = rect.y + rect.height / 2;
+    context.fillStyle = 'rgba(0, 0, 0, 0.62)';
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#ffffff';
+    context.beginPath();
+    context.moveTo(x - radius * 0.24, y - radius * 0.44);
+    context.lineTo(x - radius * 0.24, y + radius * 0.44);
+    context.lineTo(x + radius * 0.48, y);
+    context.closePath();
+    context.fill();
+  }
+  const label = media.type === 'animated_gif' ? 'GIF' : formatCardMediaDuration(media.durationMs);
+  if (label) {
+    const fontSize = Math.max(8, Math.round(12 * scale));
+    context.font = `600 ${fontSize}px ${CARD_FONT_FAMILY}`;
+    const padding = Math.max(3, 6 * scale);
+    const metrics = context.measureText(label);
+    const width = metrics.width + padding * 2;
+    const height = fontSize + padding * 2;
+    if (width > rect.width - 8 || height > rect.height - 8) {
+      context.restore();
+      return;
+    }
+    const x = rect.x + rect.width - width - 8 * scale;
+    const y = rect.y + rect.height - height - 8 * scale;
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillRect(x, y, width, height);
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, x + width / 2, y + height / 2);
+  }
+  context.restore();
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -298,11 +375,8 @@ async function renderCardCanvas(
   options: { theme?: CardTheme; resources?: ImageResources; cardWidth?: number } = {},
 ): Promise<HTMLCanvasElement> {
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
-  if (media.some((item) => item.type !== 'photo')) {
-    throw new Error('推文卡片目前只支持照片');
-  }
   if (media.length > 4) {
-    throw new Error('推文卡片最多支持 4 张照片');
+    throw new Error('推文卡片最多支持 4 项媒体');
   }
 
   const resources = options.resources ?? new ImageResources();
@@ -311,24 +385,36 @@ async function renderCardCanvas(
   const translation = record.translation?.status === 'available' ? record.translation : undefined;
   let grokIcon: HTMLCanvasElement | undefined;
   let xIcon: HTMLCanvasElement | undefined;
-  const images: HTMLImageElement[] = [];
+  const cardMedia: LoadedCardMedia[] = media.map((item) => ({
+    media: item,
+    preview: getCardMediaPreview(item),
+  }));
   let canvas: HTMLCanvasElement | undefined;
   let avatar: LoadedAvatar | undefined;
   let completed = false;
   try {
-    // Two photos at a time bound concurrent decoding. Settle all started work before cleanup.
+    // Two preview images at a time bound concurrent decoding. Video/GIF previews
+    // degrade to a visible slot; photos retain the established fail-fast contract.
     const results = await Promise.allSettled([
       (async () => {
-        for (let index = 0; index < media.length; index += 2) {
+        for (let index = 0; index < cardMedia.length; index += 2) {
+          const pairMedia = cardMedia.slice(index, index + 2);
           const pair = await Promise.allSettled(
-            media.slice(index, index + 2).map(async (item) => {
-              if (!item.originalUrl) throw new Error('当前照片没有可用的原图地址');
-              return resources.load(item.originalUrl);
+            pairMedia.map(async (item) => {
+              if (!item.preview.url) {
+                if (item.media.type === 'photo') throw new Error('当前照片没有可用的原图地址');
+                return;
+              }
+              const image = await resources.load(item.preview.url);
+              item.preview.width = image.naturalWidth;
+              item.preview.height = image.naturalHeight;
+              item.image = image;
             }),
           );
-          for (const result of pair) if (result.status === 'fulfilled') images.push(result.value);
-          const failed = pair.find((result) => result.status === 'rejected');
-          if (failed?.status === 'rejected') throw failed.reason;
+          for (const [pairIndex, result] of pair.entries()) {
+            if (result.status === 'rejected' && pairMedia[pairIndex]!.media.type === 'photo')
+              throw result.reason;
+          }
         }
       })(),
       loadAvatar(record.author.avatarUrl, resources, palette.text).then((image) => {
@@ -357,15 +443,15 @@ async function renderCardCanvas(
       Math.min(
         CARD_MAX_WIDTH,
         options.cardWidth ??
-          (images.length
-            ? Math.max(...images.map((image) => image.naturalWidth))
+          (cardMedia.length
+            ? Math.max(...cardMedia.map((item) => item.preview.width))
             : CARD_TEXT_WIDTH),
       ),
     );
     const bodyFontSize = Math.max(18, Math.min(30, Math.round(estimatedWidth * 0.024)));
     context.font = `400 ${bodyFontSize}px ${CARD_FONT_FAMILY}`;
     const layout = calculateTweetCardLayout({
-      images: images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight })),
+      images: cardMedia.map((item) => ({ width: item.preview.width, height: item.preview.height })),
       text: record.text,
       translation: translation
         ? {
@@ -458,16 +544,20 @@ async function renderCardCanvas(
       }
     });
 
-    images.forEach((image, index) => {
+    cardMedia.forEach((item, index) => {
       const rect = layout.imageRects[index]!;
-      drawContainedImage(context, image, { ...rect, y: rect.y + layout.imageY }, palette);
+      const positionedRect = { ...rect, y: rect.y + layout.imageY };
+      if (item.image) drawContainedImage(context, item.image, positionedRect, palette);
+      else drawMediaPlaceholder(context, positionedRect, palette, item.media);
+      if (item.media.type !== 'photo')
+        drawMediaBadge(context, positionedRect, item.media, !!item.image);
     });
 
     resources.checkActive();
     completed = true;
     return canvas;
   } finally {
-    for (const image of images) releaseImage(image);
+    for (const item of cardMedia) if (item.image) releaseImage(item.image);
     if (avatar) releaseImage(avatar);
     if (grokIcon) releaseImage(grokIcon);
     if (xIcon) releaseImage(xIcon);
@@ -498,11 +588,11 @@ export async function renderTweetCard(
       const inset = 24 * CARD_RENDER_SCALE;
       const heading = 36 * CARD_RENDER_SCALE;
       const quoted = quote.record
-        ? await renderCardCanvas(
-            quote.record,
-            quote.record.media.filter((item) => item.type === 'photo'),
-            { theme, resources, cardWidth: (main.width - inset * 2) / CARD_RENDER_SCALE },
-          )
+        ? await renderCardCanvas(quote.record, quote.record.media, {
+            theme,
+            resources,
+            cardWidth: (main.width - inset * 2) / CARD_RENDER_SCALE,
+          })
         : undefined;
       if (quoted) canvases.push(quoted);
       // Very narrow cards may require fitting the minimum-width quoted card to the container.

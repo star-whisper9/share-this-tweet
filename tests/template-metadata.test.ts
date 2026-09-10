@@ -113,4 +113,32 @@ it('validates imported optional metadata while accepting older archives', () => 
       tweetRecords: [{ ...archive.tweetRecords[0], editIds: [{}] }],
     }),
   ).toThrow(StorageError);
+  expect(() =>
+    validateStorageArchive({
+      ...archive,
+      tweetRecords: [
+        {
+          ...archive.tweetRecords[0],
+          media: [
+            {
+              index: 1,
+              type: 'video',
+              previewUrl: 'https://pbs.twimg.com/media/preview.jpg',
+            },
+          ],
+        },
+      ],
+    }),
+  ).not.toThrow();
+  expect(() =>
+    validateStorageArchive({
+      ...archive,
+      tweetRecords: [
+        {
+          ...archive.tweetRecords[0],
+          media: [{ index: 1, type: 'video', previewUrl: 'https://example.com/preview.jpg' }],
+        },
+      ],
+    }),
+  ).toThrow(StorageError);
 });
