@@ -58,12 +58,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.4.0' }) } });
   vi.mocked(renderTweetCard).mockResolvedValue({ blob: png, width: 1600, height: 500 });
   vi.mocked(renderPhotoFrame).mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }));
   vi.mocked(detectCardTheme).mockReturnValue('light');
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.resetAllMocks();
   vi.restoreAllMocks();
 });
@@ -91,6 +93,21 @@ describe('export session', () => {
       expect(output.filename).toBe((file as File).name);
       expect(output.mediaIndex).toBeUndefined();
     }
+  });
+
+  it('passes all media to card rendering and records the first media identity', async () => {
+    const media = [video, photo(3)];
+    const withMedia = { ...record, media };
+    const session = new ExportSession(withMedia, settings);
+    await session.saveCard();
+    expect(renderTweetCard).toHaveBeenCalledWith(
+      withMedia,
+      media,
+      expect.objectContaining({ theme: 'light' }),
+    );
+    expect(recordOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ outputType: 'tweet-card', mediaIndex: 2 }),
+    );
   });
 
   it('suppresses duplicate clicks and stale completion after the session is disposed', async () => {
@@ -176,6 +193,41 @@ describe('export session', () => {
     expect(downloadBlob).toHaveBeenCalledOnce();
     expect(session.action('save-card').status).toBe('success');
     expect(session.status.state).toBe('error');
+  });
+
+  it('writes source only to dynamic media in a mixed batch and records actual output types', async () => {
+    const session = mixedSession();
+    await session.saveSelected('sourced');
+    const calls = vi.mocked(downloadMedia).mock.calls;
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.[2]).toBeUndefined();
+    expect(calls[1]?.[1]).toBe('42_2_source.mp4');
+    expect(calls[1]?.[2]).toMatchObject({
+      schemaVersion: 1,
+      tweetId: '42',
+      media: { index: 2, type: 'video' },
+      tool: { name: 'share-this-tweet', version: '0.4.0' },
+    });
+    expect(calls[2]?.[2]).toBeUndefined();
+    expect(vi.mocked(recordOutput).mock.calls.map(([output]) => output.outputType)).toEqual([
+      'original-media',
+      'sourced-media',
+      'original-media',
+    ]);
+  });
+
+  it('does not silently fall back to an original download when source writing fails', async () => {
+    vi.mocked(downloadMedia).mockRejectedValueOnce(new Error('unsupported MP4'));
+    const session = new ExportSession({ ...record, media: [video] }, settings);
+    await session.saveSelected('sourced');
+    expect(downloadMedia).toHaveBeenCalledOnce();
+    expect(downloadMedia).toHaveBeenCalledWith(
+      video,
+      '42_2_source.mp4',
+      expect.objectContaining({ tweetId: '42' }),
+    );
+    expect(recordOutput).not.toHaveBeenCalled();
+    expect(session.mediaAction('sourced').status).toBe('error');
   });
 });
 

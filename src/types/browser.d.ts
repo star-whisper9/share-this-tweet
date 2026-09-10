@@ -7,6 +7,7 @@ interface BrowserStorageArea {
 
 interface BrowserRuntime {
   getURL(path: string): string;
+  getManifest(): { version: string };
   sendMessage(message: unknown): Promise<unknown>;
   openOptionsPage(): Promise<void>;
   onMessage: {
@@ -16,6 +17,22 @@ interface BrowserRuntime {
 
 interface BrowserDownloads {
   download(options: { url: string; filename?: string; saveAs?: boolean }): Promise<number>;
+  search(query: { id: number }): Promise<BrowserDownloadItem[]>;
+  onChanged: {
+    addListener(listener: (delta: BrowserDownloadDelta) => void): void;
+  };
+}
+
+interface BrowserDownloadItem {
+  id: number;
+  state: 'in_progress' | 'complete' | 'interrupted';
+  error?: string;
+}
+
+interface BrowserDownloadDelta {
+  id: number;
+  state?: { current?: 'in_progress' | 'complete' | 'interrupted' };
+  error?: { current?: string };
 }
 
 declare const browser: {

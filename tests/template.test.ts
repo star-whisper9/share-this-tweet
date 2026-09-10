@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildMediaFilename, buildCardFilename, sanitizeFilename } from '../src/core/filename.js';
+import {
+  buildMediaFilename,
+  buildCardFilename,
+  buildSourcedMediaFilename,
+  sanitizeFilename,
+} from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
 import { renderTemplate, TemplateError } from '../src/core/template.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
@@ -55,6 +60,17 @@ describe('buildMediaFilename', () => {
   it('sanitizes filename characters and forces the actual media extension', () => {
     expect(buildMediaFilename(record, photo, 'a:/bad name.gif')).toBe('a__bad name.jpg');
     expect(sanitizeFilename('  hello\nworld  ')).toBe('hello_world');
+  });
+
+  it('reserves a visible source suffix for long video filenames', () => {
+    const video: MediaRecord = {
+      index: 1,
+      type: 'video',
+      variants: [{ url: 'https://video.twimg.com/test.mp4', mime: 'video/mp4' }],
+    };
+    const filename = buildSourcedMediaFilename(record, video, `${'长'.repeat(180)}.mp4`);
+    expect([...filename]).toHaveLength(180);
+    expect(filename.endsWith('_source.mp4')).toBe(true);
   });
 });
 

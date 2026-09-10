@@ -15,6 +15,7 @@ const entries = [
   ['src/page/interceptor.ts', 'page/interceptor.js'],
   ['src/options/options.ts', 'options/options.js'],
   ['src/popup/popup.ts', 'popup/popup.js'],
+  ['src/workers/media-source.worker.ts', 'workers/media-source.worker.js'],
 ];
 
 for (const [source, output] of entries) {

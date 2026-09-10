@@ -41,4 +41,14 @@ describe('storage record models', () => {
       }),
     ).toThrow(StorageError);
   });
+
+  it('accepts the distinct sourced-media output type', () => {
+    expect(
+      createOutputRecord(
+        { tweetId: '42', outputType: 'sourced-media', filename: 'video_source.mp4', mediaIndex: 1 },
+        'output-2',
+        '2026-09-10T10:00:00.000Z',
+      ).outputType,
+    ).toBe('sourced-media');
+  });
 });

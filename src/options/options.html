@@ -363,6 +363,44 @@
               <input type="file" data-record-import accept="application/json" hidden />
               <output data-record-status role="status" aria-live="polite"></output>
             </div>
+            <section class="source-media-reader" aria-labelledby="source-media-heading">
+              <div>
+                <strong id="source-media-heading">读取 MP4 中的来源</strong>
+                <p>文件只在本机处理，不会上传，也不会自动加入来源记录。</p>
+              </div>
+              <div
+                class="source-media-drop"
+                data-source-media-drop
+                role="button"
+                tabindex="0"
+                aria-describedby="source-media-status"
+              >
+                选择或拖入 MP4 文件
+              </div>
+              <input type="file" data-source-media-input accept="video/mp4,.mp4" hidden />
+              <output
+                id="source-media-status"
+                data-source-media-status
+                role="status"
+                aria-live="polite"
+              ></output>
+              <dl class="source-media-result" data-source-media-result hidden>
+                <dt>文件</dt>
+                <dd data-source-file></dd>
+                <dt>来源发布者</dt>
+                <dd data-source-publisher></dd>
+                <dt>Tweet ID</dt>
+                <dd data-source-tweet-id></dd>
+                <dt>媒体</dt>
+                <dd data-source-media-kind></dd>
+                <dt>发布时间</dt>
+                <dd data-source-published-at></dd>
+                <dt>写入工具</dt>
+                <dd data-source-tool></dd>
+                <dt>原推</dt>
+                <dd><a data-source-link target="_blank" rel="noopener noreferrer">打开原推</a></dd>
+              </dl>
+            </section>
             <p class="records-summary" data-record-summary>正在读取来源记录…</p>
             <div class="records-list" data-record-list role="list"></div>
             <p class="records-empty" data-record-empty hidden>还没有找到来源记录。</p>

@@ -1,4 +1,5 @@
 import { IMAGE_PALETTES, detectImageTheme } from '../core/image-theme.js';
+import { readMp4SourceInWorker } from '../core/media-source-client.js';
 import { mountTemplateGuide } from './template-guide.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
@@ -13,6 +14,7 @@ import {
 import type { FrameOrientation } from '../core/frame.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import type { OutputRecord, StorageArchive, StoredTweetRecord } from '../shared/storage-model.js';
+import type { MediaSourceMetadata } from '../shared/media-source.js';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -59,10 +61,18 @@ const recordStatus = document.querySelector<HTMLOutputElement>('[data-record-sta
 const recordDetail = document.querySelector<HTMLElement>('[data-record-detail]');
 const recordDetailEmpty = document.querySelector<HTMLElement>('[data-record-detail-empty]');
 const recordImport = document.querySelector<HTMLInputElement>('[data-record-import]');
+const sourceMediaInput = document.querySelector<HTMLInputElement>('[data-source-media-input]');
+const sourceMediaDrop = document.querySelector<HTMLElement>('[data-source-media-drop]');
+const sourceMediaStatus = document.querySelector<HTMLOutputElement>('[data-source-media-status]');
+const sourceMediaResult = document.querySelector<HTMLElement>('[data-source-media-result]');
 let storedTweetRecords: StoredTweetRecord[] = [];
 let storedOutputRecords: OutputRecord[] = [];
 let selectedRecordId = '';
 let recordsLoading = false;
+let sourceReadController: AbortController | undefined;
+// The reader only inspects bounded MP4 boxes in its Worker, so it can accept
+// larger local files than the background network-download path buffers.
+const MAX_LOCAL_SOURCE_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 const sampleRecord: TweetRecord = {
   tweetId: '1234567890',
   url: 'https://x.com/example/status/1234567890',
@@ -252,6 +262,76 @@ function setRecordStatus(message: string): void {
   if (recordStatus) recordStatus.textContent = message;
 }
 
+function setSourceMediaStatus(message: string): void {
+  if (sourceMediaStatus) sourceMediaStatus.textContent = message;
+}
+
+function verifiedSourceUrl(source: MediaSourceMetadata): string {
+  const url = new URL(source.tweetUrl);
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== 'x.com' ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !new RegExp(`^/(?:[A-Za-z0-9_]{1,15}|i)/status/${source.tweetId}$`).test(url.pathname)
+  )
+    throw new Error('文件中的原推链接未通过安全检查');
+  return url.href;
+}
+
+function renderSourceMedia(source: MediaSourceMetadata, filename: string): void {
+  const update = (selector: string, value: string): void => {
+    const element = sourceMediaResult?.querySelector<HTMLElement>(selector);
+    if (element) element.textContent = value;
+  };
+  update('[data-source-file]', filename);
+  update('[data-source-publisher]', `${source.publisher.name} · ${source.publisher.handle}`);
+  update('[data-source-tweet-id]', source.tweetId);
+  update(
+    '[data-source-media-kind]',
+    `${source.media.type === 'animated_gif' ? 'GIF 视频' : '视频'} · 第 ${source.media.index} 项`,
+  );
+  update(
+    '[data-source-published-at]',
+    source.publishedAt ? formatRecordDate(source.publishedAt) : '未知',
+  );
+  update('[data-source-tool]', `${source.tool.name} ${source.tool.version}`);
+  const link = sourceMediaResult?.querySelector<HTMLAnchorElement>('[data-source-link]');
+  if (link) link.href = verifiedSourceUrl(source);
+  if (sourceMediaResult) sourceMediaResult.hidden = false;
+}
+
+async function readSourceMedia(file: File): Promise<void> {
+  sourceReadController?.abort(new Error('已选择另一个文件'));
+  const controller = new AbortController();
+  sourceReadController = controller;
+  if (sourceMediaResult) sourceMediaResult.hidden = true;
+  if (file.size > MAX_LOCAL_SOURCE_FILE_SIZE) {
+    setSourceMediaStatus('读取失败：文件超过 2 GiB。');
+    if (sourceReadController === controller) sourceReadController = undefined;
+    return;
+  }
+  setSourceMediaStatus(`正在本机读取 ${file.name}…`);
+  try {
+    const source = await readMp4SourceInWorker(file, { signal: controller.signal });
+    if (sourceReadController !== controller) return;
+    if (!source) {
+      setSourceMediaStatus('这个 MP4 没有“分享有据”写入的来源信息。');
+      return;
+    }
+    renderSourceMedia(source, file.name);
+    setSourceMediaStatus('已读取来源。文件未上传，也没有加入来源记录。');
+  } catch (error) {
+    if (sourceReadController !== controller) return;
+    setSourceMediaStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (sourceReadController === controller) sourceReadController = undefined;
+  }
+}
+
 function formatRecordDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
@@ -322,6 +402,7 @@ function renderRecordDetail(): void {
   const outputs = getRecordOutputs(record.tweetId);
   const outputLabels: Record<string, string> = {
     'original-media': '原始媒体',
+    'sourced-media': '来源媒体',
     'framed-image': '来源画框',
     'tweet-card': '推文卡片',
     'shared-text': '分享文本',
@@ -544,6 +625,31 @@ recordImport?.addEventListener('change', () => {
   recordImport.value = '';
   if (file) void importRecords(file);
 });
+sourceMediaInput?.addEventListener('change', () => {
+  const file = sourceMediaInput.files?.[0];
+  sourceMediaInput.value = '';
+  if (file) void readSourceMedia(file);
+});
+sourceMediaDrop?.addEventListener('click', () => sourceMediaInput?.click());
+sourceMediaDrop?.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  sourceMediaInput?.click();
+});
+for (const type of ['dragenter', 'dragover'] as const)
+  sourceMediaDrop?.addEventListener(type, (event: DragEvent) => {
+    event.preventDefault();
+    if (sourceMediaDrop) sourceMediaDrop.dataset.dragging = 'true';
+  });
+for (const type of ['dragleave', 'drop'] as const)
+  sourceMediaDrop?.addEventListener(type, (event: DragEvent) => {
+    event.preventDefault();
+    if (sourceMediaDrop) delete sourceMediaDrop.dataset.dragging;
+    if (type === 'drop') {
+      const file = event.dataTransfer?.files[0];
+      if (file) void readSourceMedia(file);
+    }
+  });
 document.querySelector('[data-record-delete]')?.addEventListener('click', () => {
   void deleteSelectedRecord();
 });

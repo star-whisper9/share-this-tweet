@@ -1,4 +1,8 @@
-import { buildFrameFilename, buildMediaFilename } from '../core/filename.js';
+import {
+  buildFrameFilename,
+  buildMediaFilename,
+  buildSourcedMediaFilename,
+} from '../core/filename.js';
 import { FRAME_ORIENTATIONS, type FrameOrientation } from '../core/frame.js';
 import type { MediaRecord } from '../shared/model.js';
 import type { ExportSession } from './export-session.js';
@@ -108,8 +112,12 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
   const batch = selection.size > 1;
   const photo = media.type === 'photo';
   const state = session.mediaAction('original');
+  const sourcedState = session.mediaAction('sourced');
   wrapper.dataset.state = state.status;
-  const selectedPhotos = selection.selected(record.media).some((item) => item.type === 'photo');
+  const selectedMedia = selection.selected(record.media);
+  const selectedPhotos = selectedMedia.some((item) => item.type === 'photo');
+  const selectedDynamicMedia = selectedMedia.find((item) => item.type !== 'photo');
+  const selectedDynamic = selectedDynamicMedia !== undefined;
   if (selection.size === 0 || photo || (batch && selectedPhotos)) {
     wrapper.append(frameActions(session, media));
     if (batch && selection.selected(record.media).some((item) => item.type !== 'photo'))
@@ -146,16 +154,23 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
     label: actionLabel(state, labels),
     image: 'download',
     state,
-    primary: batch || !photo,
+    primary: !selectedDynamic,
     disabled: session.isSavingBatch || selection.size === 0,
     onClick: () => {
       void session.saveSelected('original');
     },
   });
   let filename: string | undefined;
+  let sourcedFilename: string | undefined;
   if (selection.size > 0) {
     try {
       filename = buildMediaFilename(record, media, settings.filenameTemplate);
+      if (selectedDynamicMedia)
+        sourcedFilename = buildSourcedMediaFilename(
+          record,
+          selectedDynamicMedia,
+          settings.filenameTemplate,
+        );
     } catch (error) {
       button.disabled = true;
       wrapper.append(
@@ -166,6 +181,39 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
       );
     }
   }
+  if (selectedDynamic) {
+    const sourceLabels = batch
+      ? {
+          idle: `保存已选媒体并保留来源（${selection.size}）`,
+          loading: '正在写入来源并保存…',
+          success: `再次保存并保留来源（${selection.size}）`,
+          error: '重试写入来源并保存',
+        }
+      : {
+          idle: `保存${mediaLabel}并保留来源`,
+          loading: '正在写入来源并保存…',
+          success: `再次保存${mediaLabel}并保留来源`,
+          error: '重试写入来源并保存',
+        };
+    wrapper.append(
+      actionButton({
+        key: batch
+          ? `download-sourced-selected-${record.tweetId}`
+          : `download-sourced-${record.tweetId}-${media.index}`,
+        label: actionLabel(sourcedState, sourceLabels),
+        description: batch
+          ? '视频和 GIF 写入来源；照片保持原样'
+          : '不覆盖画面与声音；平台转码后可能被清除',
+        image: 'download',
+        state: sourcedState,
+        primary: true,
+        disabled: session.isSavingBatch || selection.size === 0,
+        onClick: () => {
+          void session.saveSelected('sourced');
+        },
+      }),
+    );
+  }
   wrapper.append(button);
   if (state.error)
     wrapper.append(
@@ -174,11 +222,21 @@ function mediaActions(session: ExportSession, media: MediaRecord): HTMLElement {
         state.error,
       ),
     );
+  if (sourcedState.error)
+    wrapper.append(
+      errorDetails(
+        batch
+          ? '部分媒体未能写入来源，请重试或明确选择原样保存。'
+          : '没能写入来源，请重试或明确选择原样保存。',
+        sourcedState.error,
+      ),
+    );
   if (filename) {
     const details = node('details', 'stt-file-details');
     details.append(node('summary', '', '查看保存文件名'));
     const list = node('dl', '');
     list.append(node('dt', '', photo ? '原图' : '视频'), node('dd', '', filename));
+    if (sourcedFilename) list.append(node('dt', '', '保留来源'), node('dd', '', sourcedFilename));
     if (photo) {
       let frameFilename: string;
       try {

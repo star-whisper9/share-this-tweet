@@ -14,6 +14,7 @@ export const TWEET_RECORDS_STORE = 'tweetRecords';
 export const OUTPUT_RECORDS_STORE = 'outputRecords';
 const OUTPUT_TYPES: OutputType[] = [
   'original-media',
+  'sourced-media',
   'framed-image',
   'tweet-card',
   'shared-text',

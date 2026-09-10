@@ -1,7 +1,13 @@
 import type { TweetRecord } from './model.js';
 
 export type OutputType =
-  'original-media' | 'framed-image' | 'tweet-card' | 'shared-text' | 'shared-image' | 'copied-text';
+  | 'original-media'
+  | 'sourced-media'
+  | 'framed-image'
+  | 'tweet-card'
+  | 'shared-text'
+  | 'shared-image'
+  | 'copied-text';
 
 export interface StoredTweetRecord extends TweetRecord {
   savedAt: string;

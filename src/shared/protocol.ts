@@ -1,4 +1,5 @@
 import type { TweetRecord } from './model.js';
+import type { MediaSourceMetadata } from './media-source.js';
 import type {
   OutputRecord,
   OutputRecordInput,
@@ -16,9 +17,17 @@ export type ExtensionMessage =
   | { type: 'clear-storage-records' }
   | { type: 'export-storage-records' }
   | { type: 'import-storage-records'; archive: StorageArchive }
-  | { type: 'download-media'; url: string; filename: string };
+  | { type: 'download-media'; url: string; filename: string }
+  | {
+      type: 'download-sourced-media';
+      url: string;
+      filename: string;
+      source: MediaSourceMetadata;
+    }
+  | { type: 'prepare-sourced-media'; url: string; source: MediaSourceMetadata };
 
 export type DownloadMediaResponse = { ok: true; downloadId: number } | { ok: false; error: string };
+export type PrepareSourcedMediaResponse = { ok: true; blob: Blob } | { ok: false; error: string };
 
 export type StorageMutationResponse = { ok: true } | { ok: false; error: string };
 export type StoredTweetRecordResponse =

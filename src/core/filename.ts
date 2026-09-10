@@ -39,6 +39,19 @@ export function buildMediaFilename(
   return forceExtension(sanitizeFilename(rendered), target.extension);
 }
 
+export function buildSourcedMediaFilename(
+  record: TweetRecord,
+  media: MediaRecord,
+  template = DEFAULT_FILENAME_TEMPLATE,
+): string {
+  const filename = buildMediaFilename(record, media, template);
+  const extension = getMediaDownloadTarget(media).extension;
+  const base = filename.slice(0, -(extension.length + 1));
+  const suffix = `_source.${extension}`;
+  const trimmedBase = [...base].slice(0, Math.max(1, MAX_FILENAME_LENGTH - suffix.length)).join('');
+  return `${trimmedBase}${suffix}`;
+}
+
 export function buildFrameFilename(
   record: TweetRecord,
   media: MediaRecord,

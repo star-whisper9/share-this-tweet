@@ -96,15 +96,6 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
   const save = session.action('save-card');
   if (save.status === 'error')
     actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
-  if (
-    [...session.record.media, ...(session.quoted?.record.media ?? [])].some(
-      (media) => media.type !== 'photo',
-    )
-  ) {
-    actions.append(
-      node('p', 'stt-sheet-note', '推文卡片不包含视频或 GIF，仅保留正文、照片和来源。'),
-    );
-  }
   for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
     const details = group.querySelector<HTMLDetailsElement>('.stt-file-details');
     if (details) details.open = expandedFiles.has(group.dataset.tweetId);

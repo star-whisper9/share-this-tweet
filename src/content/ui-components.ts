@@ -54,9 +54,10 @@ export function extensionIcon(size: 'small' | 'brand'): HTMLImageElement {
 }
 // Only use already-known media on X's image host (or local generated previews).
 export function thumbnailURL(media: MediaRecord): string | undefined {
-  if (media.type !== 'photo' || !media.originalUrl) return undefined;
+  const source = media.type === 'photo' ? media.originalUrl : media.previewUrl;
+  if (!source) return undefined;
   try {
-    const url = new URL(media.originalUrl, location.href);
+    const url = new URL(source, location.href);
     if (url.protocol === 'blob:' && url.origin === location.origin) return url.href;
     if (url.protocol !== 'https:' || url.hostname !== 'pbs.twimg.com') return undefined;
     url.searchParams.set('name', 'small');

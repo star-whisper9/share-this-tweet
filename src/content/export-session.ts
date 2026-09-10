@@ -1,4 +1,9 @@
-import { buildCardFilename, buildFrameFilename, buildMediaFilename } from '../core/filename.js';
+import {
+  buildCardFilename,
+  buildFrameFilename,
+  buildMediaFilename,
+  buildSourcedMediaFilename,
+} from '../core/filename.js';
 import { ImageResources } from '../core/image-resources.js';
 import { detectCardTheme, renderTweetCard, type CardTheme } from '../core/card.js';
 import { downloadBlob, downloadMedia } from '../core/download.js';
@@ -8,6 +13,7 @@ import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import type { OutputRecordInput } from '../shared/storage-model.js';
 import type { ExtensionSettings } from '../shared/settings.js';
+import { createMediaSourceMetadata } from '../shared/media-source.js';
 import { MediaSelection } from './media-selection.js';
 
 export type ActionStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -20,7 +26,7 @@ export interface SheetStatus {
   message: string;
 }
 export type TweetAction = 'copy-text' | 'save-card';
-export type MediaMode = 'original' | 'framed';
+export type MediaMode = 'original' | 'framed' | 'sourced';
 interface ActionMessages {
   loading: string;
   success: string;
@@ -35,10 +41,14 @@ const IDLE: Readonly<ActionState> = Object.freeze({ status: 'idle' });
 const directionLabels: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
 
 function mediaKey(index: number, mode: MediaMode, orientation: FrameOrientation): string {
-  return mode === 'original' ? `media:${index}` : `frame:${index}:${orientation}`;
+  if (mode === 'original') return `media:${index}`;
+  if (mode === 'sourced') return `source:${index}`;
+  return `frame:${index}:${orientation}`;
 }
 function batchKey(mode: MediaMode, orientation: FrameOrientation): string {
-  return mode === 'original' ? 'batch:original' : `batch:frame:${orientation}`;
+  if (mode === 'original') return 'batch:original';
+  if (mode === 'sourced') return 'batch:sourced';
+  return `batch:frame:${orientation}`;
 }
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -217,15 +227,17 @@ export class ExportSession {
   }
 
   private async getCard({ record, settings, theme }: ExportContext): Promise<File> {
-    const photos = record.media.filter((media) => media.type === 'photo');
-    const filename = buildCardFilename(record, photos[0], settings.filenameTemplate);
+    const filename = buildCardFilename(record, record.media[0], settings.filenameTemplate);
     const key = JSON.stringify([record, theme, filename]);
     if (this.cardKey === key && this.cardFile) return this.cardFile;
     if (this.cardPending?.key === key) return this.cardPending.promise;
     this.cardFile = undefined;
     this.cardKey = key;
     const promise = (async () => {
-      const result = await renderTweetCard(record, photos, { theme, resources: this.resources });
+      const result = await renderTweetCard(record, record.media, {
+        theme,
+        resources: this.resources,
+      });
       const file = new File([result.blob], filename, { type: 'image/png' });
       if (this.active && this.cardKey === key && file.size <= 32 * 1024 * 1024)
         this.cardFile = file;
@@ -240,12 +252,12 @@ export class ExportSession {
   }
 
   private cardOutput(record: TweetRecord, file: File): OutputRecordInput {
-    const photo = record.media.find((media) => media.type === 'photo');
+    const firstMedia = record.media[0];
     return {
       tweetId: record.tweetId,
       outputType: 'tweet-card',
       filename: file.name,
-      ...(photo ? { mediaIndex: photo.index } : {}),
+      ...(firstMedia ? { mediaIndex: firstMedia.index } : {}),
     };
   }
 
@@ -275,6 +287,7 @@ export class ExportSession {
     const { record, settings } = context;
     let filename: string;
     const framed = mode === 'framed' && media.type === 'photo';
+    const sourced = mode === 'sourced' && media.type !== 'photo';
     if (framed) {
       const blob = await renderPhotoFrame(
         record,
@@ -295,12 +308,17 @@ export class ExportSession {
       if (!this.active) return;
       downloadBlob(blob, filename);
     } else {
-      filename = buildMediaFilename(record, media, settings.filenameTemplate);
-      await downloadMedia(media, filename);
+      filename = sourced
+        ? buildSourcedMediaFilename(record, media, settings.filenameTemplate)
+        : buildMediaFilename(record, media, settings.filenameTemplate);
+      const source = sourced
+        ? createMediaSourceMetadata(record, media, browser.runtime.getManifest().version)
+        : undefined;
+      await downloadMedia(media, filename, source);
     }
     return this.persist(record, {
       tweetId: record.tweetId,
-      outputType: framed ? 'framed-image' : 'original-media',
+      outputType: framed ? 'framed-image' : sourced ? 'sourced-media' : 'original-media',
       filename,
       mediaIndex: media.index,
     });
@@ -317,7 +335,9 @@ export class ExportSession {
     const success =
       mode === 'framed'
         ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${directionLabels[orientation]}画框，视频和 GIF 原样保存。`
-        : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
+        : mode === 'sourced'
+          ? `已交给浏览器保存，共 ${selected.length} 项媒体；视频和 GIF 已写入来源，照片原样保存。`
+          : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
     this.batchRunning = batch;
     try {
       await this.run(
@@ -328,7 +348,12 @@ export class ExportSession {
           const warnings: string[] = [];
           for (const [index, media] of selected.entries()) {
             if (!this.active) return;
-            const itemMode = mode === 'framed' && media.type === 'photo' ? 'framed' : 'original';
+            const itemMode =
+              mode === 'framed' && media.type === 'photo'
+                ? 'framed'
+                : mode === 'sourced' && media.type !== 'photo'
+                  ? 'sourced'
+                  : 'original';
             const itemKey = mediaKey(media.index, itemMode, orientation);
             try {
               const warning = await this.exportMedia(context, media, mode, orientation);

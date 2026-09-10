@@ -1,5 +1,6 @@
 import type { MediaRecord } from '../shared/model.js';
-import type { DownloadMediaResponse } from '../shared/protocol.js';
+import type { MediaSourceMetadata } from '../shared/media-source.js';
+import type { DownloadMediaResponse, PrepareSourcedMediaResponse } from '../shared/protocol.js';
 import { getMediaDownloadTarget } from './media.js';
 
 export function isAndroidUserAgent(userAgent: string): boolean {
@@ -13,6 +14,14 @@ function isDownloadResponse(value: unknown): value is DownloadMediaResponse {
     'ok' in value &&
     typeof (value as { ok?: unknown }).ok === 'boolean'
   );
+}
+
+function isPreparedMediaResponse(value: unknown): value is PrepareSourcedMediaResponse {
+  if (typeof value !== 'object' || value === null || !('ok' in value)) return false;
+  const response = value as { ok?: unknown; blob?: unknown; error?: unknown };
+  return response.ok === true
+    ? response.blob instanceof Blob
+    : response.ok === false && typeof response.error === 'string';
 }
 
 async function downloadOnAndroid(url: string, filename: string): Promise<void> {
@@ -53,17 +62,33 @@ export function downloadBlob(blob: Blob, filename: string): void {
   }, 1000);
 }
 
-export async function downloadMedia(media: MediaRecord, filename: string): Promise<void> {
+export async function downloadMedia(
+  media: MediaRecord,
+  filename: string,
+  source?: MediaSourceMetadata,
+): Promise<void> {
   const { url } = getMediaDownloadTarget(media);
   if (isAndroidUserAgent(navigator.userAgent)) {
+    if (source) {
+      const prepared = await browser.runtime.sendMessage({
+        type: 'prepare-sourced-media',
+        url,
+        source,
+      });
+      if (!isPreparedMediaResponse(prepared)) throw new Error('来源处理服务返回了无效结果');
+      if (!prepared.ok) throw new Error(prepared.error);
+      downloadBlob(prepared.blob, filename);
+      return;
+    }
     await downloadOnAndroid(url, filename);
     return;
   }
 
   const response = await browser.runtime.sendMessage({
-    type: 'download-media',
+    type: source ? 'download-sourced-media' : 'download-media',
     url,
     filename,
+    ...(source ? { source } : {}),
   });
   if (!isDownloadResponse(response)) throw new Error('下载服务返回了无效结果');
   if (!response.ok) throw new Error(response.error);
