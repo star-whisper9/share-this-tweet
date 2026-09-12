@@ -7,7 +7,8 @@
 <p align="center">分享喜欢，也留下出处。</p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.4.0-blue" alt="版本 0.4.0"></a>
+  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/share-this-tweet/"><img src="https://img.shields.io/amo/v/share-this-tweet?label=AMO&amp;logo=firefoxbrowser&amp;logoColor=white&amp;color=FF7139" alt="AMO 商店版本"></a>
+  <a href="https://github.com/star-whisper9/share-this-tweet/releases/latest"><img src="https://img.shields.io/github/v/release/star-whisper9/share-this-tweet?display_name=tag&amp;label=Unlisted&amp;logo=github&amp;logoColor=white&amp;color=blue" alt="GitHub Releases · Unlisted 版本"></a>
   <img src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&amp;logoColor=white" alt="支持 Firefox">
   <img src="https://img.shields.io/badge/Android-experimental-3DDC84?logo=android&amp;logoColor=white" alt="Android 初步支持">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="许可证 GPL-3.0"></a>
@@ -17,9 +18,10 @@
 
 适用于桌面 Firefox，也支持 Firefox Android。
 
-当前版本 **v0.4.0** · [下载安装包](https://github.com/star-whisper9/share-this-tweet/releases) · [安装说明](#安装) · [更新记录](CHANGELOG.md)
+当前项目版本 **v0.4.0** · **[从 AMO 安装](https://addons.mozilla.org/zh-CN/firefox/addon/share-this-tweet/)** · [安装说明](#安装) · [更新记录](CHANGELOG.md)
 
-> [!IMPORTANT] 出处与版权
+> [!IMPORTANT]
+> 
 > 保留出处的初衷是分享能留下正确署名。
 > **这不代表你自动获得了原作者授权**，你仍应在合理的、不侵犯原作者权益的情况下分享 TA 们的作品！
 
@@ -93,9 +95,13 @@ X 提供译文时，卡片会同时保留译文和原文，阅读与对照都方
 
 ## 安装
 
-Firefox 附加组件商店（AMO）版本仍在审核中，目前先通过 [GitHub Releases](https://github.com/star-whisper9/share-this-tweet/releases) 提供 **Mozilla 签名的 Unlisted 安装包**。Unlisted 表示自行分发，暂时无法在商店中搜索安装。
+### 推荐：从 Firefox 附加组件商店安装
 
-在最新版本的 **Assets** 中下载以 **`.xpi`** 结尾的文件，保留原文件直接安装，无需解压。Release 中的源码压缩包用于查看或构建源码。
+**[前往 AMO 安装「分享有据」](https://addons.mozilla.org/zh-CN/firefox/addon/share-this-tweet/)**
+
+使用桌面 Firefox 或 Firefox Android 打开商店页面，点击“**添加到 Firefox**”，按提示确认安装即可。无需手动下载 `.xpi`，也无需解锁 Firefox Android 的隐藏安装菜单。
+
+安装后，请保持扩展自动更新开启，后续商店版本可由 Firefox 自动更新。
 
 | 使用环境        | 最低版本 |
 | --------------- | -------- |
@@ -104,14 +110,28 @@ Firefox 附加组件商店（AMO）版本仍在审核中，目前先通过 [GitH
 
 Android 已进行初步适配，兼容性仍在完善。请使用 Firefox 浏览器打开 X；扩展不会在 X 的独立 App 中运行。
 
-### 桌面 Firefox
+本文介绍当前项目版本的功能。AMO 与 GitHub Releases 的版本可能不同，请以顶部对应渠道的版本徽章及发布页面为准。
+
+> [!IMPORTANT]
+> **GitHub Releases 提供的 Unlisted 版本需要手动更新**，当前不会自动从 GitHub Releases 获取新版本。日常使用推荐安装 AMO 商店版。
+
+<details>
+<summary>备用方式：从 GitHub Releases 安装 Unlisted 版本（需手动更新）</summary>
+
+无法通过 AMO 安装，或需要使用 GitHub Releases 中的安装包时，可以采用以下方式。
+
+[GitHub Releases](https://github.com/star-whisper9/share-this-tweet/releases) 提供 **Mozilla 签名的 Unlisted 安装包**。Unlisted 表示自行分发，这类安装包不通过 AMO 商店列表分发，但仍经过 Mozilla 签名。
+
+在最新版本的 **Assets** 中下载以 **`.xpi`** 结尾的文件，保留原文件直接安装，无需解压。Release 中的源码压缩包用于查看或构建源码。
+
+#### 桌面 Firefox
 
 1. 从 [Releases](https://github.com/star-whisper9/share-this-tweet/releases) 下载 `.xpi` 安装包。
 2. 在 Firefox 中打开“**附加组件和主题**”，或在地址栏输入 `about:addons`。
 3. 点击齿轮菜单，选择“**从文件安装附加组件**”，选中刚下载的 `.xpi` 文件。
 4. 按提示确认添加，完成后打开 X 推文详情页即可使用。
 
-### Android Firefox
+#### Android Firefox
 
 首次从文件安装，需要先解锁 Firefox 内的隐藏安装菜单，也就是通常说的开发者模式：
 
@@ -124,11 +144,15 @@ Android 已进行初步适配，兼容性仍在完善。请使用 Firefox 浏览
 
 这里只需解锁 Firefox 自己的菜单，无需开启 Android 系统开发者选项或 USB 调试。若没有看到安装入口，先确认 Firefox 已更新，再重复点击标志的步骤。以上安装流程可参照 [Mozilla 官方说明](https://extensionworkshop.com/documentation/publish/install-self-distributed/)。
 
-### 如何更新
+#### 手动更新
 
-当前版本**不会自动从 GitHub Releases 更新**。有新版本时，下载新的 `.xpi`，重复对应平台的安装步骤即可，无需先卸载；卸载会影响本地设置与来源记录。
+**GitHub Releases 版本当前不提供自动更新，需要手动下载安装新版。**
 
-安装后的版本号可能显示为 `0.4.0.1` 这样的四段数字，末尾数字用于区分同一版本的签名安装包。
+有新版本时，下载新的 `.xpi`，重复对应平台的安装步骤即可，**无需先卸载**。卸载会影响本地设置与来源记录；更新前也可以在设置页导出来源记录备份。
+
+GitHub 安装包的版本号可能显示为 `0.4.0.1` 这样的四段数字，末尾数字用于区分同一版本的签名安装包。
+
+</details>
 
 <details>
 <summary>桌面 Firefox：本地构建与临时加载</summary>
