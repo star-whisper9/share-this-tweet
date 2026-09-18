@@ -151,9 +151,6 @@ function readSettings(): ExtensionSettings {
       ? (selectedOrientation as FrameOrientation)
       : DEFAULT_SETTINGS.frameOrientation,
     textTemplate: inputs.textTemplate?.value ?? DEFAULT_SETTINGS.textTemplate,
-    stitchFrame:
-      document.querySelector<HTMLButtonElement>('[data-stitch-frame][aria-pressed="true"]')?.dataset
-        .stitchFrame === 'true',
     stitchStyle:
       document.querySelector<HTMLButtonElement>('[data-stitch-style][aria-pressed="true"]')?.dataset
         .stitchStyle === 'gallery'
@@ -244,7 +241,6 @@ function updateDraft(announce = true): void {
   dirty =
     keys.some((key) => settings[key] !== baseline[key]) ||
     settings.frameOrientation !== baseline.frameOrientation ||
-    settings.stitchFrame !== baseline.stitchFrame ||
     settings.stitchStyle !== baseline.stitchStyle;
   updatePresetSelection(settings);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
@@ -259,10 +255,7 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
-  for (const [attribute, value] of [
-    ['data-stitch-frame', String(settings.stitchFrame)],
-    ['data-stitch-style', settings.stitchStyle],
-  ]) {
+  for (const [attribute, value] of [['data-stitch-style', settings.stitchStyle]]) {
     for (const button of Array.from(document.querySelectorAll(`[${attribute}]`)))
       button.setAttribute('aria-pressed', String(button.getAttribute(attribute!) === value));
   }
@@ -628,7 +621,7 @@ for (const button of Array.from(
     updateDraft();
   });
 }
-for (const attribute of ['data-stitch-frame', 'data-stitch-style']) {
+for (const attribute of ['data-stitch-style']) {
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>(`[${attribute}]`))) {
     button.addEventListener('click', () => {
       if (!ready || saving) return;

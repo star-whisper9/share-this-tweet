@@ -1,7 +1,7 @@
 import type { TweetRecord } from '../shared/model.js';
 import type { ExtensionSettings } from '../shared/settings.js';
 import { getCardMediaPreview } from './card-media.js';
-import { renderImageFrame } from './frame.js';
+import { renderImageFrame, type FrameOrientation } from './frame.js';
 import { IMAGE_PALETTES, type ImageTheme } from './image-theme.js';
 import { ImageResources, releaseImage } from './image-resources.js';
 
@@ -52,6 +52,7 @@ export async function renderStitchedMedia(
   settings: ExtensionSettings,
   theme: ImageTheme,
   resources: ImageResources,
+  frame: 'original' | FrameOrientation,
 ): Promise<Blob> {
   if (record.media.length < 2) throw new Error('至少需要两项媒体才能拼接');
   const images: HTMLImageElement[] = [];
@@ -87,12 +88,12 @@ export async function renderStitchedMedia(
     // Release decoded originals before allocating the framed output.
     for (const image of images) releaseImage(image);
     images.length = 0;
-    if (settings.stitchFrame)
+    if (frame !== 'original')
       return await renderImageFrame(
         record,
         record.media[0]!,
         settings.frameTemplate,
-        settings.frameOrientation,
+        frame,
         resources,
         theme,
         canvas,

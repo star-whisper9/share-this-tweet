@@ -89,9 +89,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   draws.mockClear();
 });
-it.each([false, true])(
+it.each(['original', 'top', 'bottom'] as const)(
   'renders all stills in order and cleans up, framed=%s',
-  async (stitchFrame) => {
+  async (frame) => {
     vi.stubGlobal('HTMLCanvasElement', Canvas);
     vi.stubGlobal('document', { createElement: () => new Canvas() });
     vi.stubGlobal('browser', { runtime: { getURL: () => 'brand' } });
@@ -108,15 +108,10 @@ it.each([false, true])(
       if (!image) throw new Error('unexpected URL');
       return image as unknown as HTMLImageElement;
     });
-    const result = await renderStitchedMedia(
-      record,
-      { ...DEFAULT_SETTINGS, stitchFrame },
-      'dark',
-      resources,
-    );
-    expect(result.type).toBe(stitchFrame ? 'image/jpeg' : 'image/png');
+    const result = await renderStitchedMedia(record, DEFAULT_SETTINGS, 'dark', resources, frame);
+    expect(result.type).toBe(frame !== 'original' ? 'image/jpeg' : 'image/png');
     expect(load.mock.calls.map(([url]) => url)).toEqual(
-      stitchFrame ? ['photo', 'preview', 'brand'] : ['photo', 'preview'],
+      frame !== 'original' ? ['photo', 'preview', 'brand'] : ['photo', 'preview'],
     );
     expect(draws.mock.calls.slice(0, 2).map(([image]) => image.id)).toEqual(['photo', 'preview']);
     for (const image of images.slice(0, 2)) expect(image.remove).toHaveBeenCalledOnce();
@@ -139,6 +134,7 @@ it('fails instead of omitting a missing dynamic preview, releasing decoded photo
       DEFAULT_SETTINGS,
       'light',
       resources,
+      'original',
     ),
   ).rejects.toThrow();
   expect(image.remove).toHaveBeenCalledOnce();

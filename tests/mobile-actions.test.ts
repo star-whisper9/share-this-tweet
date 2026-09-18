@@ -182,3 +182,35 @@ it('omits media commands for an unavailable quote and restores them when quote d
   ui.render(session);
   expect(ui.dock.contains(ui.button('save-media-2'))).toBe(true);
 });
+
+it.each([true, false])(
+  'keeps the shared frame selector available for dynamic-only and empty selections, mobile=%s',
+  (mobile) => {
+    const ui = setup();
+    const record: TweetRecord = {
+      ...tweet('1'),
+      media: [
+        {
+          index: 1,
+          type: 'video',
+          variants: [{ url: 'https://video.twimg.com/1.mp4', mime: 'video/mp4' }],
+        },
+        {
+          index: 2,
+          type: 'animated_gif',
+          variants: [{ url: 'https://video.twimg.com/2.mp4', mime: 'video/mp4' }],
+        },
+      ],
+    };
+    const session = new ExportSession(record, DEFAULT_SETTINGS);
+    ui.render(session, mobile);
+    ui.button('save-choice-1-photo-top').click();
+    expect(session.mediaOptions.photo).toBe('top');
+    session.toggleMedia(1);
+    ui.render(session, mobile);
+    ui.button('save-choice-1-photo-original').click();
+    expect(session.mediaOptions.photo).toBe('original');
+    expect(ui.button('stitch-media-1').disabled).toBe(false);
+    expect(ui.button('save-media-1').disabled).toBe(true);
+  },
+);

@@ -125,18 +125,19 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
   const selected = selection.selected(record.media);
   const photos = selected.filter((item) => item.type === 'photo').length;
   const dynamic = selected.length - photos;
+  const canStitch = record.media.length > 1;
   const wrapper = node('div', 'stt-media-action');
   wrapper.dataset.tweetId = record.tweetId;
   const state = session.mediaAction('configured');
   wrapper.dataset.state = state.status;
-  if (selected.length) {
+  if (selected.length || canStitch) {
     const settings = node('div', 'stt-save-settings');
-    if (photos)
+    if (photos || canStitch)
       settings.append(
         saveChoices<MediaSaveOptions['photo']>(
           session,
           'photo',
-          dock ? '照片' : `照片 · ${photos}`,
+          canStitch ? (photos ? '照片 / 拼图' : '拼图') : dock ? '照片' : `照片 · ${photos}`,
           mediaOptions.photo,
           [
             { value: 'original', label: '原图', symbol: 'original' },

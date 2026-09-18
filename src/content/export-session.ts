@@ -128,6 +128,8 @@ export class ExportSession {
   configureMedia(options: Partial<MediaSaveOptions>): void {
     if (!this.active || this.isSavingBatch) return;
     this.mediaPreferences = { ...this.mediaPreferences, ...options };
+    if (options.photo !== undefined && this.actions.get('stitch-media')?.status !== 'loading')
+      this.actions.delete('stitch-media');
     for (const key of this.actions.keys())
       if (key.startsWith('configured:')) this.actions.delete(key);
     this.changed();
@@ -314,6 +316,7 @@ export class ExportSession {
   }
 
   stitchMedia(): Promise<void> {
+    const frame = this.mediaOptions.photo;
     return this.run(
       'stitch-media',
       {
@@ -322,7 +325,7 @@ export class ExportSession {
         failure: '拼接失败，请查看详情后重试。',
       },
       async ({ record, settings, theme }) => {
-        const blob = await renderStitchedMedia(record, settings, theme, this.resources);
+        const blob = await renderStitchedMedia(record, settings, theme, this.resources, frame);
         const extension =
           blob.type === 'image/png'
             ? 'png'
@@ -336,7 +339,7 @@ export class ExportSession {
           record,
           settings.filenameTemplate,
           extension,
-          settings.stitchFrame,
+          frame !== 'original',
         );
         if (!this.active) return;
         downloadBlob(blob, filename);

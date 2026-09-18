@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "分享有据 · Share This Tweet",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "incognito": "not_allowed",
   "description": "将 X 推文保存为卡片，为图片添加来源画框，为视频写入可读取的来源信息。",
   "icons": {

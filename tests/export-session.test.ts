@@ -311,16 +311,17 @@ it('stitches all media independently of selection and records a single output', 
   vi.mocked(renderStitchedMedia).mockResolvedValue(png);
   const session = new ExportSession(
     { ...record, media: [photo(1), video, photo(3)] },
-    { ...settings, stitchStyle: 'gallery', stitchFrame: true },
+    { ...settings, stitchStyle: 'gallery' },
   );
   session.toggleMedia(1);
   expect(session.selection.size).toBe(0);
   await session.stitchMedia();
   expect(renderStitchedMedia).toHaveBeenCalledWith(
     session.record,
-    expect.objectContaining({ stitchStyle: 'gallery', stitchFrame: true }),
+    expect.objectContaining({ stitchStyle: 'gallery' }),
     'light',
     expect.anything(),
+    settings.frameOrientation,
   );
   expect(downloadBlob).toHaveBeenCalledOnce();
   expect(recordOutput).toHaveBeenCalledWith(
@@ -360,3 +361,32 @@ it('separates grid and row card caches and refreshes the row style after setting
     'row-tweet-card',
   ]);
 });
+
+it.each(['original', 'top', 'bottom'] as const)(
+  'captures the current %s frame choice for stitching',
+  async (frame) => {
+    const pending = deferred<Blob>();
+    vi.mocked(renderStitchedMedia).mockReturnValueOnce(pending.promise);
+    const session = new ExportSession({ ...record, media: [photo(1), video] }, settings);
+    session.configureMedia({ photo: frame });
+    const work = session.stitchMedia();
+    session.configureMedia({ photo: frame === 'top' ? 'bottom' : 'top' });
+    await session.stitchMedia();
+    expect(renderStitchedMedia).toHaveBeenCalledOnce();
+    expect(renderStitchedMedia).toHaveBeenCalledWith(
+      session.record,
+      settings,
+      'light',
+      expect.anything(),
+      frame,
+    );
+    pending.resolve(
+      new Blob(['image'], { type: frame === 'original' ? 'image/png' : 'image/jpeg' }),
+    );
+    await work;
+    const filename = vi.mocked(downloadBlob).mock.calls[0][1];
+    expect(filename.endsWith(frame === 'original' ? '_stitched.png' : '_stitched_framed.jpg')).toBe(
+      true,
+    );
+  },
+);
