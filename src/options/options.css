@@ -296,6 +296,11 @@ h2 {
   color: var(--muted);
   background: var(--surface);
 }
+.frame-orientation-grid button[data-stitch-frame],
+.frame-orientation-grid button[data-stitch-style] {
+  place-items: center;
+  text-align: center;
+}
 .frame-orientation-grid button span {
   font-size: 20px;
   line-height: 1;
