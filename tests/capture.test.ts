@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startTweetCapture } from '../src/content/capture.js';
-import { TweetSource } from '../src/content/tweet-source.js';
+import { MAX_CACHED_TWEETS, TweetSource } from '../src/content/tweet-source.js';
 import { CAPTURE_READY_EVENT, TWEET_DATA_EVENT } from '../src/shared/capture-protocol.js';
 
 let mutation: () => void;
@@ -107,5 +107,22 @@ describe('early capture startup', () => {
     await expect(other).resolves.toMatchObject({ tweetId: '99' });
     await expect(source.waitFor('42')).resolves.toMatchObject({ tweetId: '42' });
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('bounded tab capture cache', () => {
+  it('evicts least recently read records while preserving recent records', () => {
+    const source = new TweetSource();
+    const candidate = (id: number) => ({
+      id_str: String(id),
+      full_text: 'post',
+      user: { id_str: '7', screen_name: 'alice' },
+    });
+    source.ingest(Array.from({ length: MAX_CACHED_TWEETS }, (_, i) => candidate(i + 1)));
+    expect(source.get('1')?.tweetId).toBe('1');
+    source.ingest(candidate(MAX_CACHED_TWEETS + 1));
+    expect(source.get('1')).toBeDefined();
+    expect(source.get('2')).toBeUndefined();
+    expect(source.get(String(MAX_CACHED_TWEETS + 1))).toBeDefined();
   });
 });

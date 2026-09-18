@@ -122,11 +122,15 @@ export async function upsertTweetRecord(record: TweetRecord): Promise<StoredTwee
     const transaction = database.transaction(TWEET_RECORDS_STORE, 'readwrite');
     const complete = transactionComplete(transaction);
     const store = transaction.objectStore(TWEET_RECORDS_STORE);
-    const existing = (await requestResult(store.get(record.tweetId))) as
-      StoredTweetRecord | undefined;
-    if (existing) stored = { ...mergeTweetRecords(existing, record), savedAt: stored.savedAt };
-    await requestResult(store.put(stored));
-    await complete;
+    await Promise.all([
+      (async () => {
+        const existing = (await requestResult(store.get(record.tweetId))) as
+          StoredTweetRecord | undefined;
+        if (existing) stored = { ...mergeTweetRecords(existing, record), savedAt: stored.savedAt };
+        await requestResult(store.put(stored));
+      })(),
+      complete,
+    ]);
   });
   return stored;
 }
@@ -135,8 +139,10 @@ export async function getTweetRecord(tweetId: string): Promise<StoredTweetRecord
   return withDatabase(async (database) => {
     const transaction = database.transaction(TWEET_RECORDS_STORE, 'readonly');
     const complete = transactionComplete(transaction);
-    const result = await requestResult(transaction.objectStore(TWEET_RECORDS_STORE).get(tweetId));
-    await complete;
+    const [result] = await Promise.all([
+      requestResult(transaction.objectStore(TWEET_RECORDS_STORE).get(tweetId)),
+      complete,
+    ]);
     return result as StoredTweetRecord | undefined;
   });
 }
@@ -146,8 +152,10 @@ export async function recordOutput(input: OutputRecordInput): Promise<OutputReco
   await withDatabase(async (database) => {
     const transaction = database.transaction(OUTPUT_RECORDS_STORE, 'readwrite');
     const complete = transactionComplete(transaction);
-    await requestResult(transaction.objectStore(OUTPUT_RECORDS_STORE).add(output));
-    await complete;
+    await Promise.all([
+      requestResult(transaction.objectStore(OUTPUT_RECORDS_STORE).add(output)),
+      complete,
+    ]);
   });
   return output;
 }
@@ -167,8 +175,8 @@ export async function listStorageRecords(): Promise<{
     const [tweetRecords, outputRecords] = await Promise.all([
       requestResult(tweetsRequest),
       requestResult(outputsRequest),
+      complete,
     ]);
-    await complete;
     return {
       tweetRecords: (tweetRecords as StoredTweetRecord[]).sort((left, right) =>
         right.savedAt.localeCompare(left.savedAt),
@@ -188,11 +196,14 @@ export async function deleteTweetRecord(tweetId: string): Promise<void> {
     );
     const complete = transactionComplete(transaction);
     const outputStore = transaction.objectStore(OUTPUT_RECORDS_STORE);
-    const outputs = (await requestResult(outputStore.getAll())) as OutputRecord[];
     transaction.objectStore(TWEET_RECORDS_STORE).delete(tweetId);
-    for (const output of outputs) {
-      if (output.tweetId === tweetId) outputStore.delete(output.id);
-    }
+    const cursor = outputStore.index('tweetId').openKeyCursor(IDBKeyRange.only(tweetId));
+    cursor.onsuccess = () => {
+      const item = cursor.result;
+      if (!item) return;
+      outputStore.delete(item.primaryKey);
+      item.continue();
+    };
     await complete;
   });
 }

@@ -1,7 +1,11 @@
+import { fileCacheDeadline, JOB_RETENTION } from '../shared/job-retention.js';
 import { renderExportJob } from '../core/job-renderer.js';
 import {
   deleteExportJob,
   getExportJob,
+  getExportJobBlob,
+  getExportJobDiagnostics,
+  type JobPayloadChanges,
   listExportJobs,
   putExportJob,
   type StoredExportJob,
@@ -106,8 +110,10 @@ function toSummary(job: StoredExportJob): JobSummary {
     files: job.files.map((file) => ({
       id: file.id,
       filename: file.filename,
-      size: file.blob.size,
+      size: file.size,
       saved: file.saved,
+      cached: file.cached,
+      cacheExpiresAt: file.cacheExpiresAt,
     })),
   };
 }
@@ -133,16 +139,30 @@ function isAndroid(): boolean {
 /** Serialize durable changes so progress, files, and cancellation never overwrite each other. */
 function mutateJob(
   id: string,
-  change: (job: StoredExportJob) => void | Promise<void>,
+  change: (job: StoredExportJob) => void | JobPayloadChanges | Promise<void | JobPayloadChanges>,
 ): Promise<StoredExportJob | undefined> {
   const operation = mutation.then(async () => {
     const current = jobs.get(id) ?? (await getExportJob(id));
     if (!current) return undefined;
-    // Never expose an unpersisted draft to other mutations. Blob is structured
-    // cloneable, so the whole durable record can be copied without reading it.
+    // Draft metadata only. Payload writes/deletions share the same transaction.
     const draft = structuredClone(current) as StoredExportJob;
-    await change(draft);
-    await putExportJob(draft);
+    const payloads = (await change(draft)) ?? {};
+    if (draft.summary.status !== current.summary.status) {
+      draft.settledAt = ['queued', 'running'].includes(draft.summary.status)
+        ? undefined
+        : Date.now();
+    }
+    const retained = new Set(draft.files.filter((file) => file.cached).map((file) => file.id));
+    payloads.removeFileIds = [
+      ...new Set([
+        ...(payloads.removeFileIds ?? []),
+        ...current.files
+          .filter((file) => file.cached && !retained.has(file.id))
+          .map((file) => file.id),
+      ]),
+    ];
+    draft.summary.files = toSummary(draft).files;
+    await putExportJob(draft, payloads);
     jobs.set(id, draft);
     return draft;
   });
@@ -176,10 +196,68 @@ export async function initializeExportJobs(): Promise<void> {
           current.summary.error = t('jobs.restartInterrupted', {}, current.request.locale);
         });
       }
+      await sweepExpiredJobs(Date.now());
+      const timer = setInterval(() => {
+        void cleanupExportJobs().catch((error) =>
+          console.error('Export cache cleanup failed', error),
+        );
+      }, JOB_RETENTION.sweepInterval);
+      if (typeof timer === 'object') timer.unref();
       scheduleProcessing();
     })();
   }
   return initialization;
+}
+
+/** Excludes active/queued jobs; all deletions serialize with job mutations. */
+async function sweepExpiredJobs(now: number): Promise<void> {
+  const operation = mutation.then(async () => {
+    for (const [id, current] of jobs) {
+      if (controllers.has(id) || ['queued', 'running'].includes(current.summary.status)) continue;
+      const settled = current.settledAt ?? Date.parse(current.summary.createdAt);
+      if (
+        !current.files.some((file) => file.cached && file.cacheExpiresAt <= now) &&
+        !(current.summary.hasDiagnostics && (current.diagnosticsExpiresAt ?? 0) <= now) &&
+        now < settled + JOB_RETENTION.history
+      )
+        continue;
+      const job = structuredClone(current) as StoredExportJob;
+      const changes: JobPayloadChanges = {};
+      const expired = job.files.filter((file) => file.cached && file.cacheExpiresAt <= now);
+      for (const file of expired) file.cached = false;
+      changes.removeFileIds = expired.map((file) => file.id);
+      if (job.summary.hasDiagnostics && (job.diagnosticsExpiresAt ?? 0) <= now) {
+        job.summary.hasDiagnostics = false;
+        job.diagnosticsExpiresAt = undefined;
+        changes.diagnostics = null;
+      }
+      if (job.summary.status === 'ready' && job.files.some((file) => !file.saved && !file.cached)) {
+        job.summary.status = 'expired';
+      }
+      const settledAt = job.settledAt ?? Date.parse(job.summary.createdAt);
+      if (now >= settledAt + JOB_RETENTION.history && !job.files.some((file) => file.cached)) {
+        await deleteExportJob(id);
+        jobs.delete(id);
+      } else if (
+        expired.length ||
+        changes.diagnostics === null ||
+        job.summary.status !== current.summary.status
+      ) {
+        job.summary.files = toSummary(job).files;
+        await putExportJob(job, changes);
+        jobs.set(id, job);
+      }
+    }
+  });
+  mutation = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+export async function cleanupExportJobs(): Promise<void> {
+  await initializeExportJobs();
+  await sweepExpiredJobs(Date.now());
 }
 
 function findQueuedJob(): StoredExportJob | undefined {
@@ -253,8 +331,9 @@ function commitCallbackUpdate(id: string): void {
       // A dynamic renderer reports its final diagnostic record immediately
       // before rejecting. Keep it even if cancellation won the status race.
       if (latest.diagnostics) {
-        job.diagnostics = latest.diagnostics;
+        job.diagnosticsExpiresAt = Date.now() + JOB_RETENTION.diagnostics;
         job.summary.hasDiagnostics = true;
+        return { diagnostics: latest.diagnostics };
       }
     });
   });
@@ -286,15 +365,12 @@ async function markFileSaved(id: string, fileId: string): Promise<StoredExportJo
     const file = current.files.find((item) => item.id === fileId);
     if (!file) throw new Error(t('jobs.fileNotFound', {}, current.request.locale));
     if (!file.saved) {
+      if (!file.cached) throw new Error(t('jobs.cacheReleased', {}, current.request.locale));
       file.saved = true;
+      file.cacheExpiresAt = fileCacheDeadline(true, isAndroid(), Date.now());
+      if (!isAndroid()) file.cached = false;
       savedFile = file;
     }
-    current.summary.files = current.files.map((item) => ({
-      id: item.id,
-      filename: item.filename,
-      size: item.blob.size,
-      saved: item.saved,
-    }));
   });
   if (job && savedFile) await storeHistory(job, savedFile);
   return jobs.get(id);
@@ -384,14 +460,17 @@ async function acceptFile(jobId: string, file: ExportJobFile): Promise<void> {
     // A retry renders all selections again. An output already saved by a
     // previous partial attempt is deliberately skipped to avoid duplicates.
     if (existing?.saved) return;
-    if (existing) Object.assign(existing, file, { saved: false });
-    else job.files.push({ ...file, saved: false });
-    job.summary.files = job.files.map((item) => ({
-      id: item.id,
-      filename: item.filename,
-      size: item.blob.size,
-      saved: item.saved,
-    }));
+    const { blob, ...metadata } = file;
+    const stored: StoredExportJobFile = {
+      ...metadata,
+      size: blob.size,
+      saved: false,
+      cached: true,
+      cacheExpiresAt: fileCacheDeadline(false, isAndroid(), Date.now()),
+    };
+    if (existing) Object.assign(existing, stored);
+    else job.files.push(stored);
+    return { files: [{ id: file.id, blob }] };
   });
   const controller = controllers.get(jobId);
   if (!controller || jobs.get(jobId)?.summary.status !== 'running')
@@ -485,7 +564,7 @@ async function processQueue(): Promise<void> {
 }
 
 async function enqueue(request: ExportJobRequest): Promise<JobResponse> {
-  await initializeExportJobs();
+  await cleanupExportJobs();
   const existing = jobs.get(request.id) ?? (await getExportJob(request.id));
   if (existing && JSON.stringify(existing.request) === JSON.stringify(request)) {
     jobs.set(existing.id, existing);
@@ -541,23 +620,24 @@ async function retry(id: string): Promise<JobResponse> {
   const job = jobs.get(id);
   if (!job) return { ok: false, error: t('jobs.notFound', {}, getLocale()) };
   if (controllers.has(id)) return { ok: false, error: t('jobs.busy', {}, job.request.locale) };
-  if (!['failed', 'cancelled', 'interrupted'].includes(job.summary.status)) {
+  if (!['failed', 'cancelled', 'interrupted', 'expired'].includes(job.summary.status)) {
     return { ok: false, error: t('jobs.retryUnavailable', {}, job.request.locale) };
   }
-  await mutateJob(id, (current) => {
+  const updated = await mutateJob(id, (current) => {
+    if (
+      controllers.has(id) ||
+      !['failed', 'cancelled', 'interrupted', 'expired'].includes(current.summary.status)
+    )
+      throw new Error(t('jobs.busy', {}, current.request.locale));
     current.files = current.files.filter((file) => file.saved);
-    current.diagnostics = undefined;
-    current.summary.files = current.files.map((file) => ({
-      id: file.id,
-      filename: file.filename,
-      size: file.blob.size,
-      saved: true,
-    }));
+    current.diagnosticsExpiresAt = undefined;
     current.summary.hasDiagnostics = false;
     current.summary.status = 'queued';
     current.summary.progress = undefined;
     current.summary.error = undefined;
+    return { diagnostics: null };
   });
+  if (!updated) return { ok: false, error: t('jobs.notFound', {}, job.request.locale) };
   scheduleProcessing();
   return { ok: true };
 }
@@ -570,6 +650,9 @@ async function remove(id: string): Promise<JobResponse> {
     return { ok: false, error: t('jobs.busy', {}, job.request.locale) };
   }
   const operation = mutation.then(async () => {
+    const current = jobs.get(id);
+    if (current && (controllers.has(id) || ['queued', 'running'].includes(current.summary.status)))
+      throw new Error(t('jobs.busy', {}, current.request.locale));
     await deleteExportJob(id);
     jobs.delete(id);
   });
@@ -587,22 +670,33 @@ async function file(id: string, fileId: string): Promise<JobResponse> {
   const output = job?.files.find((item) => item.id === fileId);
   if (!output)
     return { ok: false, error: t('jobs.fileNotFound', {}, job?.request.locale ?? getLocale()) };
-  return { ok: true, blob: output.blob, filename: output.filename };
+  if (!output.cached || (!controllers.has(id) && output.cacheExpiresAt <= Date.now())) {
+    await cleanupExportJobs();
+    return { ok: false, error: t('jobs.cacheReleased', {}, job!.request.locale) };
+  }
+  const blob = await getExportJobBlob(output.id);
+  if (!blob) return { ok: false, error: t('jobs.fileNotFound', {}, job!.request.locale) };
+  return { ok: true, blob, filename: output.filename };
 }
 
 async function diagnostics(id: string): Promise<JobResponse> {
   await initializeExportJobs();
   const job = jobs.get(id);
-  if (!job?.diagnostics)
+  const report =
+    job?.summary.hasDiagnostics &&
+    (controllers.has(id) || (job.diagnosticsExpiresAt ?? 0) > Date.now())
+      ? await getExportJobDiagnostics(id)
+      : undefined;
+  if (!report)
     return {
       ok: false,
       error: t('jobs.diagnosticsNotFound', {}, job?.request.locale ?? getLocale()),
     };
-  return { ok: true, diagnostics: job.diagnostics };
+  return { ok: true, diagnostics: report };
 }
 
 async function fileSaved(id: string, fileId: string): Promise<JobResponse> {
-  await initializeExportJobs();
+  await cleanupExportJobs();
   const job = jobs.get(id);
   if (!job) return { ok: false, error: t('jobs.notFound', {}, getLocale()) };
   if (!isAndroid())
@@ -643,7 +737,7 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
     return enqueue(parsed.request).catch((error) => ({ ok: false, error: messageError(error) }));
   }
   if (parsed.type === 'export-job-list')
-    return initializeExportJobs()
+    return cleanupExportJobs()
       .then(() => ({ ok: true, jobs: Array.from(jobs.values()).map(toSummary) }))
       .catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-open')

@@ -28,7 +28,7 @@ export interface ExportJobFile {
   output: OutputRecordInput;
 }
 export type ExportJobStatus =
-  'queued' | 'running' | 'ready' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  'queued' | 'running' | 'ready' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'expired';
 export interface JobSummary {
   id: string;
   kind: ExportJobKind;
@@ -39,7 +39,14 @@ export interface JobSummary {
   progress?: string;
   error?: string;
   warnings: string[];
-  files: Array<{ id: string; filename: string; size: number; saved: boolean }>;
+  files: Array<{
+    id: string;
+    filename: string;
+    size: number;
+    saved: boolean;
+    cached: boolean;
+    cacheExpiresAt: number;
+  }>;
   hasDiagnostics: boolean;
 }
 function object(value: unknown): value is Record<string, unknown> {

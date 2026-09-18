@@ -23,8 +23,14 @@ const terminalStatuses = new Set<JobSummary['status']>([
   'failed',
   'cancelled',
   'interrupted',
+  'expired',
 ]);
-const retryableStatuses = new Set<JobSummary['status']>(['failed', 'cancelled', 'interrupted']);
+const retryableStatuses = new Set<JobSummary['status']>([
+  'failed',
+  'cancelled',
+  'interrupted',
+  'expired',
+]);
 let jobs: JobSummary[] = [];
 let refreshing = false;
 let refreshRevision = 0;
@@ -84,7 +90,7 @@ function renderFile(job: JobSummary, file: JobSummary['files'][number]): HTMLLIE
   name.textContent = file.filename;
   const size = document.createElement('div');
   size.className = 'file-size';
-  size.textContent = formatBytes(file.size);
+  size.textContent = `${formatBytes(file.size)} · ${file.cached ? t('jobs.cacheUntil', { time: formatCreatedAt(new Date(file.cacheExpiresAt).toISOString()) }) : t('jobs.cacheReleased')}`;
   details.append(name, size);
   row.append(details);
 
@@ -100,16 +106,17 @@ function renderFile(job: JobSummary, file: JobSummary['files'][number]): HTMLLIE
     state.textContent = t('jobs.downloadInitiated');
     controls.append(state);
   }
-  controls.append(
-    button(
-      file.saved && !isAndroid ? t('jobs.saveAgain') : t('jobs.download'),
-      'download',
-      job.id,
-      {
-        fileId: file.id,
-      },
-    ),
-  );
+  if (file.cached)
+    controls.append(
+      button(
+        file.saved && !isAndroid ? t('jobs.saveAgain') : t('jobs.download'),
+        'download',
+        job.id,
+        {
+          fileId: file.id,
+        },
+      ),
+    );
   row.append(controls);
   return row;
 }

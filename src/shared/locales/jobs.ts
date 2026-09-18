@@ -1,5 +1,10 @@
 export const zhCN = {
   'jobs.title': '导出任务',
+  'jobs.cacheReleased': '缓存已释放，请重新导出。',
+  'jobs.status.expired': '文件已过期',
+  'jobs.cacheUntil': '缓存保留至 {time}',
+  'jobs.retention':
+    '桌面保存后释放缓存；Android 保存后保留 24 小时、未保存保留 7 天。诊断保留 7 天，结束的任务记录保留 30 天。',
   'jobs.viewTasks': '查看导出任务',
   'jobs.submitting': '正在加入队列…',
   'jobs.queuedAction': '已加入队列',
@@ -51,7 +56,7 @@ export const zhCN = {
   'jobs.invalidFile': '导出文件无效。',
   'jobs.taskExists': '已有相同标识的导出任务。',
   'jobs.completedCannotCancel': '已完成的任务不能取消。',
-  'jobs.retryUnavailable': '只有失败、已取消或已中断的任务可以重试。',
+  'jobs.retryUnavailable': '只有失败、已取消、已中断或已过期的任务可以重试。',
   'jobs.androidManualSaveOnly': '手动保存文件仅适用于 Android。',
   'jobs.invalidTaskId': '导出任务标识无效。',
   'jobs.invalidFileId': '导出文件标识无效。',
@@ -59,6 +64,11 @@ export const zhCN = {
 
 export const en: Record<keyof typeof zhCN, string> = {
   'jobs.title': 'Export tasks',
+  'jobs.cacheReleased': 'Cache released. Export again to regenerate the file.',
+  'jobs.status.expired': 'Files expired',
+  'jobs.cacheUntil': 'Cached until {time}',
+  'jobs.retention':
+    'Desktop caches are released after saving. Android keeps saved files for 24 hours and unsaved files for 7 days. Diagnostics last 7 days; finished task records last 30 days.',
   'jobs.viewTasks': 'View export tasks',
   'jobs.submitting': 'Adding to queue…',
   'jobs.queuedAction': 'Queued',
@@ -111,7 +121,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'jobs.invalidFile': 'The export file is invalid.',
   'jobs.taskExists': 'An export task with this id already exists.',
   'jobs.completedCannotCancel': 'Completed export tasks cannot be cancelled.',
-  'jobs.retryUnavailable': 'Only failed, cancelled, or interrupted tasks can be retried.',
+  'jobs.retryUnavailable': 'Only failed, cancelled, interrupted, or expired tasks can be retried.',
   'jobs.androidManualSaveOnly': 'Manual file saving is only used on Android.',
   'jobs.invalidTaskId': 'The export task id is invalid.',
   'jobs.invalidFileId': 'The export file id is invalid.',

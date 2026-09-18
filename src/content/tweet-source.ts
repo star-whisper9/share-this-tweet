@@ -13,6 +13,8 @@ interface Waiter {
   timer: number;
 }
 
+export const MAX_CACHED_TWEETS = 200;
+
 export class TweetSource {
   private captureError?: Error;
   private readonly translationRequests = new Map<
@@ -129,7 +131,12 @@ export class TweetSource {
   }
 
   get(tweetId: string): TweetRecord | undefined {
-    return this.records.get(tweetId);
+    const record = this.records.get(tweetId);
+    if (record) {
+      this.records.delete(tweetId);
+      this.records.set(tweetId, record);
+    }
+    return record;
   }
 
   ingestSerialized(serialized: string): void {
@@ -145,6 +152,7 @@ export class TweetSource {
       if (!record) continue;
       const existing = this.records.get(record.tweetId);
       const merged = existing ? mergeTweetRecords(existing, record) : record;
+      this.records.delete(record.tweetId);
       this.records.set(record.tweetId, merged);
       changed.add(record.tweetId);
     }
@@ -198,6 +206,10 @@ export class TweetSource {
         waiter.resolve(merged);
       }
     }
+    // Active export sessions already hold their own snapshot. Bound the
+    // tab-wide capture cache while keeping recently read records available.
+    while (this.records.size > MAX_CACHED_TWEETS)
+      this.records.delete(this.records.keys().next().value!);
   }
 
   waitFor(tweetId: string, timeoutMs = 5000): Promise<TweetRecord> {

@@ -115,6 +115,7 @@ let storedTweetRecords: StoredTweetRecord[] = [];
 let storedOutputRecords: OutputRecord[] = [];
 let selectedRecordId = '';
 let recordsLoading = false;
+let recordsLoaded = false;
 let sourceReadController: AbortController | undefined;
 let displayedSource: { source: MediaSourceMetadata; filename: string } | undefined;
 // The reader only inspects bounded MP4 boxes in its Worker, so it can accept
@@ -286,6 +287,7 @@ function setFrameOrientation(orientation: FrameOrientation): void {
 }
 function activateTab(tab: Tab, focus = false): void {
   if (form) form.dataset.activeTab = tab;
+  if (tab === 'records' && !recordsLoaded) void loadRecords();
   for (const button of Array.from(
     document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'),
   )) {
@@ -710,12 +712,14 @@ function renderRecords(): void {
 }
 
 async function loadRecords(): Promise<void> {
+  if (recordsLoading) return;
   recordsLoading = true;
   renderRecords();
   try {
     const records = await listStorageRecords();
     storedTweetRecords = records.tweetRecords;
     storedOutputRecords = records.outputRecords;
+    recordsLoaded = true;
     setRecordStatus('');
   } catch (error) {
     storedTweetRecords = [];
@@ -1122,7 +1126,6 @@ document.querySelector('[data-retry-load]')?.addEventListener('click', () => {
   void initialize();
 });
 void initialize();
-void loadRecords();
 const unwatchLanguage = watchLanguage((language) => {
   if (languageSelect) languageSelect.value = language;
   baseline = { ...baseline, language };
