@@ -1,6 +1,7 @@
 import { calculateStitchLayout, type StitchStyle } from './stitch.js';
 import { tagRunsForLines, type CardTextRun } from './card-tags.js';
 import { languageName } from '../shared/translation.js';
+import { getLocale, t, type Locale } from '../shared/i18n.js';
 import {
   IMAGE_PALETTES as CARD_PALETTES,
   detectImageTheme as detectCardTheme,
@@ -54,6 +55,7 @@ export interface TweetCardLayoutInput extends CardTextMeasurement {
   cardWidth?: number;
   mediaLayout?: 'grid' | 'row';
   stitchStyle?: StitchStyle;
+  locale?: Locale;
 }
 
 export interface TweetCardLayout {
@@ -85,6 +87,7 @@ interface CardRenderOptions {
   resources?: ImageResources;
   mediaLayout?: 'grid' | 'row';
   stitchStyle?: StitchStyle;
+  locale?: Locale;
 }
 
 interface LoadedCardMedia {
@@ -121,7 +124,7 @@ export function wrapCardText(
 
 function validateImageDimensions(images: CardImageDimension[]): void {
   if (images.length > 4) {
-    throw new Error('推文卡片最多支持 4 张照片');
+    throw new Error(t('core.card.maxPhotos'));
   }
   if (
     images.some(
@@ -132,7 +135,7 @@ function validateImageDimensions(images: CardImageDimension[]): void {
         image.height <= 0,
     )
   ) {
-    throw new Error('推文卡片需要有效的图片尺寸');
+    throw new Error(t('core.card.invalidImageDimensions'));
   }
 }
 
@@ -170,10 +173,13 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     );
   };
   if (input.translation) {
-    appendLabel(`翻译自 ${input.translation.sourceLanguage}`, 'grok');
+    appendLabel(
+      t('core.translation.from', { language: input.translation.sourceLanguage }, input.locale),
+      'grok',
+    );
     appendText(input.translation.text);
     bodyLines.push({ text: '' });
-    appendLabel('原文：', 'x');
+    appendLabel(t('core.translation.original', {}, input.locale), 'x');
   }
   appendText(input.text);
   const textLines = bodyLines.map((line) => line.text);
@@ -314,6 +320,7 @@ function drawMediaPlaceholder(
   rect: CardImageRect,
   palette: CardPalette,
   media: MediaRecord,
+  locale: Locale,
 ): void {
   context.fillStyle = palette.imageBackground;
   context.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -322,7 +329,9 @@ function drawMediaPlaceholder(
   context.textBaseline = 'middle';
   context.font = `400 ${Math.max(12, Math.round(Math.min(rect.width, rect.height) * 0.06))}px ${CARD_FONT_FAMILY}`;
   context.fillText(
-    media.type === 'animated_gif' ? 'GIF 预览不可用' : '视频预览不可用',
+    media.type === 'animated_gif'
+      ? t('core.card.gifPreviewUnavailable', {}, locale)
+      : t('core.card.videoPreviewUnavailable', {}, locale),
     rect.x + rect.width / 2,
     rect.y + rect.height / 2,
   );
@@ -383,7 +392,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error('推文卡片 PNG 生成失败'));
+        reject(new Error(t('core.card.pngFailed')));
         return;
       }
       resolve(blob);
@@ -398,7 +407,7 @@ async function renderCardCanvas(
 ): Promise<HTMLCanvasElement> {
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
   if (media.length > 4) {
-    throw new Error('推文卡片最多支持 4 项媒体');
+    throw new Error(t('core.card.maxMedia', {}, options.locale));
   }
 
   const resources = options.resources ?? new ImageResources();
@@ -425,7 +434,13 @@ async function renderCardCanvas(
             pairMedia.map(async (item) => {
               if (!item.preview.url) {
                 if (item.media.type === 'photo' || options.mediaLayout === 'row')
-                  throw new Error(`第 ${item.media.index} 项媒体没有可用的静态图像`);
+                  throw new Error(
+                    t(
+                      'core.card.staticImageUnavailable',
+                      { index: item.media.index },
+                      options.locale,
+                    ),
+                  );
                 return;
               }
               const image = await resources.load(item.preview.url);
@@ -462,7 +477,7 @@ async function renderCardCanvas(
     resources.checkActive();
     canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
+    if (!context) throw new Error(t('core.card.canvasUnavailable', {}, options.locale));
 
     const estimatedWidth = Math.max(
       CARD_MIN_WIDTH,
@@ -483,13 +498,17 @@ async function renderCardCanvas(
         ? {
             text: translation.text,
             sourceLanguage:
-              languageName(translation.sourceLanguage, translation.sourceLanguageName) ||
-              '未知语言',
+              languageName(
+                translation.sourceLanguage,
+                translation.sourceLanguageName,
+                options.locale,
+              ) || t('core.translation.unknownLanguage', {}, options.locale),
           }
         : undefined,
       cardWidth: options.cardWidth,
       mediaLayout: options.mediaLayout,
       stitchStyle: options.stitchStyle,
+      locale: options.locale,
       measureText: (text) => context.measureText(text),
       measureLabelText: (text) => {
         context.save();
@@ -508,7 +527,7 @@ async function renderCardCanvas(
       pixelHeight > 16384 ||
       pixelWidth * pixelHeight > 32000000
     ) {
-      throw new Error('推文内容超出卡片尺寸限制，无法完整生成。');
+      throw new Error(t('core.card.contentTooLarge', {}, options.locale));
     }
     canvas.width = pixelWidth;
     canvas.height = layout.height * CARD_RENDER_SCALE;
@@ -524,7 +543,11 @@ async function renderCardCanvas(
     context.textAlign = 'left';
     context.textBaseline = 'top';
     context.font = `600 ${Math.round(bodyFontSize * 0.9)}px ${CARD_FONT_FAMILY}`;
-    context.fillText(record.author.name || '未知作者', authorX, avatarY + 2);
+    context.fillText(
+      record.author.name || t('core.card.unknownAuthor', {}, options.locale),
+      authorX,
+      avatarY + 2,
+    );
     context.fillStyle = palette.muted;
     context.font = `400 ${Math.round(bodyFontSize * 0.62)}px ${CARD_FONT_FAMILY}`;
     context.fillText(
@@ -535,7 +558,7 @@ async function renderCardCanvas(
     if (record.publishedAt) {
       context.textAlign = 'right';
       context.fillText(
-        new Intl.DateTimeFormat('zh-CN', {
+        new Intl.DateTimeFormat(options.locale, {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
@@ -582,7 +605,14 @@ async function renderCardCanvas(
           CARD_RENDER_SCALE;
         context.drawImage(item.image, left, positionedRect.y, right - left, positionedRect.height);
       } else if (item.image) drawContainedImage(context, item.image, positionedRect, palette);
-      else drawMediaPlaceholder(context, positionedRect, palette, item.media);
+      else
+        drawMediaPlaceholder(
+          context,
+          positionedRect,
+          palette,
+          item.media,
+          options.locale ?? getLocale(),
+        );
       if (item.media.type !== 'photo')
         drawMediaBadge(context, positionedRect, item.media, !!item.image);
     });
@@ -609,6 +639,8 @@ export async function renderTweetCard(
   mediaInput: MediaRecord | MediaRecord[],
   options: CardRenderOptions = {},
 ): Promise<TweetCardResult> {
+  const locale = options.locale ?? getLocale();
+  options = { ...options, locale };
   const resources = options.resources ?? new ImageResources();
   const theme = options.theme ?? detectCardTheme();
   const canvases: HTMLCanvasElement[] = [];
@@ -637,26 +669,32 @@ export async function renderTweetCard(
         : 100 * CARD_RENDER_SCALE;
       const height = main.height + heading + quoteHeight + inset;
       if (height > 16384 || main.width * height > 32000000)
-        throw new Error('引用内容超出卡片尺寸限制，无法完整生成。');
+        throw new Error(t('core.card.quoteTooLarge', {}, locale));
       output = document.createElement('canvas');
       canvases.push(output);
       output.width = main.width;
       output.height = height;
       const context = output.getContext('2d');
-      if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
+      if (!context) throw new Error(t('core.card.canvasUnavailable', {}, locale));
       const palette = CARD_PALETTES[theme];
       context.fillStyle = palette.background;
       context.fillRect(0, 0, output.width, output.height);
       context.drawImage(main, 0, 0);
       context.fillStyle = palette.muted;
       context.font = `600 ${14 * CARD_RENDER_SCALE}px ${CARD_FONT_FAMILY}`;
-      context.fillText('引用推文', inset, main.height + 22 * CARD_RENDER_SCALE);
+      context.fillText(
+        t('core.card.quoteHeading', {}, locale),
+        inset,
+        main.height + 22 * CARD_RENDER_SCALE,
+      );
       const y = main.height + heading;
       if (quoted) context.drawImage(quoted, inset, y, quoteWidth, quoteHeight);
       else {
         context.font = `400 ${14 * CARD_RENDER_SCALE}px ${CARD_FONT_FAMILY}`;
         context.fillText(
-          quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容',
+          quote.status === 'unavailable'
+            ? t('core.text.quoteUnavailable', {}, locale)
+            : t('core.text.quotePending', {}, locale),
           inset + 16,
           y + 40,
           quoteWidth - 32,
@@ -677,7 +715,7 @@ export async function renderTweetCard(
     const footer = document.createElement('canvas');
     canvases.push(footer);
     const context = footer.getContext('2d');
-    if (!context) throw new Error('浏览器不支持 Canvas 推文卡片渲染');
+    if (!context) throw new Error(t('core.card.canvasUnavailable', {}, locale));
     const scale = CARD_RENDER_SCALE;
     const padding = 20 * scale;
     const font = `400 ${11 * scale}px ${CARD_FONT_FAMILY}`;
@@ -685,7 +723,9 @@ export async function renderTweetCard(
     const sources = [record, ...(record.quote ? [record.quote] : [])];
     const lines = sources.flatMap((source, index) => {
       const id = source.tweetId;
-      const url = source.url ?? (id ? `https://x.com/i/status/${id}` : '来源未获取');
+      const url =
+        source.url ??
+        (id ? `https://x.com/i/status/${id}` : t('core.card.sourceUnavailable', {}, locale));
       return wrapCardText(
         `${sources.length > 1 ? `[${index + 1}] ` : ''}${url}`,
         output.width - padding * 2,
@@ -696,7 +736,7 @@ export async function renderTweetCard(
     const footHeight = padding + lines.length * lineHeight + 26 * scale;
     const height = output.height + footHeight;
     if (height > 16384 || output.width * height > 32000000)
-      throw new Error('溯源脚注超出卡片尺寸限制，无法完整生成。');
+      throw new Error(t('core.card.footnoteTooLarge', {}, locale));
     footer.width = output.width;
     footer.height = height;
     const palette = CARD_PALETTES[theme];
@@ -717,7 +757,7 @@ export async function renderTweetCard(
     );
     const brandY = height - 22 * scale;
     context.drawImage(brand, padding, brandY, 12 * scale, 12 * scale);
-    context.fillText('分享有据', padding + 17 * scale, brandY);
+    context.fillText(t('core.brand', {}, locale), padding + 17 * scale, brandY);
     output = footer;
     resources.checkActive();
     const blob = await canvasToBlob(output);

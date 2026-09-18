@@ -5,6 +5,7 @@ import {
 } from '../shared/translation.js';
 import { normalizeTweetCandidate } from '../shared/tweet-normalizer.js';
 import { mergeTweetRecords, withoutQuote, type TweetRecord } from '../shared/model.js';
+import { t } from '../shared/i18n.js';
 
 interface Waiter {
   resolve: (record: TweetRecord) => void;
@@ -210,7 +211,7 @@ export class TweetSource {
         const remaining = waiters.filter((waiter) => waiter.timer !== timer);
         if (remaining.length > 0) this.waiters.set(tweetId, remaining);
         else this.waiters.delete(tweetId);
-        reject(new Error('尚未收到当前推文数据，请重新加载页面后重试。'));
+        reject(new Error(t('content.captureDataPending')));
       }, timeoutMs);
       const waiters = this.waiters.get(tweetId) ?? [];
       waiters.push({ resolve, reject, timer });

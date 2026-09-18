@@ -1,5 +1,6 @@
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
 import type { PrepareSourcedMediaResponse } from '../shared/protocol.js';
+import { getLocale, setLocale, t, type Locale } from '../shared/i18n.js';
 import { embedMp4SourceInWorker } from '../core/media-source-client.js';
 import { parseMediaSourceMetadata, type MediaSourceMetadata } from '../shared/media-source.js';
 import {
@@ -16,11 +17,14 @@ import {
 
 browser.runtime.onMessage.addListener((message: unknown) => {
   if (!isExtensionMessage(message)) return;
-  if (message.type === 'download-media') return downloadMedia(message.url, message.filename);
+  const locale = message.locale ?? getLocale();
+  setLocale(locale);
+  if (message.type === 'download-media')
+    return downloadMedia(message.url, message.filename, locale);
   if (message.type === 'download-sourced-media')
-    return downloadSourcedMedia(message.url, message.filename, message.source);
+    return downloadSourcedMedia(message.url, message.filename, message.source, locale);
   if (message.type === 'prepare-sourced-media')
-    return prepareSourcedMedia(message.url, message.source);
+    return prepareSourcedMedia(message.url, message.source, locale);
   if (message.type === 'save-tweet-record') return saveTweetRecord(message.record);
   if (message.type === 'record-output') return saveOutputRecord(message.output);
   if (message.type === 'get-tweet-record') return readTweetRecord(message.tweetId);
@@ -200,8 +204,12 @@ async function importRecords(
   }
 }
 
-async function downloadMedia(url: string, filename: string): Promise<DownloadMediaResponse> {
-  const validationError = validateDownloadRequest(url, filename);
+async function downloadMedia(
+  url: string,
+  filename: string,
+  locale: Locale,
+): Promise<DownloadMediaResponse> {
+  const validationError = validateDownloadRequest(url, filename, locale);
   if (validationError) return { ok: false, error: validationError };
 
   try {
@@ -213,7 +221,7 @@ async function downloadMedia(url: string, filename: string): Promise<DownloadMed
     return { ok: true, downloadId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: `下载失败：${message}` };
+    return { ok: false, error: t('core.background.downloadFailed', { message }, locale) };
   }
 }
 
@@ -223,7 +231,10 @@ const SOURCE_FETCH_TIMEOUT_MS = 90_000;
 const SOURCE_WORKER_TIMEOUT_MS = 120_000;
 const DOWNLOAD_COMPLETION_TIMEOUT_MS = 30 * 60_000;
 let activeSourceTasks = 0;
-const pendingDownloads = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
+const pendingDownloads = new Map<
+  number,
+  { resolve: () => void; reject: (error: Error) => void; locale: Locale }
+>();
 
 browser.downloads.onChanged.addListener((delta) => {
   const state = delta.state?.current;
@@ -240,28 +251,41 @@ function settlePendingDownload(
   if (!pending) return;
   pendingDownloads.delete(downloadId);
   if (state === 'complete') pending.resolve();
-  else pending.reject(new Error(`浏览器保存中断${error ? `：${error}` : ''}`));
+  else
+    pending.reject(
+      new Error(
+        t(
+          'core.background.downloadInterrupted',
+          { error: error ? `：${error}` : '' },
+          pending.locale,
+        ),
+      ),
+    );
 }
 
-export function validateDownloadRequest(url: string, filename?: string): string | undefined {
+export function validateDownloadRequest(
+  url: string,
+  filename?: string,
+  locale: Locale = getLocale(),
+): string | undefined {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return '媒体地址无效';
+    return t('core.background.invalidMediaUrl', {}, locale);
   }
 
   if (
     parsed.protocol !== 'https:' ||
     !['pbs.twimg.com', 'video.twimg.com'].includes(parsed.hostname)
   ) {
-    return '媒体地址不属于允许的 X 媒体域名';
+    return t('core.background.disallowedMediaDomain', {}, locale);
   }
   if (
     filename !== undefined &&
     (!filename || [...filename].length > 180 || /[\\/\u0000]/.test(filename))
   ) {
-    return '文件名无效';
+    return t('core.background.invalidFilename', {}, locale);
   }
   return undefined;
 }
@@ -270,14 +294,15 @@ export async function readBoundedResponse(
   response: Response,
   maximumBytes = MAX_SOURCE_MEDIA_SIZE,
   onLimitExceeded: () => void = () => {},
+  locale: Locale = getLocale(),
 ): Promise<Blob> {
   const contentLength = response.headers.get('content-length');
   const declaredSize = contentLength === null ? undefined : Number(contentLength);
   if (declaredSize !== undefined && Number.isFinite(declaredSize) && declaredSize > maximumBytes) {
     onLimitExceeded();
-    throw new Error('媒体超过允许的大小，无法写入来源信息');
+    throw new Error(t('core.background.mediaTooLarge', {}, locale));
   }
-  if (!response.body) throw new Error('浏览器无法以受限内存方式读取媒体');
+  if (!response.body) throw new Error(t('core.background.streamUnavailable', {}, locale));
   const reader = response.body.getReader();
   const chunks: BlobPart[] = [];
   let size = 0;
@@ -289,7 +314,7 @@ export async function readBoundedResponse(
       if (size > maximumBytes) {
         await reader.cancel();
         onLimitExceeded();
-        throw new Error('媒体超过允许的大小，无法写入来源信息');
+        throw new Error(t('core.background.mediaTooLarge', {}, locale));
       }
       // Network response byte streams are ArrayBuffer-backed in Firefox. Keep
       // each chunk as a Blob part so the bounded reader does not copy it again.
@@ -298,23 +323,29 @@ export async function readBoundedResponse(
   } finally {
     reader.releaseLock();
   }
-  if (size === 0) throw new Error('媒体响应为空');
+  if (size === 0) throw new Error(t('core.background.emptyMediaResponse', {}, locale));
   return new Blob(chunks, { type: response.headers.get('content-type') ?? 'video/mp4' });
 }
 
-async function fetchSourceMedia(url: string): Promise<Blob> {
+async function fetchSourceMedia(url: string, locale: Locale): Promise<Blob> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SOURCE_FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(url, { credentials: 'omit', signal: controller.signal });
-    if (!response.ok) throw new Error(`媒体请求失败：HTTP ${response.status}`);
-    return await readBoundedResponse(response, MAX_SOURCE_MEDIA_SIZE, () => controller.abort());
+    if (!response.ok)
+      throw new Error(t('core.background.mediaRequestFailed', { status: response.status }, locale));
+    return await readBoundedResponse(
+      response,
+      MAX_SOURCE_MEDIA_SIZE,
+      () => controller.abort(),
+      locale,
+    );
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function waitForDownloadCompletion(downloadId: number): Promise<void> {
+async function waitForDownloadCompletion(downloadId: number, locale: Locale): Promise<void> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
@@ -325,17 +356,18 @@ async function waitForDownloadCompletion(downloadId: number): Promise<void> {
       pendingDownloads.set(downloadId, {
         resolve: () => finish(resolve),
         reject: (error) => finish(() => reject(error)),
+        locale,
       });
       timeout = setTimeout(() => {
         pendingDownloads.delete(downloadId);
-        reject(new Error('等待浏览器完成保存超时'));
+        reject(new Error(t('core.background.downloadTimeout', {}, locale)));
       }, DOWNLOAD_COMPLETION_TIMEOUT_MS);
       void browser.downloads
         .search({ id: downloadId })
         .then(([item]) => {
           if (!item) {
             const pending = pendingDownloads.get(downloadId);
-            if (pending) pending.reject(new Error('浏览器没有返回下载任务'));
+            if (pending) pending.reject(new Error(t('core.background.noDownloadTask', {}, locale)));
             return;
           }
           if (item.state === 'complete' || item.state === 'interrupted')
@@ -346,7 +378,11 @@ async function waitForDownloadCompletion(downloadId: number): Promise<void> {
           if (pending)
             pending.reject(
               new Error(
-                `无法确认浏览器保存状态：${error instanceof Error ? error.message : String(error)}`,
+                t(
+                  'core.background.downloadStateUnknown',
+                  { message: error instanceof Error ? error.message : String(error) },
+                  locale,
+                ),
               ),
             );
         });
@@ -357,9 +393,9 @@ async function waitForDownloadCompletion(downloadId: number): Promise<void> {
   }
 }
 
-async function withSourceTask<T>(operation: () => Promise<T>): Promise<T> {
+async function withSourceTask<T>(operation: () => Promise<T>, locale: Locale): Promise<T> {
   if (activeSourceTasks >= MAX_ACTIVE_SOURCE_TASKS)
-    throw new Error('已有来源媒体正在处理，请稍后重试');
+    throw new Error(t('core.background.sourceBusy', {}, locale));
   activeSourceTasks += 1;
   try {
     return await operation();
@@ -368,20 +404,31 @@ async function withSourceTask<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-async function buildSourcedMedia(url: string, source: MediaSourceMetadata): Promise<Blob> {
-  const urlError = validateDownloadRequest(url);
+async function buildSourcedMedia(
+  url: string,
+  source: MediaSourceMetadata,
+  locale: Locale,
+): Promise<Blob> {
+  const urlError = validateDownloadRequest(url, undefined, locale);
   if (urlError) throw new Error(urlError);
   const validatedSource = parseMediaSourceMetadata(source);
-  const input = await fetchSourceMedia(url);
-  return embedMp4SourceInWorker(input, validatedSource, { timeoutMs: SOURCE_WORKER_TIMEOUT_MS });
+  const input = await fetchSourceMedia(url, locale);
+  return embedMp4SourceInWorker(input, validatedSource, {
+    timeoutMs: SOURCE_WORKER_TIMEOUT_MS,
+    locale,
+  });
 }
 
 async function prepareSourcedMedia(
   url: string,
   source: MediaSourceMetadata,
+  locale: Locale,
 ): Promise<PrepareSourcedMediaResponse> {
   try {
-    return { ok: true, blob: await withSourceTask(() => buildSourcedMedia(url, source)) };
+    return {
+      ok: true,
+      blob: await withSourceTask(() => buildSourcedMedia(url, source, locale), locale),
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -391,26 +438,31 @@ async function downloadSourcedMedia(
   url: string,
   filename: string,
   source: MediaSourceMetadata,
+  locale: Locale,
 ): Promise<DownloadMediaResponse> {
-  const validationError = validateDownloadRequest(url, filename);
+  const validationError = validateDownloadRequest(url, filename, locale);
   if (validationError) return { ok: false, error: validationError };
   let objectUrl: string | undefined;
   try {
     return await withSourceTask(async () => {
-      const output = await buildSourcedMedia(url, source);
+      const output = await buildSourcedMedia(url, source, locale);
       objectUrl = URL.createObjectURL(output);
       const downloadId = await browser.downloads.download({
         url: objectUrl,
         filename,
         saveAs: false,
       });
-      await waitForDownloadCompletion(downloadId);
+      await waitForDownloadCompletion(downloadId, locale);
       return { ok: true, downloadId };
-    });
+    }, locale);
   } catch (error) {
     return {
       ok: false,
-      error: `写入来源失败：${error instanceof Error ? error.message : String(error)}`,
+      error: t(
+        'core.background.writeSourceFailed',
+        { message: error instanceof Error ? error.message : String(error) },
+        locale,
+      ),
     };
   } finally {
     if (objectUrl) URL.revokeObjectURL(objectUrl);

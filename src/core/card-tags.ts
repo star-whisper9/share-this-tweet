@@ -17,7 +17,7 @@ export function tagRunsForLines(text: string, lines: string[]): CardTextRun[][] 
   let cursor = 0;
   return lines.map((line) => {
     const offset = line ? text.indexOf(line, cursor) : cursor;
-    if (offset < 0) throw new Error('卡片正文折行无法对应原文');
+    if (offset < 0) throw new Error(t('core.cardTags.lineMismatch'));
     cursor = offset + line.length;
     const runs: CardTextRun[] = [];
     let start = 0;
@@ -33,3 +33,4 @@ export function tagRunsForLines(text: string, lines: string[]): CardTextRun[][] 
     return runs;
   });
 }
+import { t } from '../shared/i18n.js';

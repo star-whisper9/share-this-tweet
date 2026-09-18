@@ -1,4 +1,5 @@
 import type { TweetRecord } from '../shared/model.js';
+import { getLocale, t, type Locale } from '../shared/i18n.js';
 import type { ExtensionSettings } from '../shared/settings.js';
 import { getCardMediaPreview } from './card-media.js';
 import { renderImageFrame, type FrameOrientation } from './frame.js';
@@ -26,7 +27,7 @@ export function calculateStitchLayout(
         !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0,
     )
   )
-    throw new Error('拼接需要有效的图片尺寸');
+    throw new Error(t('core.stitch.invalidDimensions'));
   const naturalHeight = Math.min(...images.map((image) => image.height));
   const gap = style === 'gallery' ? Math.max(1, Math.round(naturalHeight * 0.012)) : 0;
   const widths = images.map((image) => (image.width / image.height) * naturalHeight);
@@ -53,14 +54,16 @@ export async function renderStitchedMedia(
   theme: ImageTheme,
   resources: ImageResources,
   frame: 'original' | FrameOrientation,
+  locale: Locale = getLocale(),
 ): Promise<Blob> {
-  if (record.media.length < 2) throw new Error('至少需要两项媒体才能拼接');
+  if (record.media.length < 2) throw new Error(t('core.stitch.atLeastTwoMedia', {}, locale));
   const images: HTMLImageElement[] = [];
   const canvas = document.createElement('canvas');
   try {
     for (const media of record.media) {
       const url = getCardMediaPreview(media).url;
-      if (!url) throw new Error(`第 ${media.index} 项媒体没有可用的静态图像`);
+      if (!url)
+        throw new Error(t('core.stitch.staticImageUnavailable', { index: media.index }, locale));
       images.push(await resources.load(url));
     }
     resources.checkActive();
@@ -71,7 +74,7 @@ export async function renderStitchedMedia(
     canvas.width = Math.max(1, Math.round(layout.width));
     canvas.height = Math.max(1, Math.round(layout.height));
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器不支持 Canvas 拼接');
+    if (!context) throw new Error(t('core.stitch.canvasUnavailable', {}, locale));
     if (settings.stitchStyle === 'gallery') {
       context.fillStyle = IMAGE_PALETTES[theme].background;
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -97,10 +100,12 @@ export async function renderStitchedMedia(
         resources,
         theme,
         canvas,
+        locale,
       );
     return await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob((blob) => {
-        if (!blob || blob.type !== 'image/png') reject(new Error('浏览器无法生成拼接图片'));
+        if (!blob || blob.type !== 'image/png')
+          reject(new Error(t('core.stitch.imageFailed', {}, locale)));
         else resolve(blob);
       }, 'image/png'),
     );

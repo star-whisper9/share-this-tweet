@@ -4,6 +4,7 @@ import {
   TRANSLATION_DATA_EVENT,
 } from '../shared/capture-protocol.js';
 import type { TweetSource } from './tweet-source.js';
+import { t } from '../shared/i18n.js';
 
 // Start listening before inserting the page script: its first response can
 // arrive before either the script load event or DOMContentLoaded.
@@ -33,7 +34,7 @@ export function startTweetCapture(source: TweetSource): void {
   let observer: MutationObserver | undefined;
   const timeout = window.setTimeout(() => {
     observer?.disconnect();
-    if (!ready) source.failCapture(new Error('推文读取器启动超时，请重新加载页面。'));
+    if (!ready) source.failCapture(new Error(t('content.captureTimeout')));
   }, 5000);
   window.addEventListener(CAPTURE_READY_EVENT, () => {
     ready = true;
@@ -51,7 +52,7 @@ export function startTweetCapture(source: TweetSource): void {
     script.async = false;
     const fail = (): void => {
       window.clearTimeout(timeout);
-      source.failCapture(new Error('推文读取器未能启动，请重新加载页面。'));
+      source.failCapture(new Error(t('content.captureStartFailed')));
       script?.remove();
     };
     script.addEventListener(

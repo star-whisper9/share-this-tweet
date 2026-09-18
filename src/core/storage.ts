@@ -1,4 +1,5 @@
 import { validMetadata } from '../shared/metadata-validation.js';
+import { t } from '../shared/i18n.js';
 import { mergeTweetRecords, type TweetRecord } from '../shared/model.js';
 import type {
   OutputRecord,
@@ -54,14 +55,14 @@ export function createOutputRecord(
   createdAt = new Date().toISOString(),
 ): OutputRecord {
   if (!OUTPUT_TYPES.includes(input.outputType)) {
-    throw new StorageError(`不支持的输出记录类型：${input.outputType}`);
+    throw new StorageError(t('core.storage.invalidOutputType', { type: input.outputType }));
   }
   return { ...input, id, createdAt };
 }
 
 export function openStorageDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === 'undefined') {
-    return Promise.reject(new StorageError('当前环境不支持 IndexedDB'));
+    return Promise.reject(new StorageError(t('core.storage.indexedDbUnsupported')));
   }
 
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -96,8 +97,8 @@ export function openStorageDatabase(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(new StorageError('无法打开来源记录数据库', { cause: request.error }));
-    request.onblocked = () => reject(new StorageError('来源记录数据库被旧连接阻塞'));
+      reject(new StorageError(t('core.storage.openFailed'), { cause: request.error }));
+    request.onblocked = () => reject(new StorageError(t('core.storage.blocked')));
   });
 }
 
@@ -107,7 +108,7 @@ async function withDatabase<T>(operation: (database: IDBDatabase) => Promise<T>)
     return await operation(database);
   } catch (error) {
     if (error instanceof StorageError) throw error;
-    throw new StorageError('来源记录数据库操作失败', { cause: error });
+    throw new StorageError(t('core.storage.operationFailed'), { cause: error });
   } finally {
     database.close();
   }
@@ -293,15 +294,18 @@ function isOutputRecord(value: unknown): value is OutputRecord {
 }
 
 export function validateStorageArchive(value: unknown): StorageArchive {
-  if (typeof value !== 'object' || value === null) throw new StorageError('来源记录归档不是对象');
+  if (typeof value !== 'object' || value === null)
+    throw new StorageError(t('core.storage.archiveNotObject'));
   const archive = value as Partial<StorageArchive>;
-  if (archive.schemaVersion !== 1) throw new StorageError('不支持的来源记录归档版本');
-  if (typeof archive.exportedAt !== 'string') throw new StorageError('来源记录归档缺少导出时间');
+  if (archive.schemaVersion !== 1)
+    throw new StorageError(t('core.storage.unsupportedArchiveVersion'));
+  if (typeof archive.exportedAt !== 'string')
+    throw new StorageError(t('core.storage.archiveMissingDate'));
   if (!Array.isArray(archive.tweetRecords) || !archive.tweetRecords.every(isStoredTweetRecord)) {
-    throw new StorageError('来源记录归档包含无效推文记录');
+    throw new StorageError(t('core.storage.invalidTweetRecord'));
   }
   if (!Array.isArray(archive.outputRecords) || !archive.outputRecords.every(isOutputRecord)) {
-    throw new StorageError('来源记录归档包含无效输出记录');
+    throw new StorageError(t('core.storage.invalidOutputRecord'));
   }
   return archive as StorageArchive;
 }

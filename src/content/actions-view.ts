@@ -1,4 +1,5 @@
 import { translationWarning } from '../shared/translation.js';
+import { t } from '../shared/i18n.js';
 import type { ExportSession } from './export-session.js';
 import { appendMediaActions } from './media-view.js';
 import { actionButton, actionLabel, errorDetails, node } from './ui-components.js';
@@ -6,13 +7,19 @@ import { actionButton, actionLabel, errorDetails, node } from './ui-components.j
 function cardSaveButton(session: ExportSession, row = false, mobile = false): HTMLButtonElement {
   const key = row ? 'save-row-card' : 'save-card';
   const state = session.action(key);
-  const label = mobile ? (row ? '单行卡片' : '网格卡片') : row ? '保存单行卡片' : '保存推文卡片';
+  const label = mobile
+    ? row
+      ? t('content.rowCard')
+      : t('content.gridCard')
+    : row
+      ? t('content.saveRowCard')
+      : t('content.saveTweetCard');
   const button = actionButton({
     key,
     label: actionLabel(state, {
       idle: label,
-      loading: '正在保存…',
-      success: `再次${label}`,
+      loading: t('content.saving'),
+      success: t('content.saveAgain', { label }),
       error: label,
     }),
     image: 'download',
@@ -33,10 +40,10 @@ function textAction(session: ExportSession, mobile = false, errors?: HTMLElement
     actionButton({
       key: 'copy-text',
       label: actionLabel(state, {
-        idle: mobile ? '复制文字' : '复制推文文字',
-        loading: '正在复制…',
-        success: mobile ? '再次复制' : '已复制 · 再复制一次',
-        error: '重试复制文字',
+        idle: mobile ? t('content.copyText') : t('content.copyTweetText'),
+        loading: t('content.copying'),
+        success: mobile ? t('content.copyAgain') : t('content.copiedAndCopyAgain'),
+        error: t('content.retryCopyText'),
       }),
       image: 'copy',
       state,
@@ -47,9 +54,7 @@ function textAction(session: ExportSession, mobile = false, errors?: HTMLElement
     }),
   );
   if (state.status === 'error')
-    (errors ?? wrapper).append(
-      errorDetails('没能复制，请重试或检查剪贴板权限。', state.error ?? ''),
-    );
+    (errors ?? wrapper).append(errorDetails(t('content.copyFailedDetails'), state.error ?? ''));
   return wrapper;
 }
 
@@ -94,12 +99,16 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   dock.replaceChildren();
   dock.hidden = !mobile;
   for (const [label, record] of [
-    ['主推文', session.record],
-    ['引用推文', session.quoted?.record],
+    [t('content.mainTweet'), session.record],
+    [t('content.quoteTweet'), session.quoted?.record],
   ] as const) {
     const warning = translationWarning(record?.translation);
     if (warning) {
-      const message = node('p', 'stt-translation-warning', `翻译警告 · ${label}：${warning}`);
+      const message = node(
+        'p',
+        'stt-translation-warning',
+        t('content.translationWarning', { label, warning }),
+      );
       message.setAttribute('role', 'status');
       actions.append(message);
     }
@@ -108,10 +117,10 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
     if (session.record.quote) {
       const tabs = node('div', 'stt-media-tabs');
       tabs.setAttribute('role', 'group');
-      tabs.setAttribute('aria-label', '媒体所属推文');
+      tabs.setAttribute('aria-label', t('content.mediaForTweet'));
       for (const [scope, label] of [
-        ['main', '主推文'],
-        ['quote', '引用推文'],
+        ['main', t('content.mainTweet')],
+        ['quote', t('content.quoteTweet')],
       ] as const) {
         const button = node('button', '', label);
         button.type = 'button';
@@ -126,29 +135,42 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
       actions.append(tabs);
     }
     const target = state.scope === 'quote' ? session.quoted : session;
-    if (target?.record.media.length) appendMediaActions(actions, target, '媒体', dock);
+    if (target?.record.media.length) appendMediaActions(actions, target, t('content.media'), dock);
     else if (state.scope === 'quote')
       actions.append(
-        node('p', 'stt-save-empty', target ? '引用推文没有媒体。' : '引用内容暂不可用。'),
+        node(
+          'p',
+          'stt-save-empty',
+          target ? t('content.quoteNoMedia') : t('content.quoteUnavailable'),
+        ),
       );
     dock.setAttribute(
       'aria-label',
-      state.scope === 'quote' ? '引用媒体及整条推文操作' : '主推文媒体及整条推文操作',
+      state.scope === 'quote'
+        ? t('content.quoteMediaAndTweetActions')
+        : t('content.mainMediaAndTweetActions'),
     );
   } else {
-    appendMediaActions(actions, session, session.record.quote ? '主推文媒体' : '所选媒体');
-    if (session.quoted) appendMediaActions(actions, session.quoted, '引用推文媒体');
+    appendMediaActions(
+      actions,
+      session,
+      session.record.quote ? t('content.mainMedia') : t('content.selectedMedia'),
+    );
+    if (session.quoted) appendMediaActions(actions, session.quoted, t('content.quotedMedia'));
     actions.append(
       node(
         'div',
         'stt-section-label',
-        session.record.quote ? '整条推文（包含一层引用）' : '整条推文',
+        session.record.quote ? t('content.entireTweetWithQuote') : t('content.entireTweet'),
       ),
     );
   }
   const exports = node('div', 'stt-export-grid');
   exports.setAttribute('role', 'group');
-  exports.setAttribute('aria-label', session.record.quote ? '整条推文，包含一层引用' : '整条推文');
+  exports.setAttribute(
+    'aria-label',
+    session.record.quote ? t('content.entireTweetAria') : t('content.entireTweet'),
+  );
   exports.append(
     cardSaveButton(session, false, mobile),
     cardSaveButton(session, true, mobile),
@@ -158,7 +180,7 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   for (const key of ['save-card', 'save-row-card'] as const) {
     const save = session.action(key);
     if (save.status === 'error')
-      actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
+      actions.append(errorDetails(t('content.cardSaveFailedDetails'), save.error ?? ''));
   }
   for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
     const details = group.querySelector<HTMLDetailsElement>('.stt-file-details');

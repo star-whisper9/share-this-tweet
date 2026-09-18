@@ -4,25 +4,47 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>分享有据 · Share This Tweet</title>
+    <title data-i18n="options.title">分享有据 · Share This Tweet</title>
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
     <header class="app-header">
-      <a class="brand" href="#" aria-label="分享有据 · Share This Tweet 设置首页">
+      <a
+        class="brand"
+        href="#"
+        data-i18n-aria-label="options.brandHome"
+        aria-label="分享有据 · Share This Tweet 设置首页"
+      >
         <span class="brand-mark" aria-hidden="true"><img src="../icons/icon-48.png" alt="" /></span>
-        <span>分享有据 · Share This Tweet</span>
+        <span data-i18n="options.title">分享有据 · Share This Tweet</span>
       </a>
+      <label class="language-picker">
+        <span data-i18n="options.language">界面语言</span>
+        <select data-language aria-label="界面语言" data-i18n-aria-label="options.language">
+          <option value="auto" data-i18n="options.language.auto">跟随浏览器</option>
+          <option value="zh-CN" data-i18n="options.language.zh-CN">简体中文</option>
+          <option value="en" data-i18n="options.language.en">English</option>
+        </select>
+      </label>
     </header>
     <main>
       <header class="page-heading">
-        <h1>按你喜欢的方式分享<span class="heading-dot">。</span></h1>
+        <h1>
+          <span data-i18n="options.heading">按你喜欢的方式分享</span
+          ><span class="heading-dot" data-i18n="options.headingDot">。</span>
+        </h1>
       </header>
       <form data-settings-form novalidate>
         <div class="load-error" data-load-error hidden role="alert">
-          <span data-load-message></span><button type="button" data-retry-load>重新读取</button>
+          <span data-load-message></span
+          ><button type="button" data-retry-load data-i18n="options.load.retry">重新读取</button>
         </div>
-        <div class="settings-tabs" role="tablist" aria-label="分享设置分类">
+        <div
+          class="settings-tabs"
+          role="tablist"
+          data-i18n-aria-label="options.tabList"
+          aria-label="分享设置分类"
+        >
           <button
             type="button"
             role="tab"
@@ -34,7 +56,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="3" y="3" width="18" height="18" rx="3" />
               <path d="M3 16h18M7 12l3-3 4 4 3-3 4 4" /></svg
-            >来源画框
+            ><span data-i18n="options.tab.frame">来源画框</span>
           </button>
           <button
             type="button"
@@ -49,7 +71,7 @@
               <path
                 d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 14h8M8 17h5"
               /></svg
-            >文件命名
+            ><span data-i18n="options.tab.filename">文件命名</span>
           </button>
           <button
             type="button"
@@ -63,7 +85,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="8" y="8" width="12" height="13" rx="2" />
               <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></svg
-            >复制文字
+            ><span data-i18n="options.tab.text">复制文字</span>
           </button>
           <button
             type="button"
@@ -77,11 +99,11 @@
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 5h16M4 12h16M4 19h10" />
               <circle cx="18" cy="19" r="2" /></svg
-            >来源记录
+            ><span data-i18n="options.tab.records">来源记录</span>
           </button>
         </div>
         <fieldset class="settings-body" data-editable disabled>
-          <legend class="sr-only">分享偏好</legend>
+          <legend class="sr-only" data-i18n="options.preferences">分享偏好</legend>
           <section
             class="settings-panel"
             id="panel-frame"
@@ -93,11 +115,15 @@
               <div class="section-heading">
                 <span class="step-number">01</span>
                 <div>
-                  <h2>让照片自带出处</h2>
-                  <p>在照片顶部或底部加一行署名，发出去就不必另作说明。</p>
+                  <h2 data-i18n="options.frame.title">让照片自带出处</h2>
+                  <p data-i18n="options.frame.description">
+                    在照片顶部或底部加一行署名，发出去就不必另作说明。
+                  </p>
                 </div>
               </div>
-              <p class="field-label" id="frame-presets-label">画框左侧怎么写</p>
+              <p class="field-label" id="frame-presets-label" data-i18n="options.frame.presets">
+                画框左侧怎么写
+              </p>
               <div
                 class="preset-grid"
                 data-presets="frameTemplate"
@@ -105,7 +131,7 @@
                 aria-labelledby="frame-presets-label"
               ></div>
               <p class="field-label frame-orientation-label" id="frame-orientation-label">
-                默认画框方向
+                <span data-i18n="options.frame.orientation">默认画框方向</span>
               </p>
               <div
                 class="frame-orientation-grid"
@@ -114,32 +140,39 @@
                 aria-labelledby="frame-orientation-label"
               >
                 <button type="button" data-frame-orientation="top" aria-pressed="false">
-                  <span aria-hidden="true">↑</span><strong>上</strong>
+                  <span aria-hidden="true">↑</span><strong data-i18n="options.frame.top">上</strong>
                 </button>
                 <button type="button" data-frame-orientation="bottom" aria-pressed="true">
-                  <span aria-hidden="true">↓</span><strong>下</strong>
+                  <span aria-hidden="true">↓</span
+                  ><strong data-i18n="options.frame.bottom">下</strong>
                 </button>
               </div>
               <p class="field-label frame-orientation-label" id="stitch-style-label">
-                横向连接样式
+                <span data-i18n="options.stitch.style">横向连接样式</span>
               </p>
               <div class="frame-orientation-grid" role="group" aria-labelledby="stitch-style-label">
                 <button type="button" data-stitch-style="seamless" aria-pressed="true">
-                  <strong>无缝连接</strong>
+                  <strong data-i18n="options.stitch.seamless">无缝连接</strong>
                 </button>
                 <button type="button" data-stitch-style="gallery" aria-pressed="false">
-                  <strong>画廊间隔</strong>
+                  <strong data-i18n="options.stitch.gallery">画廊间隔</strong>
                 </button>
               </div>
               <details class="template-editor" data-editor="frameTemplate">
                 <summary>
-                  <span>自定义文字与变量</span
-                  ><span class="custom-badge" data-custom-badge="frameTemplate" hidden
+                  ><span data-i18n="options.editor.frame">自定义文字与变量</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="frameTemplate"
+                    hidden
+                    data-i18n="options.editor.custom"
                     >已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
                 <div class="template-editor-body">
-                  <label for="frame-template">画框左侧模板</label>
+                  <label for="frame-template" data-i18n="options.frame.template"
+                    >画框左侧模板</label
+                  >
                   <textarea
                     id="frame-template"
                     name="frameTemplate"
@@ -149,13 +182,15 @@
                     aria-describedby="frame-help frame-error"
                     rows="3"
                   ></textarea>
-                  <p class="field-help" id="frame-help">
-                    支持按 Enter 换行，长行会按图像宽度自动折行。这里只编辑画框左侧文字。右侧的
-                    纯数字 ID 和扩展标识固定显示，用于保留出处。
+                  <p class="field-help" id="frame-help" data-i18n="options.frame.help">
+                    支持按 Enter
+                    换行，长行会按图像宽度自动折行。这里只编辑画框左侧文字。右侧的纯数字 ID
+                    和扩展标识固定显示，用于保留出处。
                   </p>
                   <div
                     class="token-list"
                     data-tokens="frameTemplate"
+                    data-i18n-aria-label="options.frame.tokens"
                     aria-label="插入来源栏变量"
                   ></div>
                   <p
@@ -167,27 +202,43 @@
                 </div>
               </details>
             </div>
-            <aside class="settings-preview frame-preview" aria-label="来源画框示意">
+            <aside
+              class="settings-preview frame-preview"
+              data-i18n-aria-label="options.frame.preview"
+              aria-label="来源画框示意"
+            >
               <div class="preview-heading">
-                <span>分享出去的样子</span><span class="preview-tag">示例</span>
+                <span data-i18n="options.preview.shared">分享出去的样子</span
+                ><span class="preview-tag" data-i18n="options.preview.example">示例</span>
               </div>
               <div class="photo-print">
-                <div class="sample-art" role="img" aria-label="蓝色抽象风景示意图">
+                <div
+                  class="sample-art"
+                  role="img"
+                  data-i18n-aria-label="options.preview.art"
+                  aria-label="蓝色抽象风景示意图"
+                >
                   <span class="sample-sun"></span><span class="sample-hill sample-hill-back"></span
                   ><span class="sample-hill sample-hill-front"></span
                   ><span class="art-caption">A LITTLE<br />INSPIRATION.</span>
                 </div>
                 <div class="print-caption">
                   <strong data-preview="frame"></strong>
-                  <span class="print-source" aria-label="固定溯源信息">
+                  <span
+                    class="print-source"
+                    data-i18n-aria-label="options.preview.source"
+                    aria-label="固定溯源信息"
+                  >
                     <span>1234567890</span>
                     <span class="print-brand"
-                      ><img src="../icons/icon-48.png" alt="" />分享有据</span
+                      ><img src="../icons/icon-48.png" alt="" /><span data-i18n="core.brand"
+                        >分享有据</span
+                      ></span
                     >
                   </span>
                 </div>
               </div>
-              <p class="preview-description">
+              <p class="preview-description" data-i18n="options.preview.frameDescription">
                 左侧为模板预览；右侧纯数字 ID
                 和扩展标识为固定溯源信息，主题自动跟随当前页面或系统，排版仅供示意。
               </p>
@@ -205,11 +256,19 @@
               <div class="section-heading">
                 <span class="step-number">02</span>
                 <div>
-                  <h2>日后也找得到来源</h2>
-                  <p>把推主与推文编号留在文件名里，归档时更好找。</p>
+                  <h2 data-i18n="options.filename.title">日后也找得到来源</h2>
+                  <p data-i18n="options.filename.description">
+                    把推主与推文编号留在文件名里，归档时更好找。
+                  </p>
                 </div>
               </div>
-              <p class="field-label" id="filename-presets-label">选一种命名方式</p>
+              <p
+                class="field-label"
+                id="filename-presets-label"
+                data-i18n="options.filename.presets"
+              >
+                选一种命名方式
+              </p>
               <div
                 class="preset-grid"
                 data-presets="filenameTemplate"
@@ -218,13 +277,19 @@
               ></div>
               <details class="template-editor" data-editor="filenameTemplate">
                 <summary>
-                  <span>自定义文件名</span
-                  ><span class="custom-badge" data-custom-badge="filenameTemplate" hidden
+                  ><span data-i18n="options.editor.filename">自定义文件名</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="filenameTemplate"
+                    hidden
+                    data-i18n="options.editor.custom"
                     >已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
                 <div class="template-editor-body">
-                  <label for="filename-template">文件名模板</label>
+                  <label for="filename-template" data-i18n="options.filename.template"
+                    >文件名模板</label
+                  >
                   <input
                     id="filename-template"
                     name="filenameTemplate"
@@ -236,6 +301,7 @@
                   <div
                     class="token-list"
                     data-tokens="filenameTemplate"
+                    data-i18n-aria-label="options.filename.tokens"
                     aria-label="插入文件名变量"
                   ></div>
                   <p
@@ -247,9 +313,14 @@
                 </div>
               </details>
             </div>
-            <aside class="settings-preview file-preview" aria-label="文件名预览">
+            <aside
+              class="settings-preview file-preview"
+              data-i18n-aria-label="options.filename.preview"
+              aria-label="文件名预览"
+            >
               <div class="preview-heading">
-                <span>保存在设备上</span><span class="preview-tag">示例</span>
+                <span data-i18n="options.preview.saved">保存在设备上</span
+                ><span class="preview-tag" data-i18n="options.preview.example">示例</span>
               </div>
               <div class="file-card">
                 <div class="file-art" aria-hidden="true">
@@ -260,14 +331,19 @@
                   </svg>
                 </div>
                 <div class="file-card-copy">
-                  <span class="file-card-type">照片原图 · JPG</span
+                  ><span class="file-card-type" data-i18n="options.preview.photoOriginal"
+                    >照片原图 · JPG</span
                   ><code data-preview="filename"></code>
                 </div>
               </div>
               <div class="source-detail">
-                <span>示例来源</span><strong>@example</strong><span>第 1 张照片</span>
+                <span data-i18n="options.preview.sampleSource">示例来源</span
+                ><strong>@example</strong
+                ><span data-i18n="options.preview.photoNumber">第 1 张照片</span>
               </div>
-              <p class="preview-description">上方文件名由你当前的模板实时生成。</p>
+              <p class="preview-description" data-i18n="options.preview.filenameDescription">
+                上方文件名由你当前的模板实时生成。
+              </p>
             </aside>
           </section>
           <section
@@ -282,11 +358,15 @@
               <div class="section-heading">
                 <span class="step-number">03</span>
                 <div>
-                  <h2>不只分享一个链接</h2>
-                  <p>把文字和出处一起复制，直接粘贴到聊天中。</p>
+                  <h2 data-i18n="options.text.title">不只分享一个链接</h2>
+                  <p data-i18n="options.text.description">
+                    把文字和出处一起复制，直接粘贴到聊天中。
+                  </p>
                 </div>
               </div>
-              <p class="field-label" id="text-presets-label">文字的分享方式</p>
+              <p class="field-label" id="text-presets-label" data-i18n="options.text.presets">
+                文字的分享方式
+              </p>
               <div
                 class="preset-grid text-presets"
                 data-presets="textTemplate"
@@ -295,12 +375,17 @@
               ></div>
               <details class="template-editor" data-editor="textTemplate">
                 <summary>
-                  <span>自定义文字排版</span
-                  ><span class="custom-badge" data-custom-badge="textTemplate" hidden>已自定义</span
+                  ><span data-i18n="options.editor.text">自定义文字排版</span
+                  ><span
+                    class="custom-badge"
+                    data-custom-badge="textTemplate"
+                    hidden
+                    data-i18n="options.editor.custom"
+                    >已自定义</span
                   ><span class="disclosure-chevron" aria-hidden="true">⌄</span>
                 </summary>
                 <div class="template-editor-body">
-                  <label for="text-template">复制文本模板</label>
+                  <label for="text-template" data-i18n="options.text.template">复制文本模板</label>
                   <textarea
                     id="text-template"
                     name="textTemplate"
@@ -312,6 +397,7 @@
                   <div
                     class="token-list"
                     data-tokens="textTemplate"
+                    data-i18n-aria-label="options.text.tokens"
                     aria-label="插入文本变量"
                   ></div>
                   <p
@@ -323,15 +409,24 @@
                 </div>
               </details>
             </div>
-            <aside class="settings-preview text-preview" aria-label="复制文字预览">
+            <aside
+              class="settings-preview text-preview"
+              data-i18n-aria-label="options.text.preview"
+              aria-label="复制文字预览"
+            >
               <div class="preview-heading">
-                <span>粘贴到聊天中</span><span class="preview-tag">示例</span>
+                <span data-i18n="options.preview.chat">粘贴到聊天中</span
+                ><span class="preview-tag" data-i18n="options.preview.example">示例</span>
               </div>
               <div class="chat-preview">
-                <span class="chat-avatar" aria-hidden="true">你</span>
+                <span class="chat-avatar" aria-hidden="true" data-i18n="options.preview.you"
+                  >你</span
+                >
                 <pre data-preview="text"></pre>
               </div>
-              <p class="preview-description">以上为示例内容，不会读取你的标签页和聊天。</p>
+              <p class="preview-description" data-i18n="options.preview.textDescription">
+                以上为示例内容，不会读取你的标签页和聊天。
+              </p>
             </aside>
           </section>
         </fieldset>
@@ -347,37 +442,53 @@
             <div class="section-heading">
               <span class="step-number">04</span>
               <div>
-                <h2>查找你保存过的来源</h2>
-                <p>推文来源只保存在本机。可以按 Tweet ID、作者或文件名查找。</p>
+                <h2 data-i18n="options.records.title">查找你保存过的来源</h2>
+                <p data-i18n="options.records.description">
+                  推文来源只保存在本机。可以按 Tweet ID、作者或文件名查找。
+                </p>
               </div>
             </div>
             <div class="records-toolbar">
-              <label class="sr-only" for="record-search">搜索来源记录</label>
+              <label class="sr-only" for="record-search" data-i18n="options.records.search"
+                >搜索来源记录</label
+              >
               <input
                 id="record-search"
                 data-record-search
                 type="search"
+                data-i18n-placeholder="options.records.search"
                 placeholder="搜索 Tweet ID、作者或文件名"
               />
               <button type="button" class="button button-secondary" data-record-refresh>
-                刷新
+                <span data-i18n="options.records.refresh">刷新</span>
               </button>
             </div>
             <div class="records-actions">
               <button type="button" class="button button-secondary" data-record-export>
-                导出 JSON
+                <span data-i18n="options.records.export">导出 JSON</span>
               </button>
               <button type="button" class="button button-secondary" data-record-import-button>
-                导入 JSON
+                <span data-i18n="options.records.import">导入 JSON</span>
               </button>
-              <button type="button" class="button button-danger" data-record-clear>清空记录</button>
+              <button
+                type="button"
+                class="button button-danger"
+                data-record-clear
+                data-i18n="options.records.clear"
+              >
+                清空记录
+              </button>
               <input type="file" data-record-import accept="application/json" hidden />
               <output data-record-status role="status" aria-live="polite"></output>
             </div>
             <section class="source-media-reader" aria-labelledby="source-media-heading">
               <div>
-                <strong id="source-media-heading">读取 MP4 中的来源</strong>
-                <p>文件只在本机处理，不会上传，也不会自动加入来源记录。</p>
+                <strong id="source-media-heading" data-i18n="options.records.readerTitle"
+                  >读取 MP4 中的来源</strong
+                >
+                <p data-i18n="options.records.readerDescription">
+                  文件只在本机处理，不会上传，也不会自动加入来源记录。
+                </p>
               </div>
               <div
                 class="source-media-drop"
@@ -386,7 +497,7 @@
                 tabindex="0"
                 aria-describedby="source-media-status"
               >
-                选择或拖入 MP4 文件
+                <span data-i18n="options.records.drop">选择或拖入 MP4 文件</span>
               </div>
               <input type="file" data-source-media-input accept="video/mp4,.mp4" hidden />
               <output
@@ -396,29 +507,46 @@
                 aria-live="polite"
               ></output>
               <dl class="source-media-result" data-source-media-result hidden>
-                <dt>文件</dt>
+                <dt data-i18n="options.records.file">文件</dt>
                 <dd data-source-file></dd>
-                <dt>来源发布者</dt>
+                <dt data-i18n="options.records.publisher">来源发布者</dt>
                 <dd data-source-publisher></dd>
                 <dt>Tweet ID</dt>
                 <dd data-source-tweet-id></dd>
-                <dt>媒体</dt>
+                <dt data-i18n="options.records.media">媒体</dt>
                 <dd data-source-media-kind></dd>
-                <dt>发布时间</dt>
+                <dt data-i18n="options.records.publishedAt">发布时间</dt>
                 <dd data-source-published-at></dd>
-                <dt>写入工具</dt>
+                <dt data-i18n="options.records.tool">写入工具</dt>
                 <dd data-source-tool></dd>
-                <dt>原推</dt>
-                <dd><a data-source-link target="_blank" rel="noopener noreferrer">打开原推</a></dd>
+                <dt data-i18n="options.records.originalTweet">原推</dt>
+                <dd>
+                  <a
+                    data-source-link
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-i18n="options.records.openTweet"
+                    >打开原推</a
+                  >
+                </dd>
               </dl>
             </section>
-            <p class="records-summary" data-record-summary>正在读取来源记录…</p>
+            <p class="records-summary" data-record-summary data-i18n="options.records.loading">
+              正在读取来源记录…
+            </p>
             <div class="records-list" data-record-list role="list"></div>
-            <p class="records-empty" data-record-empty hidden>还没有找到来源记录。</p>
+            <p class="records-empty" data-record-empty hidden data-i18n="options.records.empty">
+              还没有找到来源记录。
+            </p>
           </div>
-          <aside class="settings-preview records-preview" aria-label="来源记录详情">
+          <aside
+            class="settings-preview records-preview"
+            data-i18n-aria-label="options.records.details"
+            aria-label="来源记录详情"
+          >
             <div class="preview-heading">
-              <span>记录详情</span><span class="preview-tag">本机</span>
+              <span data-i18n="options.records.details">记录详情</span
+              ><span class="preview-tag" data-i18n="options.records.local">本机</span>
             </div>
             <div class="record-detail" data-record-detail hidden>
               <div class="record-detail-author">
@@ -428,48 +556,77 @@
               <dl class="record-meta">
                 <dt>Tweet ID</dt>
                 <dd data-record-tweet-id></dd>
-                <dt>保存时间</dt>
+                <dt data-i18n="options.records.savedAt">保存时间</dt>
                 <dd data-record-saved-at></dd>
-                <dt>原文链接</dt>
-                <dd><a data-record-link target="_blank" rel="noopener noreferrer">打开原推</a></dd>
+                <dt data-i18n="options.records.originalLink">原文链接</dt>
+                <dd>
+                  <a
+                    data-record-link
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-i18n="options.records.openTweet"
+                    >打开原推</a
+                  >
+                </dd>
               </dl>
               <pre class="record-text" data-record-text></pre>
               <p class="record-output-summary" data-record-output-summary></p>
               <div class="record-output-list" data-record-output-list></div>
               <button type="button" class="button button-danger" data-record-delete>
-                删除这条记录
+                <span data-i18n="options.records.delete">删除这条记录</span>
               </button>
             </div>
-            <p class="records-detail-empty" data-record-detail-empty>选择一条记录查看详情。</p>
+            <p
+              class="records-detail-empty"
+              data-record-detail-empty
+              data-i18n="options.records.select"
+            >
+              选择一条记录查看详情。
+            </p>
           </aside>
         </section>
         <div class="reset-confirm" data-reset-confirm hidden>
           <div>
-            <strong>恢复三项默认设置？</strong>
-            <p>这只会修改当前草稿，点击保存后才会生效。</p>
+            <strong data-i18n="options.reset.title">恢复三项默认设置？</strong>
+            <p data-i18n="options.reset.description">这只会修改当前草稿，点击保存后才会生效。</p>
           </div>
           <div>
-            <button type="button" class="button button-secondary" data-reset-cancel>取消</button
+            <button
+              type="button"
+              class="button button-secondary"
+              data-reset-cancel
+              data-i18n="options.cancel"
+            >
+              取消</button
             ><button type="button" class="button button-danger" data-reset-confirm-button>
-              恢复默认
+              <span data-i18n="options.reset">恢复默认</span>
             </button>
           </div>
         </div>
         <footer class="save-bar">
           <div class="save-state">
             <span class="state-dot" aria-hidden="true"></span
-            ><output data-status role="status" aria-live="polite">正在读取偏好…</output>
+            ><output data-status role="status" aria-live="polite" data-i18n="options.status.loading"
+              >正在读取偏好…</output
+            >
           </div>
           <div class="save-actions">
-            <button type="button" class="button button-quiet" data-reset disabled>恢复默认</button
+            <button
+              type="button"
+              class="button button-quiet"
+              data-reset
+              disabled
+              data-i18n="options.reset"
+            >
+              恢复默认</button
             ><button type="submit" class="button button-primary" disabled>
-              保存偏好 <span aria-hidden="true">↗</span>
+              <span data-i18n="options.save">保存偏好</span> <span aria-hidden="true">↗</span>
             </button>
           </div>
         </footer>
       </form>
       <footer class="page-footer">
-        分享有据 · Share This Tweet <span>·</span> 分享喜欢，也留下出处。
+        <span data-i18n="options.footer">分享有据 · Share This Tweet · 分享喜欢，也留下出处。</span>
       </footer>
     </main>
     <script src="./options.js"></script>

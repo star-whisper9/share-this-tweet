@@ -1,4 +1,5 @@
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
+import { t } from '../shared/i18n.js';
 import type { ActionState, ActionStatus } from './export-session.js';
 
 export type IconName =
@@ -86,7 +87,7 @@ export function errorDetails(message: string, technical: string): HTMLElement {
   wrapper.append(node('p', '', message));
   if (technical) {
     const details = node('details', '');
-    details.append(node('summary', '', '查看详细信息'), node('p', '', technical));
+    details.append(node('summary', '', t('content.viewDetails')), node('p', '', technical));
     wrapper.append(details);
   }
   return wrapper;

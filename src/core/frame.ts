@@ -1,5 +1,6 @@
 import { IMAGE_PALETTES, detectImageTheme, type ImageTheme } from './image-theme.js';
 import { ImageResources, loadAvatar, releaseImage, type LoadedAvatar } from './image-resources.js';
+import { getLocale, t, type Locale } from '../shared/i18n.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
 
@@ -82,7 +83,10 @@ export function calculateFrameLayout(input: FrameLayoutInput): FrameLayout {
 
   const availableWidth = Math.max(1, input.width - paddingX * 2);
   const sourceWidth = getMaxTextWidth(input.sourceLines, input.measureText);
-  const minLeftWidth = Math.max(fontSize * 6, input.measureText('模板').width);
+  const minLeftWidth = Math.max(
+    fontSize * 6,
+    input.measureText(t('core.frame.templateMeasure')).width,
+  );
   const canUseDoubleColumn = availableWidth - gap >= minLeftWidth + sourceWidth;
 
   if (canUseDoubleColumn) {
@@ -132,13 +136,18 @@ function getFrameText(
   media: MediaRecord,
   template: string,
   extension = 'jpg',
+  locale: Locale = getLocale(),
 ): string {
   const context = { tweet: record, media, extension };
-  return renderTemplate(template, { ...context, avatarMarker: FRAME_AVATAR_MARKER }).trim();
+  return renderTemplate(template, {
+    ...context,
+    avatarMarker: FRAME_AVATAR_MARKER,
+    locale,
+  }).trim();
 }
 
-function getSourceLines(record: TweetRecord): string[] {
-  return [record.tweetId, `${FRAME_BRAND_MARKER}分享有据`];
+function getSourceLines(record: TweetRecord, locale: Locale): string[] {
+  return [record.tweetId, `${FRAME_BRAND_MARKER}${t('core.brand', {}, locale)}`];
 }
 
 function createFrameTextMeasurer(
@@ -223,13 +232,17 @@ export function hasTransparentPixels(
   return false;
 }
 
-export function encodeFrame(canvas: HTMLCanvasElement, transparent: boolean): Promise<Blob> {
+export function encodeFrame(
+  canvas: HTMLCanvasElement,
+  transparent: boolean,
+  locale: Locale = getLocale(),
+): Promise<Blob> {
   const type = transparent ? 'image/webp' : 'image/jpeg';
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
         if (!blob || blob.type !== type) {
-          reject(new Error(`浏览器无法生成 ${type} 画框`));
+          reject(new Error(t('core.frame.imageFailed', { type }, locale)));
           return;
         }
         resolve(blob);
@@ -246,12 +259,12 @@ export function frameOutputSize(
   height: number,
 ): { width: number; height: number; scale: number } {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
-    throw new Error('无效的画框尺寸');
+    throw new Error(t('core.frame.invalidDimensions'));
   const scale = Math.max(1, 640 / width);
   const outputWidth = Math.ceil(width * scale);
   const outputHeight = Math.ceil(height * scale);
   if (outputWidth > 16384 || outputHeight > 16384 || outputWidth * outputHeight > 32000000)
-    throw new Error('图片超出画框尺寸限制，无法完整生成。');
+    throw new Error(t('core.frame.imageTooLarge'));
   return { width: outputWidth, height: outputHeight, scale };
 }
 
@@ -263,11 +276,13 @@ export async function renderImageFrame(
   resources = new ImageResources(),
   theme: ImageTheme = detectImageTheme(),
   source?: HTMLCanvasElement,
+  locale: Locale = getLocale(),
 ): Promise<Blob> {
   const palette = IMAGE_PALETTES[theme];
-  if (!source && media.type !== 'photo') throw new Error('只有照片支持生成画框');
-  let userText = getFrameText(record, media, template);
-  if (!source && !media.originalUrl) throw new Error('当前照片没有可用的原图地址');
+  if (!source && media.type !== 'photo') throw new Error(t('core.frame.photoOnly', {}, locale));
+  let userText = getFrameText(record, media, template, 'jpg', locale);
+  if (!source && !media.originalUrl)
+    throw new Error(t('core.frame.originalUnavailable', {}, locale));
   let image: HTMLImageElement | undefined;
   let avatarImage: LoadedAvatar | undefined;
   let brandImage: HTMLImageElement | undefined;
@@ -292,22 +307,22 @@ export async function renderImageFrame(
     if (failed?.status === 'rejected') throw failed.reason;
     resources.checkActive();
     const drawable = source ?? image;
-    if (!drawable) throw new Error('原图无法解码');
+    if (!drawable) throw new Error(t('core.frame.decodeFailed', {}, locale));
     const imageWidth = 'naturalWidth' in drawable ? drawable.naturalWidth : drawable.width;
     const imageHeight = 'naturalHeight' in drawable ? drawable.naturalHeight : drawable.height;
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器不支持 Canvas 画框渲染');
+    if (!context) throw new Error(t('core.frame.canvasUnavailable', {}, locale));
 
     if (imageWidth > 16384 || imageHeight > 16384 || imageWidth * imageHeight > 32000000) {
-      throw new Error('图片超出画框尺寸限制，无法完整生成。');
+      throw new Error(t('core.frame.imageTooLarge', {}, locale));
     }
     canvas.width = imageWidth;
     canvas.height = imageHeight;
     context.drawImage(drawable, 0, 0);
     const transparent = hasTransparentPixels(context, imageWidth, imageHeight);
-    userText = getFrameText(record, media, template, transparent ? 'webp' : 'jpg');
+    userText = getFrameText(record, media, template, transparent ? 'webp' : 'jpg', locale);
 
-    const sourceLines = getSourceLines(record);
+    const sourceLines = getSourceLines(record, locale);
     const fontSize = Math.max(12, Math.min(32, Math.round(imageWidth * 0.035)));
     context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
     const layout = calculateFrameLayout({
@@ -397,7 +412,7 @@ export async function renderImageFrame(
     context.strokeRect(0.5, frameY + 0.5, logicalWidth - 1, layout.barHeight - 1);
 
     resources.checkActive();
-    return await encodeFrame(canvas, transparent);
+    return await encodeFrame(canvas, transparent, locale);
   } finally {
     if (image) releaseImage(image);
     if (avatarImage) releaseImage(avatarImage);

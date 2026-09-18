@@ -121,6 +121,23 @@ svg {
   height: 29px;
   object-fit: contain;
 }
+.language-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.language-picker select {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 28px 5px 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
 main {
   max-width: 1120px;
   padding: 24px 36px 0;
@@ -1001,6 +1018,15 @@ form[data-state='loading'] .state-dot {
   }
   .brand {
     font-size: 14px;
+  }
+  .language-picker > span {
+    display: none;
+  }
+  .language-picker select {
+    min-height: 34px;
+    max-width: 122px;
+    padding-inline: 7px 22px;
+    font-size: 11px;
   }
   .brand-mark {
     width: 32px;

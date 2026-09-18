@@ -1,4 +1,5 @@
 import { TEMPLATE_FIELDS, DATE_FORMATS, type TemplateContext } from './template-fields.js';
+import { t } from '../shared/i18n.js';
 export type { TemplateContext } from './template-fields.js';
 export { TEMPLATE_FIELDS, DATE_FORMATS, fieldsForScope } from './template-fields.js';
 
@@ -12,25 +13,26 @@ const fields = new Map(TEMPLATE_FIELDS.map((field) => [field.name, field]));
 
 function valueFor(expression: string, context: TemplateContext, marker = true): string {
   const [formatted, ...defaults] = expression.split('|');
-  if (defaults.length > 1) throw new TemplateError('默认值不能包含 |');
+  if (defaults.length > 1) throw new TemplateError(t('core.template.defaultContainsPipe'));
   const separator = formatted.indexOf(':');
   const name = separator < 0 ? formatted : formatted.slice(0, separator);
   const format = separator < 0 ? undefined : formatted.slice(separator + 1);
   const field = fields.get(name);
-  if (!field) throw new TemplateError(`未知模板字段：{${name}}`);
+  if (!field) throw new TemplateError(t('core.template.unknownField', { name }));
   if (
     format !== undefined &&
     (!field.date || !(DATE_FORMATS as readonly string[]).includes(format))
   )
-    throw new TemplateError(`不支持的模板格式：{${formatted}}`);
+    throw new TemplateError(t('core.template.unsupportedFormat', { format: formatted }));
   if (field.media && !context.media && !(name === 'media.index' && context.card))
-    throw new TemplateError(`模板字段需要媒体上下文：{${name}}`);
+    throw new TemplateError(t('core.template.needsMedia', { name }));
   const raw = field.read(context);
   if (marker && name === 'author.avatar' && context.avatarMarker) return context.avatarMarker;
   let value = raw === undefined ? '' : String(raw);
   if (value && format) {
     const date = new Date(value);
-    if (!Number.isFinite(date.getTime())) throw new TemplateError(`日期字段无法格式化：{${name}}`);
+    if (!Number.isFinite(date.getTime()))
+      throw new TemplateError(t('core.template.invalidDate', { name }));
     const iso = date.toISOString();
     value =
       format === 'YYYYMMDD'
@@ -54,12 +56,14 @@ export function renderTemplate(template: string, context: TemplateContext): stri
     }
     const expression = segment.value;
     if (expression.startsWith('?')) {
-      if (condition !== undefined) throw new TemplateError('可选区块不能嵌套');
+      if (condition !== undefined) throw new TemplateError(t('core.template.nestedOptional'));
       condition = expression.slice(1);
-      if (!fields.has(condition)) throw new TemplateError(`未知区块字段：${condition}`);
+      if (!fields.has(condition))
+        throw new TemplateError(t('core.template.unknownOptionalField', { name: condition }));
       visible = valueFor(condition, context, false) !== '';
     } else if (expression.startsWith('/')) {
-      if (condition !== expression.slice(1)) throw new TemplateError('可选区块结束标记不匹配');
+      if (condition !== expression.slice(1))
+        throw new TemplateError(t('core.template.optionalEndMismatch'));
       condition = undefined;
       visible = true;
     } else {
@@ -67,7 +71,7 @@ export function renderTemplate(template: string, context: TemplateContext): stri
       if (visible) result.push(value);
     }
   }
-  if (condition !== undefined) throw new TemplateError('可选区块缺少结束标记');
+  if (condition !== undefined) throw new TemplateError(t('core.template.optionalUnclosed'));
   return result.join('');
 }
 
@@ -84,20 +88,20 @@ export function parseTemplate(template: string): TemplateSegment[] {
     const open = template.indexOf('{', cursor);
     const closeLiteral = template.indexOf('}', cursor);
     if (open === -1) {
-      if (closeLiteral !== -1) throw new TemplateError('模板包含未匹配的 }');
+      if (closeLiteral !== -1) throw new TemplateError(t('core.template.unmatchedClose'));
       if (cursor < template.length)
         segments.push({ type: 'literal', value: template.slice(cursor) });
       break;
     }
     if (closeLiteral !== -1 && closeLiteral < open) {
-      throw new TemplateError('模板包含未匹配的 }');
+      throw new TemplateError(t('core.template.unmatchedClose'));
     }
 
     if (cursor < open) segments.push({ type: 'literal', value: template.slice(cursor, open) });
     const close = template.indexOf('}', open + 1);
-    if (close === -1) throw new TemplateError('模板包含未匹配的 {');
+    if (close === -1) throw new TemplateError(t('core.template.unmatchedOpen'));
     if (template.indexOf('{', open + 1) !== -1 && template.indexOf('{', open + 1) < close) {
-      throw new TemplateError('模板占位符不能嵌套');
+      throw new TemplateError(t('core.template.nestedPlaceholder'));
     }
 
     segments.push({ type: 'placeholder', value: template.slice(open + 1, close) });

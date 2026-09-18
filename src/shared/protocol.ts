@@ -1,3 +1,4 @@
+import type { Locale } from './i18n.js';
 import type { TweetRecord } from './model.js';
 import type { MediaSourceMetadata } from './media-source.js';
 import type {
@@ -7,7 +8,7 @@ import type {
   StoredTweetRecord,
 } from './storage-model.js';
 
-export type ExtensionMessage =
+type ExtensionRequest =
   | { type: 'tweet-record'; record: TweetRecord }
   | { type: 'get-tweet-record'; tweetId: string }
   | { type: 'save-tweet-record'; record: TweetRecord }
@@ -37,3 +38,5 @@ export type StorageArchiveResponse =
 export type StorageRecordsResponse =
   | { ok: true; tweetRecords: StoredTweetRecord[]; outputRecords: OutputRecord[] }
   | { ok: false; error: string };
+
+export type ExtensionMessage = ExtensionRequest & { locale?: Locale };

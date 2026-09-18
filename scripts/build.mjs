@@ -32,6 +32,7 @@ for (const [source, output] of entries) {
 }
 
 await cp(resolve(root, 'src/manifest.json'), resolve(dist, 'manifest.json'));
+await cp(resolve(root, 'src/_locales'), resolve(dist, '_locales'), { recursive: true });
 await mkdir(resolve(dist, 'icons'), { recursive: true });
 for (const icon of ['icon-16.png', 'icon-32.png', 'icon-48.png', 'icon-96.png', 'icon-128.png']) {
   await cp(resolve(root, 'src/icons', icon), resolve(dist, 'icons', icon));

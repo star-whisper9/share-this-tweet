@@ -1,4 +1,6 @@
 /** Compressed sources only: decoded full-size images are owned by each renderer. */
+import { t } from '../shared/i18n.js';
+
 export class ImageResources {
   private readonly controller = new AbortController();
   private readonly blobs = new Map<string, Blob>();
@@ -45,10 +47,10 @@ export class ImageResources {
     try {
       this.checkActive();
       const response = await fetch(url, { credentials: 'omit', signal: this.controller.signal });
-      if (!response.ok) throw new Error(`图片请求失败：HTTP ${response.status}`);
+      if (!response.ok) throw new Error(t('core.image.requestFailed', { status: response.status }));
       const blob = await response.blob();
       this.checkActive();
-      if (!blob.size) throw new Error('图片响应为空');
+      if (!blob.size) throw new Error(t('core.image.emptyResponse'));
       if (blob.size <= this.budget) {
         while (this.bytes + blob.size > this.budget || this.blobs.size >= 16) {
           const oldest = this.blobs.keys().next().value!;
@@ -81,7 +83,7 @@ export class ImageResources {
           else resolve();
         };
         image.onload = () => finish();
-        image.onerror = () => finish(new Error('图片无法解码'));
+        image.onerror = () => finish(new Error(t('core.image.decodeFailed')));
         signal.addEventListener('abort', abort, { once: true });
         image.src = objectUrl;
       });
@@ -126,7 +128,7 @@ export async function loadMonochromeIcon(
     canvas.width = 64;
     canvas.height = 64;
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('浏览器无法绘制徽标');
+    if (!context) throw new Error(t('core.image.logoCanvasUnavailable'));
     const ratio = Math.min(64 / image.naturalWidth, 64 / image.naturalHeight);
     const width = image.naturalWidth * ratio;
     const height = image.naturalHeight * ratio;

@@ -3,7 +3,11 @@ import { readMp4SourceInWorker } from '../core/media-source-client.js';
 import { mountTemplateGuide } from './template-guide.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
-import { buildTweetText } from '../core/text-export.js';
+import {
+  buildTweetText,
+  getDefaultTextTemplate,
+  isDefaultTextTemplate,
+} from '../core/text-export.js';
 import {
   clearStoredRecords,
   deleteStoredTweetRecord,
@@ -18,9 +22,12 @@ import type { MediaSourceMetadata } from '../shared/media-source.js';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
+  saveLanguage,
   saveSettings,
+  watchLanguage,
   type ExtensionSettings,
 } from '../shared/settings.js';
+import { getLocale, localizeDocument, t, type LanguagePreference } from '../shared/i18n.js';
 
 type SettingKey = 'filenameTemplate' | 'frameTemplate' | 'textTemplate';
 type Tab = 'frame' | 'filename' | 'text' | 'records';
@@ -65,74 +72,103 @@ const sourceMediaInput = document.querySelector<HTMLInputElement>('[data-source-
 const sourceMediaDrop = document.querySelector<HTMLElement>('[data-source-media-drop]');
 const sourceMediaStatus = document.querySelector<HTMLOutputElement>('[data-source-media-status]');
 const sourceMediaResult = document.querySelector<HTMLElement>('[data-source-media-result]');
+const languageSelect = document.querySelector<HTMLSelectElement>('[data-language]');
 let storedTweetRecords: StoredTweetRecord[] = [];
 let storedOutputRecords: OutputRecord[] = [];
 let selectedRecordId = '';
 let recordsLoading = false;
 let sourceReadController: AbortController | undefined;
+let displayedSource: { source: MediaSourceMetadata; filename: string } | undefined;
 // The reader only inspects bounded MP4 boxes in its Worker, so it can accept
 // larger local files than the background network-download path buffers.
 const MAX_LOCAL_SOURCE_FILE_SIZE = 2 * 1024 * 1024 * 1024;
-const sampleRecord: TweetRecord = {
-  tweetId: '1234567890',
-  url: 'https://x.com/example/status/1234567890',
-  text: '把路上的光，留给每一个平常的日子。\n今天也有值得分享的小事。',
-  author: { id: '7', handle: '@example', name: '晴日来信', avatarUrl: '/icons/x.png' },
-  publishedAt: '2026-09-07T10:00:00.000Z',
-  media: [],
-};
+function sampleRecordForLocale(): TweetRecord {
+  return {
+    tweetId: '1234567890',
+    url: 'https://x.com/example/status/1234567890',
+    text: t('options.sample.body'),
+    author: {
+      id: '7',
+      handle: '@example',
+      name: t('core.field.example.author.name'),
+      avatarUrl: '/icons/x.png',
+    },
+    publishedAt: '2026-09-07T10:00:00.000Z',
+    media: [],
+  };
+}
 const sampleMedia: MediaRecord = {
   index: 1,
   type: 'photo',
   originalUrl: 'https://pbs.twimg.com/media/example.jpg?format=jpg&name=orig',
 };
-const presets: Record<SettingKey, Preset[]> = {
-  frameTemplate: [
-    { label: '经典署名', description: '左侧显示作者名称', value: DEFAULT_SETTINGS.frameTemplate },
-    { label: '头像与署名', description: '作者头像和名称', value: '{author.avatar} {author.name}' },
-    { label: '仅账号', description: '左侧显示推主账号', value: '@{author.handle}' },
-  ],
-  filenameTemplate: [
-    {
-      label: '账号与编号',
-      description: '易查找且避免重名',
-      value: DEFAULT_SETTINGS.filenameTemplate,
-    },
-    {
-      label: '按日期归档',
-      description: 'UTC 日期 + 账号 + 编号',
-      value:
-        '{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}',
-    },
-    {
-      label: '仅编号',
-      description: '推文 ID + 序号',
-      value: '{tweet.id}_{media.index}.{extension}',
-    },
-  ],
-  textTemplate: [
-    {
-      label: '双语与来源',
-      description: '有译文时显示译文和原文，否则仅原文',
-      value: DEFAULT_SETTINGS.textTemplate,
-    },
-    {
-      label: '简洁转发',
-      description: '可选译文、原文和链接',
-      value:
-        '{?translation.text}{translation.text}\n\n原文：\n{/translation.text}{translation.originalText}\n\n{tweet.url}',
-    },
-    {
-      label: '来源索引',
-      description: '作者、日期和链接',
-      value: '{author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD}\n{tweet.url}',
-    },
-    { label: '我的排版', description: '自己安排文字与出处' },
-  ],
-};
+function getPresets(): Record<SettingKey, Preset[]> {
+  const locale = getLocale();
+  const original = t('core.translation.original', {}, locale);
+  return {
+    frameTemplate: [
+      {
+        label: t('options.preset.frame.classic.label'),
+        description: t('options.preset.frame.classic.description'),
+        value: DEFAULT_SETTINGS.frameTemplate,
+      },
+      {
+        label: t('options.preset.frame.avatar.label'),
+        description: t('options.preset.frame.avatar.description'),
+        value: '{author.avatar} {author.name}',
+      },
+      {
+        label: t('options.preset.frame.handle.label'),
+        description: t('options.preset.frame.handle.description'),
+        value: '@{author.handle}',
+      },
+    ],
+    filenameTemplate: [
+      {
+        label: t('options.preset.filename.account.label'),
+        description: t('options.preset.filename.account.description'),
+        value: DEFAULT_SETTINGS.filenameTemplate,
+      },
+      {
+        label: t('options.preset.filename.date.label'),
+        description: t('options.preset.filename.date.description'),
+        value:
+          '{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}',
+      },
+      {
+        label: t('options.preset.filename.id.label'),
+        description: t('options.preset.filename.id.description'),
+        value: '{tweet.id}_{media.index}.{extension}',
+      },
+    ],
+    textTemplate: [
+      {
+        label: t('options.preset.text.bilingual.label'),
+        description: t('options.preset.text.bilingual.description'),
+        value: getDefaultTextTemplate(locale),
+      },
+      {
+        label: t('options.preset.text.simple.label'),
+        description: t('options.preset.text.simple.description'),
+        value: `{?translation.text}{translation.text}\n\n${original}\n{/translation.text}{translation.originalText}\n\n{tweet.url}`,
+      },
+      {
+        label: t('options.preset.text.source.label'),
+        description: t('options.preset.text.source.description'),
+        value: '{author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD}\n{tweet.url}',
+      },
+      {
+        label: t('options.preset.text.custom.label'),
+        description: t('options.preset.text.custom.description'),
+      },
+    ],
+  };
+}
+let presets = getPresets();
 let baseline: ExtensionSettings = { ...DEFAULT_SETTINGS };
 let ready = false;
 let saving = false;
+let languageSaving = false;
 let dirty = false;
 let invalidFields: SettingKey[] = [];
 
@@ -145,6 +181,7 @@ function readSettings(): ExtensionSettings {
     '[data-frame-orientation][aria-pressed="true"]',
   )?.dataset.frameOrientation;
   return {
+    language: (languageSelect?.value as LanguagePreference) ?? baseline.language,
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
     frameTemplate: inputs.frameTemplate?.value ?? DEFAULT_SETTINGS.frameTemplate,
     frameOrientation: frameOrientations.includes(selectedOrientation as FrameOrientation)
@@ -188,17 +225,18 @@ function setError(name: SettingKey, message: string): void {
   }
 }
 function renderValue(name: SettingKey, value: string): string {
+  const sampleRecord = sampleRecordForLocale();
   if (name === 'filenameTemplate') {
-    if (!value.trim()) throw new Error('文件名不能为空，请选择一种命名方式或填写模板。');
+    if (!value.trim()) throw new Error(t('options.error.filenameEmpty'));
     return buildMediaFilename(sampleRecord, sampleMedia, value);
   }
   const output =
     name === 'frameTemplate'
       ? renderTemplate(value, { tweet: sampleRecord, media: sampleMedia, extension: 'png' })
       : buildTweetText(sampleRecord, value);
-  if (!output.trim()) throw new Error('预览内容为空，请至少保留文字或一个变量。');
+  if (!output.trim()) throw new Error(t('options.error.previewEmpty'));
   return name === 'frameTemplate'
-    ? output.replace(sampleRecord.author.avatarUrl ?? '', '作者头像')
+    ? output.replace(sampleRecord.author.avatarUrl ?? '', t('options.preview.avatar'))
     : output;
 }
 function validateAndPreview(settings: ExtensionSettings): boolean {
@@ -211,7 +249,7 @@ function validateAndPreview(settings: ExtensionSettings): boolean {
     } catch (error) {
       invalidFields.push(name);
       setError(name, error instanceof Error ? error.message : String(error));
-      if (preview) preview.textContent = '修正模板后，这里会显示预览。';
+      if (preview) preview.textContent = t('options.status.previewFix');
     }
   }
   return invalidFields.length === 0;
@@ -245,16 +283,17 @@ function updateDraft(announce = true): void {
   updatePresetSelection(settings);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
   // first invalid field even if it is currently in another tab.
-  if (submit) submit.disabled = !ready || saving || !dirty;
+  if (submit) submit.disabled = !ready || saving || languageSaving || !dirty;
   if (announce && ready) {
-    if (!valid) setStatus('error', '有一处模板需要检查');
-    else if (dirty) setStatus('dirty', '有尚未保存的更改');
-    else setStatus('saved', '偏好已保存');
+    if (!valid) setStatus('error', t('options.status.invalid'));
+    else if (dirty) setStatus('dirty', t('options.status.dirty'));
+    else setStatus('saved', t('options.status.saved'));
   }
 }
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
+  if (languageSelect) languageSelect.value = settings.language;
   for (const [attribute, value] of [['data-stitch-style', settings.stitchStyle]]) {
     for (const button of Array.from(document.querySelectorAll(`[${attribute}]`)))
       button.setAttribute('aria-pressed', String(button.getAttribute(attribute!) === value));
@@ -288,11 +327,12 @@ function verifiedSourceUrl(source: MediaSourceMetadata): string {
     url.hash ||
     !new RegExp(`^/(?:[A-Za-z0-9_]{1,15}|i)/status/${source.tweetId}$`).test(url.pathname)
   )
-    throw new Error('文件中的原推链接未通过安全检查');
+    throw new Error(t('options.records.invalidUrl'));
   return url.href;
 }
 
 function renderSourceMedia(source: MediaSourceMetadata, filename: string): void {
+  displayedSource = { source, filename };
   const update = (selector: string, value: string): void => {
     const element = sourceMediaResult?.querySelector<HTMLElement>(selector);
     if (element) element.textContent = value;
@@ -302,11 +342,16 @@ function renderSourceMedia(source: MediaSourceMetadata, filename: string): void 
   update('[data-source-tweet-id]', source.tweetId);
   update(
     '[data-source-media-kind]',
-    `${source.media.type === 'animated_gif' ? 'GIF 视频' : '视频'} · 第 ${source.media.index} 项`,
+    t(
+      source.media.type === 'animated_gif'
+        ? 'options.records.source.kindGif'
+        : 'options.records.source.kindVideo',
+      { index: source.media.index },
+    ),
   );
   update(
     '[data-source-published-at]',
-    source.publishedAt ? formatRecordDate(source.publishedAt) : '未知',
+    source.publishedAt ? formatRecordDate(source.publishedAt) : t('options.records.unknown'),
   );
   update('[data-source-tool]', `${source.tool.name} ${source.tool.version}`);
   const link = sourceMediaResult?.querySelector<HTMLAnchorElement>('[data-source-link]');
@@ -315,28 +360,33 @@ function renderSourceMedia(source: MediaSourceMetadata, filename: string): void 
 }
 
 async function readSourceMedia(file: File): Promise<void> {
-  sourceReadController?.abort(new Error('已选择另一个文件'));
+  displayedSource = undefined;
+  sourceReadController?.abort(new Error(t('options.source.cancelled')));
   const controller = new AbortController();
   sourceReadController = controller;
   if (sourceMediaResult) sourceMediaResult.hidden = true;
   if (file.size > MAX_LOCAL_SOURCE_FILE_SIZE) {
-    setSourceMediaStatus('读取失败：文件超过 2 GiB。');
+    setSourceMediaStatus(t('options.records.source.failedLarge'));
     if (sourceReadController === controller) sourceReadController = undefined;
     return;
   }
-  setSourceMediaStatus(`正在本机读取 ${file.name}…`);
+  setSourceMediaStatus(t('options.records.source.reading', { filename: file.name }));
   try {
     const source = await readMp4SourceInWorker(file, { signal: controller.signal });
     if (sourceReadController !== controller) return;
     if (!source) {
-      setSourceMediaStatus('这个 MP4 没有“分享有据”写入的来源信息。');
+      setSourceMediaStatus(t('options.records.source.none'));
       return;
     }
     renderSourceMedia(source, file.name);
-    setSourceMediaStatus('已读取到来源。');
+    setSourceMediaStatus(t('options.records.source.done'));
   } catch (error) {
     if (sourceReadController !== controller) return;
-    setSourceMediaStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    setSourceMediaStatus(
+      t('options.records.source.failed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   } finally {
     if (sourceReadController === controller) sourceReadController = undefined;
   }
@@ -344,7 +394,7 @@ async function readSourceMedia(file: File): Promise<void> {
 
 function formatRecordDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN');
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(getLocale());
 }
 
 function getRecordOutputs(tweetId: string): OutputRecord[] {
@@ -380,7 +430,10 @@ function renderRecordDetail(): void {
     const element = document.querySelector<HTMLElement>(selector);
     if (element) element.textContent = value;
   };
-  update('[data-record-author]', record.author.name || record.author.handle || '未知作者');
+  update(
+    '[data-record-author]',
+    record.author.name || record.author.handle || t('options.records.unknownAuthor'),
+  );
   update(
     '[data-record-handle]',
     record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '',
@@ -393,13 +446,14 @@ function renderRecordDetail(): void {
   update(
     '[data-record-text]',
     [
-      record.text || '这条推文没有正文。',
+      record.text || t('options.records.noText'),
       quote
         ? [
-            '引用推文',
+            t('options.records.quote'),
             quote.record ? `${quote.record.author.name} · @${quote.record.author.handle}` : '',
-            quote.record?.text ??
-              (quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容'),
+            (quote.record?.text ?? quote.status === 'unavailable')
+              ? t('options.records.quoteUnavailable')
+              : t('options.records.quotePending'),
             quote.tweetId ? `https://x.com/i/status/${quote.tweetId}` : '',
           ]
             .filter(Boolean)
@@ -411,21 +465,26 @@ function renderRecordDetail(): void {
   );
   const outputs = getRecordOutputs(record.tweetId);
   const outputLabels: Record<string, string> = {
-    'original-media': '原始媒体',
-    'sourced-media': '来源媒体',
-    'framed-image': '来源画框',
-    'tweet-card': '推文卡片',
-    'row-tweet-card': '单行推文卡片',
-    'stitched-image': '拼接图片',
-    'shared-text': '分享文本',
-    'shared-image': '分享图像',
-    'copied-text': '复制文本',
+    'original-media': t('options.records.output.originalMedia'),
+    'sourced-media': t('options.records.output.sourcedMedia'),
+    'framed-image': t('options.records.output.framedImage'),
+    'tweet-card': t('options.records.output.tweetCard'),
+    'row-tweet-card': t('options.records.output.rowTweetCard'),
+    'stitched-image': t('options.records.output.stitchedImage'),
+    'shared-text': t('options.records.output.sharedText'),
+    'shared-image': t('options.records.output.sharedImage'),
+    'copied-text': t('options.records.output.copiedText'),
   };
   update(
     '[data-record-output-summary]',
     outputs.length === 0
-      ? '尚无输出记录。'
-      : `已记录 ${outputs.length} 次输出：${outputs.map((output) => outputLabels[output.outputType] ?? output.outputType).join('、')}`,
+      ? t('options.records.noOutputs')
+      : t('options.records.outputSummary', {
+          count: outputs.length,
+          outputs: outputs
+            .map((output) => outputLabels[output.outputType] ?? output.outputType)
+            .join(getLocale() === 'en' ? ', ' : '、'),
+        }),
   );
   const outputList = document.querySelector<HTMLElement>('[data-record-output-list]');
   outputList?.replaceChildren();
@@ -448,8 +507,8 @@ function renderRecords(): void {
   const filtered = storedTweetRecords.filter((record) => recordMatches(record, query));
   if (recordSummary) {
     recordSummary.textContent = recordsLoading
-      ? '正在读取来源记录…'
-      : `共 ${storedTweetRecords.length} 条推文记录，当前显示 ${filtered.length} 条`;
+      ? t('options.records.loading')
+      : t('options.records.summary', { total: storedTweetRecords.length, shown: filtered.length });
   }
   if (recordList) recordList.replaceChildren();
   if (filtered.length === 0) {
@@ -466,9 +525,9 @@ function renderRecords(): void {
       button.setAttribute('role', 'listitem');
       button.setAttribute('aria-pressed', String(record.tweetId === selectedRecordId));
       const title = document.createElement('strong');
-      title.textContent = `${record.author.name || '未知作者'} · ${record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '未知账号'}`;
+      title.textContent = `${record.author.name || t('options.records.unknownAuthor')} · ${record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : t('options.records.unknownHandle')}`;
       const meta = document.createElement('span');
-      meta.textContent = `${record.tweetId} · ${formatRecordDate(record.savedAt)} · ${getRecordOutputs(record.tweetId).length} 条输出`;
+      meta.textContent = `${record.tweetId} · ${formatRecordDate(record.savedAt)} · ${t('options.records.outputs', { count: getRecordOutputs(record.tweetId).length })}`;
       button.append(title, meta);
       button.addEventListener('click', () => {
         selectedRecordId = record.tweetId;
@@ -491,7 +550,11 @@ async function loadRecords(): Promise<void> {
   } catch (error) {
     storedTweetRecords = [];
     storedOutputRecords = [];
-    setRecordStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`);
+    setRecordStatus(
+      t('options.records.source.failed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   } finally {
     recordsLoading = false;
     renderRecords();
@@ -511,9 +574,13 @@ function downloadJsonArchive(archive: StorageArchive): void {
 async function exportRecords(): Promise<void> {
   try {
     downloadJsonArchive(await exportStorageRecords());
-    setRecordStatus('来源记录已导出。');
+    setRecordStatus(t('options.records.exported'));
   } catch (error) {
-    setRecordStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+    setRecordStatus(
+      t('options.records.exportFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 
@@ -522,40 +589,53 @@ async function importRecords(file: File): Promise<void> {
     const archive = JSON.parse(await file.text()) as StorageArchive;
     await importStorageRecords(archive);
     selectedRecordId = '';
-    setRecordStatus('来源记录已导入。');
+    setRecordStatus(t('options.records.imported'));
     await loadRecords();
   } catch (error) {
-    setRecordStatus(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+    setRecordStatus(
+      t('options.records.importFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 
 async function deleteSelectedRecord(): Promise<void> {
-  if (!selectedRecordId || !window.confirm('删除这条来源记录及其输出记录？')) return;
+  if (!selectedRecordId || !window.confirm(t('options.records.deleteConfirm'))) return;
   try {
     await deleteStoredTweetRecord(selectedRecordId);
     selectedRecordId = '';
-    setRecordStatus('来源记录已删除。');
+    setRecordStatus(t('options.records.deleted'));
     await loadRecords();
   } catch (error) {
-    setRecordStatus(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+    setRecordStatus(
+      t('options.records.deleteFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 
 async function clearRecords(): Promise<void> {
-  if (!window.confirm('清空全部来源记录和输出记录？已保存到设备的媒体文件不会被删除。')) return;
+  if (!window.confirm(t('options.records.clearConfirm'))) return;
   try {
     await clearStoredRecords();
     selectedRecordId = '';
-    setRecordStatus('来源记录已清空。');
+    setRecordStatus(t('options.records.cleared'));
     await loadRecords();
   } catch (error) {
-    setRecordStatus(`清空失败：${error instanceof Error ? error.message : String(error)}`);
+    setRecordStatus(
+      t('options.records.clearFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   }
 }
 
 function buildControls(): void {
   for (const name of keys) {
     const container = document.querySelector(`[data-presets="${name}"]`);
+    container?.replaceChildren();
     presets[name].forEach((preset, index) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -577,7 +657,7 @@ function buildControls(): void {
           renderValue(name, preset.value);
         } catch {
           button.disabled = true;
-          description.textContent = '当前模板引擎不支持';
+          description.textContent = t('options.preset.unsupported');
         }
       }
       button.addEventListener('click', () => {
@@ -596,6 +676,29 @@ function buildControls(): void {
     if (tokenContainer && input)
       mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft);
   }
+}
+
+function refreshLocalizedUi(): void {
+  const textTemplate = inputs.textTemplate;
+  if (
+    textTemplate &&
+    textTemplate.value === baseline.textTemplate &&
+    isDefaultTextTemplate(textTemplate.value)
+  ) {
+    const localizedDefault = getDefaultTextTemplate(getLocale());
+    textTemplate.value = localizedDefault;
+    baseline = { ...baseline, textTemplate: localizedDefault };
+  }
+  localizeDocument();
+  presets = getPresets();
+  buildControls();
+  const settings = readSettings();
+  validateAndPreview(settings);
+  updatePresetSelection(settings);
+  renderRecords();
+  if (displayedSource && !sourceMediaResult?.hidden)
+    renderSourceMedia(displayedSource.source, displayedSource.filename);
+  if (ready && !saving && form?.dataset.state !== 'error') updateDraft();
 }
 for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {
   tab.addEventListener('click', () => activateTab(tab.dataset.settingsTab as Tab));
@@ -632,6 +735,34 @@ for (const attribute of ['data-stitch-style']) {
   }
 }
 for (const input of Object.values(inputs)) input?.addEventListener('input', () => updateDraft());
+languageSelect?.addEventListener('change', () => {
+  const language = languageSelect.value as LanguagePreference;
+  if (!ready || saving || languageSaving) return;
+  const previousLanguage = baseline.language;
+  languageSaving = true;
+  languageSelect.disabled = true;
+  if (submit) submit.disabled = true;
+  void saveLanguage(language)
+    .then(() => {
+      baseline = { ...baseline, language };
+      refreshLocalizedUi();
+      updateDraft(false);
+    })
+    .catch((error) => {
+      languageSelect.value = previousLanguage;
+      setStatus(
+        'error',
+        t('common.language.error', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    })
+    .finally(() => {
+      languageSaving = false;
+      languageSelect.disabled = false;
+      updateDraft(false);
+    });
+});
 recordSearch?.addEventListener('input', () => renderRecords());
 document.querySelector('[data-record-refresh]')?.addEventListener('click', () => {
   void loadRecords();
@@ -690,17 +821,24 @@ document.querySelector('[data-reset-cancel]')?.addEventListener('click', () => {
 document.querySelector('[data-reset-confirm-button]')?.addEventListener('click', () => {
   if (!ready || saving) return;
   if (confirmation) confirmation.hidden = true;
-  writeSettings({ ...DEFAULT_SETTINGS });
-  setStatus(dirty ? 'dirty' : 'saved', dirty ? '已恢复默认，保存后生效' : '当前已经是默认偏好');
+  writeSettings({
+    ...DEFAULT_SETTINGS,
+    language: baseline.language,
+    textTemplate: getDefaultTextTemplate(getLocale()),
+  });
+  setStatus(
+    dirty ? 'dirty' : 'saved',
+    dirty ? t('options.status.resetDirty') : t('options.status.resetCurrent'),
+  );
   resetButton?.focus();
 });
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (form.dataset.activeTab === 'records') return;
-  if (!ready || saving || !dirty) return;
+  if (!ready || saving || languageSaving || !dirty) return;
   const settings = readSettings();
   if (!validateAndPreview(settings)) {
-    setStatus('error', '请先修正标出的模板');
+    setStatus('error', t('options.status.fixFirst'));
     if (invalidFields[0]) openEditor(invalidFields[0]);
     return;
   }
@@ -709,14 +847,19 @@ form?.addEventListener('submit', async (event) => {
   if (submit) submit.disabled = true;
   if (resetButton) resetButton.disabled = true;
   if (confirmation) confirmation.hidden = true;
-  setStatus('saving', '正在保存偏好…');
+  setStatus('saving', t('options.status.saving'));
   try {
     await saveSettings(settings);
     baseline = { ...settings };
     updateDraft(false);
-    setStatus('saved', '已保存，重新打开分享面板时生效');
+    setStatus('saved', t('options.status.savedApply'));
   } catch (error) {
-    setStatus('error', `未能保存：${error instanceof Error ? error.message : String(error)}`);
+    setStatus(
+      'error',
+      t('options.status.saveFailed', {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
   } finally {
     saving = false;
     if (editable) editable.disabled = false;
@@ -733,17 +876,19 @@ window.addEventListener('beforeunload', (event) => {
 async function initialize(): Promise<void> {
   ready = false;
   if (editable) editable.disabled = true;
+  if (languageSelect) languageSelect.disabled = true;
   if (resetButton) resetButton.disabled = true;
   if (submit) submit.disabled = true;
   const banner = document.querySelector<HTMLElement>('[data-load-error]');
   const retry = document.querySelector<HTMLButtonElement>('[data-retry-load]');
   if (retry) retry.disabled = true;
   if (banner) banner.hidden = true;
-  setStatus('loading', '正在读取偏好…');
+  setStatus('loading', t('options.status.loading'));
   try {
     const settings = await loadSettings();
     baseline = { ...settings };
     ready = true;
+    refreshLocalizedUi();
     writeSettings(settings);
     if (editable) editable.disabled = false;
     if (resetButton) resetButton.disabled = false;
@@ -756,13 +901,17 @@ async function initialize(): Promise<void> {
   } catch (error) {
     const message = document.querySelector<HTMLElement>('[data-load-message]');
     if (message)
-      message.textContent = `无法读取现有偏好，已暂停保存以免覆盖。${error instanceof Error ? error.message : String(error)}`;
+      message.textContent = t('options.status.loadProtected', {
+        message: error instanceof Error ? error.message : String(error),
+      });
     if (banner) banner.hidden = false;
-    setStatus('error', '读取失败，请重试');
+    setStatus('error', t('options.status.readFailed'));
   } finally {
     if (retry) retry.disabled = false;
+    if (languageSelect) languageSelect.disabled = !ready || languageSaving;
   }
 }
+localizeDocument();
 buildControls();
 writeSettings({ ...DEFAULT_SETTINGS });
 renderRecords();
@@ -771,6 +920,14 @@ document.querySelector('[data-retry-load]')?.addEventListener('click', () => {
 });
 void initialize();
 void loadRecords();
+const unwatchLanguage = watchLanguage((language) => {
+  if (languageSelect) languageSelect.value = language;
+  baseline = { ...baseline, language };
+  refreshLocalizedUi();
+  if (ready) updateDraft(false);
+});
+
+window.addEventListener('pagehide', unwatchLanguage, { once: true });
 
 function updateFramePreviewTheme(): void {
   const preview = document.querySelector<HTMLElement>('.print-caption');

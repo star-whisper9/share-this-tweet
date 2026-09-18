@@ -1,23 +1,44 @@
 import type { TweetRecord } from '../shared/model.js';
+import { catalogs, getLocale, t, type Locale } from '../shared/i18n.js';
 import { renderTemplate } from './template.js';
 
 export const DEFAULT_TEXT_TEMPLATE =
   '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\nX · 原文：\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
-export function buildTweetText(record: TweetRecord, template = DEFAULT_TEXT_TEMPLATE): string {
-  const main = renderTemplate(template, { tweet: record });
+export function getDefaultTextTemplate(locale: Locale = getLocale()): string {
+  return t('core.text.defaultTemplate', {}, locale);
+}
+
+export function isDefaultTextTemplate(value: string): boolean {
+  return (
+    value === DEFAULT_TEXT_TEMPLATE ||
+    (Object.keys(catalogs) as Locale[]).some((locale) => value === getDefaultTextTemplate(locale))
+  );
+}
+
+export function buildTweetText(
+  record: TweetRecord,
+  template = getDefaultTextTemplate(),
+  locale: Locale = getLocale(),
+): string {
+  const main = renderTemplate(template, { tweet: record, locale });
   const quote = record.quote;
   if (!quote || template.includes('{quote.') || template.includes('{?quote.')) return main;
   const quoted = quote.record;
   const content = quoted
-    ? renderTemplate(DEFAULT_TEXT_TEMPLATE, { tweet: quoted })
-    : [quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容', quote.url]
+    ? renderTemplate(getDefaultTextTemplate(locale), { tweet: quoted, locale })
+    : [
+        quote.status === 'unavailable'
+          ? t('core.text.quoteUnavailable', {}, locale)
+          : t('core.text.quotePending', {}, locale),
+        quote.url,
+      ]
         .filter(Boolean)
         .join('\n');
-  return `${main}\n\n── 引用推文 ──\n${content}`;
+  return `${main}\n\n${t('core.text.quoteHeading', {}, locale)}\n${content}`;
 }
 
-async function copyWithSelectionFallback(text: string): Promise<void> {
+async function copyWithSelectionFallback(text: string, locale: Locale): Promise<void> {
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
@@ -34,7 +55,7 @@ async function copyWithSelectionFallback(text: string): Promise<void> {
   const activeElement = document.activeElement;
   textarea.select();
   try {
-    if (!document.execCommand('copy')) throw new Error('浏览器拒绝了剪贴板写入');
+    if (!document.execCommand('copy')) throw new Error(t('core.text.clipboardDenied', {}, locale));
   } finally {
     textarea.remove();
     selection?.removeAllRanges();
@@ -46,12 +67,13 @@ async function copyWithSelectionFallback(text: string): Promise<void> {
 
 export async function copyTweetText(
   record: TweetRecord,
-  template = DEFAULT_TEXT_TEMPLATE,
+  template = getDefaultTextTemplate(),
+  locale: Locale = getLocale(),
 ): Promise<void> {
-  const text = buildTweetText(record, template);
+  const text = buildTweetText(record, template, locale);
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;
   }
-  await copyWithSelectionFallback(text);
+  await copyWithSelectionFallback(text, locale);
 }

@@ -1,9 +1,21 @@
 import { getTweetIdFromPath, type TweetRecord } from '../shared/model.js';
-import { DEFAULT_SETTINGS, loadSettings, type ExtensionSettings } from '../shared/settings.js';
+import { t } from '../shared/i18n.js';
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  watchLanguage,
+  type ExtensionSettings,
+} from '../shared/settings.js';
 import { TweetSource } from './tweet-source.js';
 import { ExportSession } from './export-session.js';
 import { ShareSheet } from './share-sheet.js';
-import { findPrimaryArticle, mountEntry, observeTweetPage, type TweetEntry } from './tweet-page.js';
+import {
+  findPrimaryArticle,
+  localizeEntry,
+  mountEntry,
+  observeTweetPage,
+  type TweetEntry,
+} from './tweet-page.js';
 
 /** Coordinates the current X detail page; views and exports own their own state. */
 export class ShareEnhancerController {
@@ -19,6 +31,7 @@ export class ShareEnhancerController {
   private settings: ExtensionSettings = { ...DEFAULT_SETTINGS };
   private stopObservingPage?: () => void;
   private unsubscribeTweetSource?: () => void;
+  private unwatchLanguage?: () => void;
 
   constructor(private readonly tweetSource: TweetSource) {}
 
@@ -27,6 +40,12 @@ export class ShareEnhancerController {
     this.started = true;
     this.unsubscribeTweetSource = this.tweetSource.subscribe((record) => {
       if (record.tweetId === this.currentTweetId) this.applyTweetRecord(record);
+    });
+    this.unwatchLanguage = watchLanguage(() => {
+      if (this.entry) localizeEntry(this.entry.button);
+      this.session?.refreshLocale();
+      this.sheet?.relocalize();
+      void this.loadSettings();
     });
     this.stopObservingPage = observeTweetPage(() => this.scheduleSync());
     this.sync();
@@ -41,6 +60,8 @@ export class ShareEnhancerController {
     this.unsubscribeTweetSource = undefined;
     this.stopObservingPage?.();
     this.stopObservingPage = undefined;
+    this.unwatchLanguage?.();
+    this.unwatchLanguage = undefined;
     this.removeEntry();
   }
 
@@ -80,7 +101,7 @@ export class ShareEnhancerController {
       this.applyTweetRecord(existing);
       return;
     }
-    this.sheet?.setStatus('loading', '正在读取当前推文数据…');
+    this.sheet?.setStatus('loading', t('content.readingTweetData'));
     this.entry?.button.setAttribute('aria-busy', 'true');
     try {
       const record = await this.tweetSource.waitFor(tweetId);
@@ -89,7 +110,7 @@ export class ShareEnhancerController {
       if (!isCurrent()) return;
       this.sheet?.setStatus(
         'error',
-        error instanceof Error ? error.message : '无法获取当前推文数据，请重新加载页面。',
+        error instanceof Error ? error.message : t('content.couldNotReadTweet'),
       );
       console.error('分享有据: 推文读取失败', error);
     } finally {
@@ -114,6 +135,8 @@ export class ShareEnhancerController {
       const settings = await loadSettings();
       if (!this.started || requestId !== this.settingsRequestId) return;
       this.settings = settings;
+      if (this.entry) localizeEntry(this.entry.button);
+      this.sheet?.relocalize();
       if (this.session) {
         this.session.updateSettings(settings);
         this.sheet?.render(this.session);
@@ -121,7 +144,7 @@ export class ShareEnhancerController {
     } catch (error) {
       if (!this.started || requestId !== this.settingsRequestId) return;
       console.error('分享有据: 设置读取失败', error);
-      this.sheet?.setStatus('error', '暂时无法读取新设置，沿用上次可用的模板。');
+      this.sheet?.setStatus('error', t('content.settingsReadFailed'));
     }
   }
 

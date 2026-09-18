@@ -53,6 +53,7 @@ describe('downloadMedia', () => {
       [
         {
           type: 'download-media',
+          locale: 'zh-CN',
           url: 'https://video.twimg.com/test.mp4',
           filename: 'video.mp4',
         },
@@ -60,6 +61,7 @@ describe('downloadMedia', () => {
       [
         {
           type: 'download-sourced-media',
+          locale: 'zh-CN',
           url: 'https://video.twimg.com/test.mp4',
           filename: 'video_source.mp4',
           source,
@@ -86,6 +88,7 @@ describe('downloadMedia', () => {
     await downloadMedia(video, 'video_source.mp4', source);
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'prepare-sourced-media',
+      locale: 'zh-CN',
       url: 'https://video.twimg.com/test.mp4',
       source,
     });

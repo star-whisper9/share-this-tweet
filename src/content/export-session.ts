@@ -15,6 +15,7 @@ import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import type { OutputRecordInput } from '../shared/storage-model.js';
 import type { ExtensionSettings } from '../shared/settings.js';
+import { getLocale, t } from '../shared/i18n.js';
 import { createMediaSourceMetadata } from '../shared/media-source.js';
 import { MediaSelection } from './media-selection.js';
 
@@ -27,6 +28,9 @@ export interface SheetStatus {
   state: 'loading' | 'ready' | 'error';
   message: string;
 }
+interface LocalizedSheetStatus extends SheetStatus {
+  messageFactory?: () => string;
+}
 export type TweetAction = 'copy-text' | 'save-card' | 'save-row-card' | 'stitch-media';
 export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
 export interface MediaSaveOptions {
@@ -34,17 +38,20 @@ export interface MediaSaveOptions {
   video: 'original' | 'sourced';
 }
 interface ActionMessages {
-  loading: string;
-  success: string;
-  failure: string;
+  loading: () => string;
+  success: () => string;
+  failure: () => string;
 }
 interface ExportContext {
   theme: CardTheme;
   record: TweetRecord;
   settings: ExtensionSettings;
+  locale: ReturnType<typeof getLocale>;
 }
 const IDLE: Readonly<ActionState> = Object.freeze({ status: 'idle' });
-const directionLabels: Record<FrameOrientation, string> = { top: '上方', bottom: '下方' };
+function directionLabel(orientation: FrameOrientation): string {
+  return t(orientation === 'top' ? 'content.directionTop' : 'content.directionBottom');
+}
 
 function mediaKey(index: number, mode: MediaMode, orientation: FrameOrientation): string {
   if (mode === 'original') return `media:${index}`;
@@ -74,7 +81,7 @@ export class ExportSession {
   private tweet: TweetRecord;
   private preferences: ExtensionSettings;
   private mediaPreferences: MediaSaveOptions;
-  private currentStatus: SheetStatus = { state: 'ready', message: '' };
+  private currentStatus: LocalizedSheetStatus = { state: 'ready', message: '' };
 
   constructor(
     record: TweetRecord,
@@ -106,7 +113,8 @@ export class ExportSession {
   }
 
   get status(): Readonly<SheetStatus> {
-    return this.currentStatus;
+    const { messageFactory, ...status } = this.currentStatus;
+    return { ...status, message: messageFactory?.() ?? status.message };
   }
 
   get record(): TweetRecord {
@@ -173,6 +181,12 @@ export class ExportSession {
     this.quoted?.updateSettings(settings);
   }
 
+  /** Keep the action result visible while deriving its message from the new locale. */
+  refreshLocale(): void {
+    this.quoted?.refreshLocale();
+    this.changed();
+  }
+
   private invalidateCard(): void {
     this.cardFile = undefined;
     this.cardKey = undefined;
@@ -198,8 +212,12 @@ export class ExportSession {
     if (this.active) this.onChange();
   }
 
-  private setStatus(state: SheetStatus['state'], message: string): void {
-    this.currentStatus = { state, message };
+  private setStatus(
+    state: SheetStatus['state'],
+    message: string,
+    messageFactory?: () => string,
+  ): void {
+    this.currentStatus = { state, message, messageFactory };
     this.changed();
   }
 
@@ -210,18 +228,27 @@ export class ExportSession {
     operation: (context: ExportContext) => Promise<string | undefined>,
   ): Promise<void> {
     if (!this.active || this.actions.get(key)?.status === 'loading') return;
-    const context = { record: this.record, settings: this.settings, theme: detectCardTheme() };
+    const context = {
+      record: this.record,
+      settings: this.settings,
+      theme: detectCardTheme(),
+      locale: getLocale(),
+    };
     this.actions.set(key, { status: 'loading' });
-    this.setStatus('loading', messages.loading);
+    this.setStatus('loading', messages.loading(), messages.loading);
     try {
       const warning = await operation(context);
       if (!this.active) return;
       this.actions.set(key, { status: 'success' });
-      this.setStatus(warning ? 'error' : 'ready', warning ?? messages.success);
+      this.setStatus(
+        warning ? 'error' : 'ready',
+        warning ?? messages.success(),
+        warning ? undefined : messages.success,
+      );
     } catch (error) {
       if (!this.active) return;
       this.actions.set(key, { status: 'error', error: errorMessage(error) });
-      this.setStatus('error', messages.failure);
+      this.setStatus('error', messages.failure(), messages.failure);
       console.error('分享有据: 输出失败', key, error);
     }
   }
@@ -237,7 +264,7 @@ export class ExportSession {
       return undefined;
     } catch (error) {
       console.error('分享有据: 来源记录保存失败', error);
-      return `当前操作已完成，但来源记录保存失败：${errorMessage(error)}`;
+      return t('content.persistWarning', { error: errorMessage(error) });
     }
   }
 
@@ -245,18 +272,21 @@ export class ExportSession {
     return this.run(
       'copy-text',
       {
-        loading: '正在复制推文文本…',
-        success: '已复制，可直接粘贴到聊天中。',
-        failure: '这次没能复制，请查看详情后重试。',
+        loading: () => t('content.copyLoading'),
+        success: () => t('content.copySuccess'),
+        failure: () => t('content.copyFailure'),
       },
-      async ({ record, settings }) => {
-        await copyTweetText(record, settings.textTemplate);
+      async ({ record, settings, locale }) => {
+        await copyTweetText(record, settings.textTemplate, locale);
         return this.persist(record, { tweetId: record.tweetId, outputType: 'copied-text' });
       },
     );
   }
 
-  private async getCard({ record, settings, theme }: ExportContext, row = false): Promise<File> {
+  private async getCard(
+    { record, settings, theme, locale }: ExportContext,
+    row = false,
+  ): Promise<File> {
     const filename = buildCardFilename(record, record.media[0], settings.filenameTemplate, row);
     const key = JSON.stringify([
       record,
@@ -264,6 +294,7 @@ export class ExportSession {
       filename,
       row,
       row ? settings.stitchStyle : undefined,
+      locale,
     ]);
     if (this.cardKey === key && this.cardFile) return this.cardFile;
     if (this.cardPending?.key === key) return this.cardPending.promise;
@@ -273,6 +304,7 @@ export class ExportSession {
       const result = await renderTweetCard(record, record.media, {
         theme,
         resources: this.resources,
+        locale,
         ...(row ? { mediaLayout: 'row' as const, stitchStyle: settings.stitchStyle } : {}),
       });
       const file = new File([result.blob], filename, { type: 'image/png' });
@@ -302,9 +334,9 @@ export class ExportSession {
     return this.run(
       row ? 'save-row-card' : 'save-card',
       {
-        loading: '正在保存推文卡片…',
-        success: '推文卡片已保存。',
-        failure: '推文卡片保存失败，请查看详情后重试。',
+        loading: () => t('content.cardLoading'),
+        success: () => t('content.cardSuccess'),
+        failure: () => t('content.cardFailure'),
       },
       async (context) => {
         const file = await this.getCard(context, row);
@@ -320,12 +352,19 @@ export class ExportSession {
     return this.run(
       'stitch-media',
       {
-        loading: '正在拼接全部媒体…',
-        success: '拼接图片已保存。',
-        failure: '拼接失败，请查看详情后重试。',
+        loading: () => t('content.stitchLoading'),
+        success: () => t('content.stitchSuccess'),
+        failure: () => t('content.stitchFailure'),
       },
-      async ({ record, settings, theme }) => {
-        const blob = await renderStitchedMedia(record, settings, theme, this.resources, frame);
+      async ({ record, settings, theme, locale }) => {
+        const blob = await renderStitchedMedia(
+          record,
+          settings,
+          theme,
+          this.resources,
+          frame,
+          locale,
+        );
         const extension =
           blob.type === 'image/png'
             ? 'png'
@@ -334,7 +373,7 @@ export class ExportSession {
               : blob.type === 'image/webp'
                 ? 'webp'
                 : undefined;
-        if (!extension) throw new Error('拼接输出格式不正确');
+        if (!extension) throw new Error(t('content.stitchFormatError'));
         const filename = buildStitchFilename(
           record,
           settings.filenameTemplate,
@@ -370,9 +409,11 @@ export class ExportSession {
         orientation,
         this.resources,
         context.theme,
+        undefined,
+        context.locale,
       );
       if (blob.type !== 'image/jpeg' && blob.type !== 'image/webp')
-        throw new Error('画框输出格式不正确');
+        throw new Error(t('content.frameFormatError'));
       filename = buildFrameFilename(
         record,
         media,
@@ -411,22 +452,29 @@ export class ExportSession {
           ? batchKey(mode, orientation)
           : mediaKey(selected[0].index, mode, orientation);
     if (this.actions.get(key)?.status === 'loading') return;
-    const success =
+    const success = (): string =>
       mode === 'configured'
-        ? `已按所选方式保存，共 ${selected.length} 项媒体。`
+        ? t('content.mediaSaveSuccess', { count: selected.length })
         : mode === 'framed'
-          ? `已交给浏览器保存，共 ${selected.length} 项媒体；照片带${directionLabels[orientation]}画框，视频和 GIF 原样保存。`
+          ? t('content.mediaSaveFrameSuccess', {
+              count: selected.length,
+              direction: directionLabel(orientation),
+            })
           : mode === 'sourced'
-            ? `已交给浏览器保存，共 ${selected.length} 项媒体；视频和 GIF 已写入来源，照片原样保存。`
-            : `已交给浏览器保存，共 ${selected.length} 项原始媒体。`;
+            ? t('content.mediaSaveSourceSuccess', { count: selected.length })
+            : t('content.mediaSaveOriginalSuccess', { count: selected.length });
     this.batchRunning = true;
     try {
       await this.run(
         key,
-        { loading: '正在保存媒体…', success, failure: '媒体保存失败，请查看详情后重试。' },
+        {
+          loading: () => t('content.mediaSaving'),
+          success,
+          failure: () => t('content.mediaSaveFailure'),
+        },
         async (context) => {
           const failures: string[] = [];
-          const warnings: string[] = [];
+          const warnings: { index: number; message: string }[] = [];
           for (const [index, media] of selected.entries()) {
             if (!this.active) return;
             const itemMode =
@@ -445,20 +493,32 @@ export class ExportSession {
             try {
               const warning = await this.exportMedia(context, media, itemMode, orientation);
               if (!this.active) return;
-              if (warning) warnings.push(`第 ${media.index} 项：${warning}`);
+              if (warning) warnings.push({ index: media.index, message: warning });
               if (batch) this.actions.set(itemKey, { status: 'success' });
             } catch (error) {
               if (!this.active) return;
               const message = errorMessage(error);
               this.actions.set(itemKey, { status: 'error', error: message });
               if (!batch) throw error;
-              failures.push(`第 ${media.index} 项：${message}`);
+              failures.push(t('content.itemFailure', { index: media.index, error: message }));
             }
-            this.setStatus('loading', `正在保存已选媒体（${index + 1}/${selected.length}）…`);
+            const progress = () =>
+              t('content.mediaSaveProgress', { current: index + 1, total: selected.length });
+            this.setStatus('loading', progress(), progress);
           }
-          if (failures.length > 0) throw new Error(failures.join('；'));
+          if (failures.length > 0) throw new Error(failures.join('; '));
           return warnings.length > 0
-            ? `${success}但部分来源记录保存失败：${warnings.join('；')}`
+            ? t('content.partialPersistWarning', {
+                success: success(),
+                warnings: warnings
+                  .map((warning) =>
+                    t('content.itemWarning', {
+                      index: warning.index,
+                      warning: warning.message,
+                    }),
+                  )
+                  .join('; '),
+              })
             : undefined;
         },
       );

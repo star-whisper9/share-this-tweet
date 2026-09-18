@@ -3,6 +3,7 @@ import {
   parseMediaSourceMetadata,
   type MediaSourceMetadata,
 } from '../shared/media-source.js';
+import { t } from '../shared/i18n.js';
 
 // A deliberately limited, self-contained MP4 profile. No media bytes are decoded.
 export const MAX_MP4_SOURCE_FILE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -42,7 +43,7 @@ interface ParsedMp4 {
   source?: MediaSourceMetadata;
 }
 
-function invalid(message = 'MP4 文件结构损坏或不完整'): never {
+function invalid(message = t('core.mp4.invalid')): never {
   throw new Mp4SourceError('invalid-mp4', message);
 }
 function unsupported(message: string): never {
@@ -59,7 +60,7 @@ function u16(bytes: Uint8Array, offset: number): number {
 function uint64(bytes: Uint8Array, offset: number): number {
   if (offset < 0 || offset + 8 > bytes.length) invalid();
   const value = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(offset);
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) unsupported('MP4 偏移超出安全处理范围');
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) unsupported(t('core.mp4.offsetTooLarge'));
   return Number(value);
 }
 function typeAt(bytes: Uint8Array, offset: number): string {
@@ -87,10 +88,10 @@ function children(bytes: Uint8Array, parent: Box, skip = 0): Box[] {
   let position = parent.start + parent.header + skip;
   if (position > parent.end) invalid();
   while (position < parent.end) {
-    if (result.length >= MAX_BOXES) unsupported('MP4 容器项目过多');
+    if (result.length >= MAX_BOXES) unsupported(t('core.mp4.tooManyBoxes'));
     const child = header(bytes, position, parent.end);
     // Nested EOF lengths would consume newly appended metadata; don't guess at them.
-    if (child.toEnd) unsupported('暂不支持内部长度未明确的 MP4 容器');
+    if (child.toEnd) unsupported(t('core.mp4.indeterminateContainer'));
     result.push(child);
     position = child.end;
   }
@@ -104,7 +105,7 @@ function only(boxes: Box[], type: string, required = true): Box | undefined {
 }
 function allow(boxes: Box[], allowed: string[]): void {
   const unknown = boxes.find((box) => !allowed.includes(box.type));
-  if (unknown) unsupported(`暂不支持此 MP4 结构（${unknown.type}），可选择原样保存`);
+  if (unknown) unsupported(t('core.mp4.unsupportedStructure', { type: unknown.type }));
 }
 function payload(bytes: Uint8Array, box: Box, minimum: number): number {
   const offset = box.start + box.header;
@@ -113,7 +114,7 @@ function payload(bytes: Uint8Array, box: Box, minimum: number): number {
 }
 function fullBox(bytes: Uint8Array, box: Box, minimum = 4): number {
   const offset = payload(bytes, box, minimum);
-  if (u32(bytes, offset) !== 0) unsupported(`暂不支持此 MP4 ${box.type} 版本`);
+  if (u32(bytes, offset) !== 0) unsupported(t('core.mp4.unsupportedVersion', { type: box.type }));
   return offset;
 }
 
@@ -124,7 +125,7 @@ function validateSampleDescription(bytes: Uint8Array, box: Box, kind: string): v
     invalid();
   for (const entry of entries) {
     const start = payload(bytes, entry, 8);
-    if (u16(bytes, start + 6) !== 1) unsupported('暂不支持外部媒体引用');
+    if (u16(bytes, start + 6) !== 1) unsupported(t('core.mp4.externalMedia'));
     if (kind === 'vide' && (entry.type === 'avc1' || entry.type === 'avc3')) {
       payload(bytes, entry, 78);
       const extensions = children(bytes, entry, 78);
@@ -132,11 +133,11 @@ function validateSampleDescription(bytes: Uint8Array, box: Box, kind: string): v
       only(extensions, 'avcC');
     } else if (kind === 'soun' && entry.type === 'mp4a') {
       payload(bytes, entry, 28);
-      if (u16(bytes, start + 8) !== 0) unsupported('暂不支持此音频采样描述版本');
+      if (u16(bytes, start + 8) !== 0) unsupported(t('core.mp4.unsupportedAudioDescription'));
       const extensions = children(bytes, entry, 28);
       allow(extensions, ['esds', 'btrt']);
       only(extensions, 'esds');
-    } else unsupported(`暂不支持此 MP4 编码（${entry.type}），可选择原样保存`);
+    } else unsupported(t('core.mp4.unsupportedCodec', { type: entry.type }));
   }
 }
 
@@ -155,7 +156,7 @@ function validateTrack(bytes: Uint8Array, track: Box, mediaData: Box[]): void {
   only(mdia, 'mdhd');
   const handler = only(mdia, 'hdlr')!;
   const kind = typeAt(bytes, payload(bytes, handler, 12) + 8);
-  if (kind !== 'vide' && kind !== 'soun') unsupported('暂不支持含其他轨道类型的 MP4');
+  if (kind !== 'vide' && kind !== 'soun') unsupported(t('core.mp4.unsupportedTrackType'));
   const minf = children(bytes, only(mdia, 'minf')!);
   allow(minf, ['vmhd', 'smhd', 'dinf', 'stbl']);
   only(minf, kind === 'vide' ? 'vmhd' : 'smhd');
@@ -164,14 +165,15 @@ function validateTrack(bytes: Uint8Array, track: Box, mediaData: Box[]): void {
   const dref = only(dinf, 'dref')!;
   const drefStart = fullBox(bytes, dref, 8);
   const references = children(bytes, dref, 8);
-  if (u32(bytes, drefStart + 4) !== 1 || references.length !== 1) unsupported('暂不支持多媒体引用');
+  if (u32(bytes, drefStart + 4) !== 1 || references.length !== 1)
+    unsupported(t('core.mp4.multiMediaReference'));
   const reference = references[0];
   if (
     reference.type !== 'url ' ||
     reference.size !== reference.header + 4 ||
     u32(bytes, reference.start + reference.header) !== 1
   )
-    unsupported('暂不支持外部媒体引用');
+    unsupported(t('core.mp4.externalMedia'));
 
   const table = children(bytes, only(minf, 'stbl')!);
   allow(table, [
@@ -192,7 +194,7 @@ function validateTrack(bytes: Uint8Array, track: Box, mediaData: Box[]): void {
     const offset = payload(bytes, group, 8);
     const kind = typeAt(bytes, offset + 4);
     // Roll-recovery groups contain sample counts, not file positions or encryption data.
-    if (kind !== 'roll' && kind !== 'prol') unsupported('暂不支持此 MP4 采样分组');
+    if (kind !== 'roll' && kind !== 'prol') unsupported(t('core.mp4.unsupportedSampleGroup'));
   }
   for (const type of ['stsd', 'stts', 'stsc', 'stsz']) only(table, type);
   validateSampleDescription(bytes, only(table, 'stsd')!, kind);
@@ -209,7 +211,7 @@ function validateTrack(bytes: Uint8Array, track: Box, mediaData: Box[]): void {
         ? uint64(bytes, start + 8 + index * width)
         : u32(bytes, start + 8 + index * width);
     if (!mediaData.some((mdat) => offset >= mdat.start + mdat.header && offset < mdat.end))
-      unsupported('媒体采样偏移未指向文件内的媒体数据');
+      unsupported(t('core.mp4.sampleOffsetInvalid'));
   }
 }
 
@@ -219,9 +221,9 @@ function sourceFromUserData(bytes: Uint8Array, boxes: Box[]): MediaSourceMetadat
     if (box.type !== 'uuid') continue;
     const offset = payload(bytes, box, 16);
     if (!SOURCE_UUID.every((byte, index) => bytes[offset + index] === byte)) continue;
-    if (source) throw new Mp4SourceError('source-conflict', '文件包含重复的来源信息');
+    if (source) throw new Mp4SourceError('source-conflict', t('core.mp4.duplicateSource'));
     if (box.end - offset - 16 > MAX_MEDIA_SOURCE_BYTES)
-      throw new Mp4SourceError('invalid-source', '文件来源信息过大');
+      throw new Mp4SourceError('invalid-source', t('core.mp4.sourceTooLarge'));
     try {
       source = parseMediaSourceMetadata(
         JSON.parse(decoder.decode(bytes.subarray(offset + 16, box.end))),
@@ -229,7 +231,9 @@ function sourceFromUserData(bytes: Uint8Array, boxes: Box[]): MediaSourceMetadat
     } catch (error) {
       throw new Mp4SourceError(
         'invalid-source',
-        `文件来源信息无效：${error instanceof Error ? error.message : String(error)}`,
+        t('core.mp4.invalidSource', {
+          message: error instanceof Error ? error.message : String(error),
+        }),
       );
     }
   }
@@ -238,11 +242,11 @@ function sourceFromUserData(bytes: Uint8Array, boxes: Box[]): MediaSourceMetadat
 
 async function parse(input: Blob): Promise<ParsedMp4> {
   if (!Number.isSafeInteger(input.size) || input.size < 8) invalid();
-  if (input.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported('来源处理暂支持不超过 2 GiB 的 MP4');
+  if (input.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported(t('core.mp4.sizeLimit'));
   const top: Box[] = [];
   let position = 0;
   while (position < input.size) {
-    if (top.length >= MAX_BOXES) unsupported('MP4 容器项目过多');
+    if (top.length >= MAX_BOXES) unsupported(t('core.mp4.tooManyBoxes'));
     const bytes = new Uint8Array(
       await input.slice(position, Math.min(position + 16, input.size)).arrayBuffer(),
     );
@@ -258,24 +262,24 @@ async function parse(input: Blob): Promise<ParsedMp4> {
   );
   if ((brands.length - 8) % 4) invalid();
   const supportedBrands = ['isom', 'iso2', 'mp41', 'mp42', 'avc1'];
-  if (!supportedBrands.includes(typeAt(brands, 0))) unsupported('暂不支持此媒体容器品牌');
+  if (!supportedBrands.includes(typeAt(brands, 0))) unsupported(t('core.mp4.unsupportedBrand'));
   const moov = only(top, 'moov')!;
   const mediaData = top.filter((box) => box.type === 'mdat');
   if (!mediaData.length || mediaData.some((box) => box.size === box.header)) invalid();
-  if (moov.size > MAX_MOOV_BYTES) unsupported('MP4 索引过大，无法安全处理');
+  if (moov.size > MAX_MOOV_BYTES) unsupported(t('core.mp4.indexTooLarge'));
   const bytes = new Uint8Array(await input.slice(moov.start, moov.end).arrayBuffer());
   const root = header(bytes, 0, bytes.length);
   const movieChildren = children(bytes, root);
   allow(movieChildren, ['mvhd', 'iods', 'trak', 'udta']);
   only(movieChildren, 'mvhd');
   const tracks = movieChildren.filter((box) => box.type === 'trak');
-  if (!tracks.length || tracks.length > 16) unsupported('MP4 轨道数量不受支持');
+  if (!tracks.length || tracks.length > 16) unsupported(t('core.mp4.unsupportedTrackCount'));
   for (const track of tracks) validateTrack(bytes, track, mediaData);
   const udta = only(movieChildren, 'udta', false);
   const userData = udta ? children(bytes, udta) : [];
   for (const item of userData) {
     if (['iloc', 'moof', 'sidx', 'saio', 'mvex'].includes(item.type))
-      unsupported('暂不支持含位置引用的媒体元数据');
+      unsupported(t('core.mp4.locationReference'));
     if (item.type === 'meta') {
       fullBox(bytes, item);
       const entries = children(bytes, item, 4);
@@ -292,7 +296,7 @@ async function parse(input: Blob): Promise<ParsedMp4> {
 
 function box(type: string, parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const size = 8 + parts.reduce((total, part) => total + part.length, 0);
-  if (size > MAX_MOOV_BYTES) unsupported('MP4 索引过大，无法安全处理');
+  if (size > MAX_MOOV_BYTES) unsupported(t('core.mp4.indexTooLarge'));
   const result = new Uint8Array(size);
   new DataView(result.buffer).setUint32(0, size);
   for (let index = 0; index < 4; index++) result[4 + index] = type.charCodeAt(index);
@@ -377,7 +381,7 @@ export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): P
   if (parsed.source) {
     if (JSON.stringify(parsed.source) === JSON.stringify(source))
       return input.type === 'video/mp4' ? input : new Blob([input], { type: 'video/mp4' });
-    throw new Mp4SourceError('source-conflict', '文件已有不同来源信息，未覆盖原有记录');
+    throw new Mp4SourceError('source-conflict', t('core.mp4.sourceConflict'));
   }
   const userData = addUserData(parsed, source);
   const movie = box('moov', [
@@ -405,9 +409,10 @@ export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): P
   }
   if (parsed.moov.end !== input.size) parts.push(movie);
   const output = new Blob(parts, { type: 'video/mp4' });
-  if (output.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported('写入来源后文件超过 2 GiB 处理上限');
+  if (output.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported(t('core.mp4.outputSizeLimit'));
   // Re-read the output's structure and provenance before handing it to downloads.
   const verified = await readMp4Source(output);
-  if (JSON.stringify(verified) !== JSON.stringify(source)) invalid('写入来源后的文件验证失败');
+  if (JSON.stringify(verified) !== JSON.stringify(source))
+    invalid(t('core.mp4.verificationFailed'));
   return output;
 }

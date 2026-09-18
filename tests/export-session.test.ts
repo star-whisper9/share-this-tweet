@@ -1,3 +1,4 @@
+import { setLocale } from '../src/shared/i18n.js';
 import { renderStitchedMedia } from '../src/core/stitch.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExportSession } from '../src/content/export-session.js';
@@ -67,6 +68,7 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => {
+  setLocale('zh-CN');
   vi.unstubAllGlobals();
   vi.resetAllMocks();
   vi.restoreAllMocks();
@@ -322,6 +324,7 @@ it('stitches all media independently of selection and records a single output', 
     'light',
     expect.anything(),
     settings.frameOrientation,
+    'zh-CN',
   );
   expect(downloadBlob).toHaveBeenCalledOnce();
   expect(recordOutput).toHaveBeenCalledWith(
@@ -379,6 +382,7 @@ it.each(['original', 'top', 'bottom'] as const)(
       'light',
       expect.anything(),
       frame,
+      'zh-CN',
     );
     pending.resolve(
       new Blob(['image'], { type: frame === 'original' ? 'image/png' : 'image/jpeg' }),
@@ -390,3 +394,26 @@ it.each(['original', 'top', 'bottom'] as const)(
     );
   },
 );
+
+it('captures the export language and does not reuse a card from another language', async () => {
+  const pending = deferred<{ blob: Blob; width: number; height: number }>();
+  vi.mocked(renderTweetCard).mockReturnValueOnce(pending.promise);
+  const session = new ExportSession(record, settings);
+  setLocale('en');
+  const work = session.saveCard();
+  setLocale('zh-CN');
+  expect(renderTweetCard).toHaveBeenCalledWith(
+    record,
+    record.media,
+    expect.objectContaining({ locale: 'en' }),
+  );
+  pending.resolve({ blob: png, width: 1600, height: 500 });
+  await work;
+  await session.saveCard();
+  expect(renderTweetCard).toHaveBeenCalledTimes(2);
+  expect(renderTweetCard).toHaveBeenLastCalledWith(
+    record,
+    record.media,
+    expect.objectContaining({ locale: 'zh-CN' }),
+  );
+});

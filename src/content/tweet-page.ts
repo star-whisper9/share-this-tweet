@@ -1,4 +1,5 @@
 import { getTweetIdFromPath } from '../shared/model.js';
+import { getLocale, t } from '../shared/i18n.js';
 import { extensionIcon, node } from './ui-components.js';
 import { SHEET_ID } from './share-sheet.js';
 
@@ -7,6 +8,14 @@ const ROUTE_CHANGE_EVENT = 'share-this-tweet:route-change';
 export interface TweetEntry {
   host: HTMLElement;
   button: HTMLButtonElement;
+}
+
+export function localizeEntry(button: HTMLButtonElement): void {
+  button.lang = getLocale();
+  button.setAttribute('aria-label', t('content.shareAria'));
+  button.title = t('content.shareTitle');
+  const label = button.querySelector<HTMLElement>('span');
+  if (label) label.textContent = t('content.share');
 }
 
 export function observeTweetPage(onChange: () => void): () => void {
@@ -71,12 +80,11 @@ export function mountEntry(article: HTMLElement, onOpen: () => void): TweetEntry
     : document.createElement('button');
   button.type = 'button';
   button.className = 'stt-action-button';
-  button.setAttribute('aria-label', '保存或复制这条推文，保留来源');
   button.setAttribute('aria-haspopup', 'dialog');
   button.setAttribute('aria-controls', SHEET_ID);
   button.setAttribute('aria-expanded', 'false');
-  button.title = '分享有据 · Share This Tweet';
-  button.append(extensionIcon('small'), node('span', '', '分享'));
+  button.append(extensionIcon('small'), node('span', '', t('content.share')));
+  localizeEntry(button);
   button.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();

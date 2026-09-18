@@ -4,6 +4,7 @@ import {
   buildSourcedMediaFilename,
 } from '../core/filename.js';
 import type { MediaRecord } from '../shared/model.js';
+import { t } from '../shared/i18n.js';
 import type { ExportSession, MediaSaveOptions } from './export-session.js';
 import {
   actionButton,
@@ -17,7 +18,7 @@ import {
 export function appendMediaActions(
   actions: HTMLElement,
   session: ExportSession,
-  headingLabel = '所选媒体',
+  headingLabel = t('content.selectedMedia'),
   dock?: HTMLElement,
 ): void {
   const { record, selection } = session;
@@ -26,21 +27,34 @@ export function appendMediaActions(
   heading.append(node('span', '', headingLabel));
   if (record.media.length > 1)
     heading.append(
-      node('span', 'stt-selection-count', `已选 ${selection.size} / ${record.media.length}`),
+      node(
+        'span',
+        'stt-selection-count',
+        t('content.selectedCount', { selected: selection.size, total: record.media.length }),
+      ),
     );
   const strip = node('div', 'stt-media-strip');
   strip.dataset.tweetId = record.tweetId;
   strip.setAttribute('role', 'group');
-  strip.setAttribute('aria-label', '选择媒体');
+  strip.setAttribute('aria-label', t('content.mediaSelection'));
   for (const media of record.media) {
     const selected = selection.has(media.index);
-    const label = { photo: '照片', animated_gif: 'GIF', video: '视频' }[media.type];
+    const label = {
+      photo: t('content.photo'),
+      animated_gif: t('content.gif'),
+      video: t('content.video'),
+    }[media.type];
     const choice = node('button', 'stt-media-choice');
     choice.type = 'button';
     choice.dataset.sttFocusKey = `select-${record.tweetId}-${media.index}`;
     choice.disabled = session.isSavingBatch;
     choice.setAttribute('aria-pressed', String(selected));
-    choice.setAttribute('aria-label', `${label} ${media.index}${selected ? '，已选中' : ''}`);
+    choice.setAttribute(
+      'aria-label',
+      selected
+        ? t('content.mediaSelected', { label, index: media.index })
+        : `${label} ${media.index}`,
+    );
     choice.addEventListener('click', () => session.toggleMedia(media.index));
     const thumb = node('span', 'stt-media-thumb');
     thumb.append(icon(media.type === 'photo' ? 'photo' : 'video'));
@@ -137,12 +151,26 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
         saveChoices<MediaSaveOptions['photo']>(
           session,
           'photo',
-          canStitch ? (photos ? '照片 / 拼图' : '拼图') : dock ? '照片' : `照片 · ${photos}`,
+          canStitch
+            ? photos
+              ? t('content.photoStitch')
+              : t('content.stitch')
+            : dock
+              ? t('content.photo')
+              : t('content.photoCount', { count: photos }),
           mediaOptions.photo,
           [
-            { value: 'original', label: '原图', symbol: 'original' },
-            { value: 'top', label: dock ? '上框' : '上方画框', symbol: 'top' },
-            { value: 'bottom', label: dock ? '下框' : '下方画框', symbol: 'bottom' },
+            { value: 'original', label: t('content.original'), symbol: 'original' },
+            {
+              value: 'top',
+              label: dock ? t('content.topFrameShort') : t('content.topFrame'),
+              symbol: 'top',
+            },
+            {
+              value: 'bottom',
+              label: dock ? t('content.bottomFrameShort') : t('content.bottomFrame'),
+              symbol: 'bottom',
+            },
           ],
           (photo) => session.configureMedia({ photo }),
         ),
@@ -152,29 +180,31 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
         saveChoices<MediaSaveOptions['video']>(
           session,
           'video',
-          dock ? '动态' : `视频 / GIF · ${dynamic}`,
+          dock ? t('content.dynamic') : t('content.dynamicCount', { count: dynamic }),
           mediaOptions.video,
           [
-            { value: 'original', label: '原文件', symbol: 'original' },
-            { value: 'sourced', label: '写入来源', symbol: 'source' },
+            { value: 'original', label: t('content.originalFile'), symbol: 'original' },
+            { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
           ],
           (video) => session.configureMedia({ video }),
         ),
       );
     wrapper.append(settings);
     if (dynamic && mediaOptions.video === 'sourced')
-      wrapper.append(
-        node('p', 'stt-save-hint', '作者与原推链接写入文件，不加水印。平台转码可能移除。'),
-      );
+      wrapper.append(node('p', 'stt-save-hint', t('content.sourceMetadataHint')));
   } else {
-    wrapper.append(node('p', 'stt-save-empty', '选择上方媒体，再设置保存方式。'));
+    wrapper.append(node('p', 'stt-save-empty', t('content.selectMediaHint')));
   }
 
   const files: { label: string; filename: string }[] = [];
   let filenameError: string | undefined;
   try {
     for (const item of selected) {
-      const type = { photo: '照片', video: '视频', animated_gif: 'GIF' }[item.type];
+      const type = {
+        photo: t('content.photo'),
+        video: t('content.video'),
+        animated_gif: t('content.gif'),
+      }[item.type];
       files.push({ label: `${type} ${item.index}`, filename: outputFilename(session, item) });
     }
   } catch (error) {
@@ -184,10 +214,12 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
     actionButton({
       key: `save-media-${record.tweetId}`,
       label: actionLabel(state, {
-        idle: selected.length ? `保存 ${selected.length} 项媒体` : '请选择媒体',
-        loading: '正在保存…',
-        success: `已保存 · 再保存 ${selected.length} 项`,
-        error: '重试保存',
+        idle: selected.length
+          ? t('content.saveMedia', { count: selected.length })
+          : t('content.selectMedia'),
+        loading: t('content.saving'),
+        success: t('content.savedAndSaveAgain', { count: selected.length }),
+        error: t('content.retrySave'),
       }),
       image: 'download',
       state,
@@ -204,10 +236,10 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       actionButton({
         key: `stitch-media-${record.tweetId}`,
         label: actionLabel(stitch, {
-          idle: '拼接全部媒体',
-          loading: '正在拼接…',
-          success: '再次拼接全部媒体',
-          error: '重试拼接全部媒体',
+          idle: t('content.stitchAllMedia'),
+          loading: t('content.stitching'),
+          success: t('content.stitchAgain'),
+          error: t('content.retryStitch'),
         }),
         image: 'download',
         state: stitch,
@@ -217,21 +249,20 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       }),
     );
     if (record.media.some((item) => item.type !== 'photo'))
-      wrapper.append(node('p', 'stt-save-hint', '含动态媒体，拼接时使用静态预览。'));
-    if (stitch.error) wrapper.append(errorDetails('拼接未完成，请重试。', stitch.error));
+      wrapper.append(node('p', 'stt-save-hint', t('content.dynamicStitchHint')));
+    if (stitch.error) wrapper.append(errorDetails(t('content.stitchFailedDetails'), stitch.error));
   }
-  if (filenameError)
-    wrapper.append(errorDetails('文件名暂不可用，请检查文件名模板。', filenameError));
-  if (state.error) wrapper.append(errorDetails('保存未完成，可重试或切换保存方式。', state.error));
+  if (filenameError) wrapper.append(errorDetails(t('content.filenameUnavailable'), filenameError));
+  if (state.error) wrapper.append(errorDetails(t('content.saveFailedDetails'), state.error));
   if (files.length && !filenameError) {
     const details = node('details', 'stt-file-details');
-    details.append(node('summary', '', '查看输出文件'));
+    details.append(node('summary', '', t('content.viewOutputFiles')));
     const list = node('dl', '');
     for (const file of files)
       list.append(node('dt', '', file.label), node('dd', '', file.filename));
     details.append(list);
     if (photos && mediaOptions.photo !== 'original')
-      details.append(node('p', '', '透明图片的画框文件使用 .webp。'));
+      details.append(node('p', '', t('content.transparentFrameWebp')));
     wrapper.append(details);
   }
   return wrapper;

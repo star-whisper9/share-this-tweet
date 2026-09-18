@@ -1,4 +1,5 @@
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
+import { t } from '../shared/i18n.js';
 import { getMediaDownloadTarget } from './media.js';
 import { renderTemplate } from './template.js';
 
@@ -13,7 +14,7 @@ export function sanitizeFilename(value: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^(?:\.+|\s+)$/, '_');
-  if (!sanitized) throw new Error('模板渲染后文件名为空');
+  if (!sanitized) throw new Error(t('core.filename.empty'));
   return [...sanitized].slice(0, MAX_FILENAME_LENGTH).join('');
 }
 

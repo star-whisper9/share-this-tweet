@@ -557,6 +557,7 @@
   font-size: 11px;
   line-height: 1.5;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 .stt-sheet .stt-save-choice[aria-pressed='true'] {
   border-color: var(--stt-tint-border);
@@ -991,6 +992,7 @@
     background: transparent;
     font-size: 12px;
     color: var(--stt-text-muted);
+    overflow-wrap: anywhere;
   }
   .stt-media-tabs button[aria-pressed='true'] {
     background: var(--stt-tint);

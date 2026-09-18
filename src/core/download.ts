@@ -1,4 +1,5 @@
 import type { MediaRecord } from '../shared/model.js';
+import { getLocale, t } from '../shared/i18n.js';
 import type { MediaSourceMetadata } from '../shared/media-source.js';
 import type { DownloadMediaResponse, PrepareSourcedMediaResponse } from '../shared/protocol.js';
 import { getMediaDownloadTarget } from './media.js';
@@ -26,9 +27,9 @@ function isPreparedMediaResponse(value: unknown): value is PrepareSourcedMediaRe
 
 async function downloadOnAndroid(url: string, filename: string): Promise<void> {
   const response = await fetch(url, { credentials: 'omit' });
-  if (!response.ok) throw new Error(`媒体请求失败：HTTP ${response.status}`);
+  if (!response.ok) throw new Error(t('core.download.requestFailed', { status: response.status }));
   const blob = await response.blob();
-  if (blob.size === 0) throw new Error('媒体响应为空');
+  if (blob.size === 0) throw new Error(t('core.download.emptyResponse'));
 
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -74,8 +75,10 @@ export async function downloadMedia(
         type: 'prepare-sourced-media',
         url,
         source,
+        locale: getLocale(),
       });
-      if (!isPreparedMediaResponse(prepared)) throw new Error('来源处理服务返回了无效结果');
+      if (!isPreparedMediaResponse(prepared))
+        throw new Error(t('core.download.invalidPrepareResponse'));
       if (!prepared.ok) throw new Error(prepared.error);
       downloadBlob(prepared.blob, filename);
       return;
@@ -88,8 +91,9 @@ export async function downloadMedia(
     type: source ? 'download-sourced-media' : 'download-media',
     url,
     filename,
+    locale: getLocale(),
     ...(source ? { source } : {}),
   });
-  if (!isDownloadResponse(response)) throw new Error('下载服务返回了无效结果');
+  if (!isDownloadResponse(response)) throw new Error(t('core.download.invalidResponse'));
   if (!response.ok) throw new Error(response.error);
 }

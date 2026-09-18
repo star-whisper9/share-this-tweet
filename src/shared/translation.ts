@@ -1,4 +1,5 @@
 import { decodeHtmlEntities } from './html-entities.js';
+import { getLocale, t, type Locale } from './i18n.js';
 
 export type TweetTranslation =
   | { status: 'unavailable' }
@@ -49,11 +50,15 @@ const LANGUAGE_NAMES: Record<string, readonly [string, string]> = {
 export function languageName(
   code?: string,
   suppliedName?: string,
-  locale: 'zh' | 'en' = 'zh',
+  locale: Locale = getLocale(),
 ): string {
+  const known = code ? LANGUAGE_NAMES[code.toLowerCase().replace(/_/g, '-')] : undefined;
+  if (locale === 'en' && known) return known[1];
   if (suppliedName?.trim()) return suppliedName.trim();
   if (!code) return '';
-  return LANGUAGE_NAMES[code.toLowerCase().replace(/_/g, '-')]?.[locale === 'zh' ? 0 : 1] ?? code;
+  return (
+    LANGUAGE_NAMES[code.toLowerCase().replace(/_/g, '-')]?.[locale === 'zh-CN' ? 0 : 1] ?? code
+  );
 }
 function shortString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() && value.length <= 100
@@ -108,13 +113,12 @@ export function mergeTranslation(
   return translation;
 }
 
-export function translationWarning(translation?: TweetTranslation): string | undefined {
+export function translationWarning(
+  translation?: TweetTranslation,
+  locale: Locale = getLocale(),
+): string | undefined {
   if (translation?.status !== 'invalid') return undefined;
-  return {
-    empty: 'X 返回的译文为空，已回退为原文。',
-    malformed: 'X 返回的翻译数据格式异常，已回退为原文。',
-    stale: '译文与当前原文不匹配，已回退为原文。',
-  }[translation.reason];
+  return t(`core.translation.warning.${translation.reason}`, {}, locale);
 }
 
 export function validTranslation(value: unknown): boolean {

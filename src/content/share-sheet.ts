@@ -1,4 +1,5 @@
 import type { TweetRecord } from '../shared/model.js';
+import { getLocale, t } from '../shared/i18n.js';
 import type { ExportSession } from './export-session.js';
 import { renderActions } from './actions-view.js';
 import { node, icon, extensionIcon, sourceURL } from './ui-components.js';
@@ -30,10 +31,35 @@ export class ShareSheet {
     document.addEventListener('focusin', this.onFocusIn);
   }
   render(session: ExportSession): void {
+    this.sheet.lang = getLocale();
+    this.updateLayout();
     this.session = session;
     this.updateSummary(session.record);
     renderActions(this.sheet, session, this.mobileQuery.matches);
     this.setStatus(session.status.state, session.status.message);
+  }
+  relocalize(): void {
+    const update = (selector: string, value: string): void => {
+      const element = this.sheet.querySelector<HTMLElement>(selector);
+      if (element) element.textContent = value;
+    };
+    update('.stt-brand-name', t('content.brand'));
+    update('#stt-sheet-title', t('content.sheetTitle'));
+    const close = this.sheet.querySelector<HTMLButtonElement>('[data-stt-close]');
+    close?.setAttribute('aria-label', t('content.closeSheet'));
+    if (!this.hasRecord) {
+      update('[data-stt-author]', t('content.readingTweet'));
+      update('[data-stt-text]', t('content.readyToExport'));
+      update('.stt-action-skeleton', t('content.readingOptions'));
+    }
+    update('.stt-provenance > summary', t('content.provenance'));
+    update('.stt-provenance dt', t('content.tweetId'));
+    const dateLabel = this.sheet.querySelectorAll<HTMLElement>('.stt-provenance dt')[1];
+    if (dateLabel) dateLabel.textContent = t('content.publishedAt');
+    const sourceLink = this.sheet.querySelector<HTMLAnchorElement>('[data-stt-source-link]');
+    if (sourceLink) sourceLink.textContent = t('content.viewOriginal');
+    if (this.session) this.render(this.session);
+    else this.updateLayout();
   }
   destroy(): void {
     this.close(true);
@@ -51,6 +77,7 @@ export class ShareSheet {
 
   private updateLayout(): void {
     const mobile = this.mobileQuery.matches;
+    this.sheet.lang = getLocale();
     this.sheet.dataset.layout = mobile ? 'mobile' : 'desktop';
     const body = this.sheet.querySelector<HTMLElement>('.stt-preview-body');
     const toggle = this.sheet.querySelector<HTMLButtonElement>('.stt-preview-toggle');
@@ -58,7 +85,9 @@ export class ShareSheet {
     if (toggle) {
       toggle.hidden = !mobile;
       toggle.setAttribute('aria-expanded', String(this.previewExpanded));
-      toggle.textContent = this.previewExpanded ? '收起预览 ▴' : '推文预览 ▾';
+      toggle.textContent = this.previewExpanded
+        ? `${t('content.collapsePreview')} ▴`
+        : `${t('content.expandPreview')} ▾`;
     }
     // Status belongs to the scrolling content on mobile, so a long failure
     // message never pushes the pinned commands off screen.
@@ -130,46 +159,51 @@ export class ShareSheet {
     };
     const handle = record.author.handle
       ? `@${record.author.handle.replace(/^@+/, '')}`
-      : '账号未知';
+      : t('content.unknownAccount');
     const name = record.author.name || handle;
     update('[data-stt-author]', name);
     update('[data-stt-handle]', handle);
     update('[data-stt-avatar]', Array.from(name.replace(/^@/, ''))[0] || 'X');
     update('[data-stt-tweet-id]', record.tweetId);
-    update('[data-stt-text]', record.text || '这条推文没有正文。');
+    update('[data-stt-text]', record.text || t('content.noText'));
     const translation = summary.querySelector<HTMLElement>('.stt-preview-translation');
     if (translation) {
       translation.hidden = record.translation?.status !== 'available';
       translation.replaceChildren();
       if (record.translation?.status === 'available')
         translation.append(
-          node('span', 'stt-section-label', '译文'),
+          node('span', 'stt-section-label', t('content.translation')),
           node('p', 'stt-translation-text', record.translation.text),
-          node('span', 'stt-section-label', '原文'),
+          node('span', 'stt-section-label', t('content.originalText')),
         );
     }
     const date = record.publishedAt ? new Date(record.publishedAt) : undefined;
     update(
       '[data-stt-date]',
       date && !Number.isNaN(date.getTime())
-        ? new Intl.DateTimeFormat('zh-CN', {
+        ? new Intl.DateTimeFormat(getLocale(), {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
           }).format(date)
-        : '发布时间暂不可用',
+        : t('content.publishedUnavailable'),
     );
     const link = summary.querySelector<HTMLAnchorElement>('[data-stt-source-link]');
     if (link) {
       link.href = sourceURL(record);
-      link.textContent = '查看原推';
+      link.textContent = t('content.viewOriginal');
     }
     const expander = summary.querySelector<HTMLButtonElement>('[data-stt-expand-text]');
-    if (expander)
+    if (expander) {
       expander.hidden =
         (record.text || '').length < 70 && (record.text || '').split('\n').length < 3;
+      expander.textContent =
+        expander.getAttribute('aria-expanded') === 'true'
+          ? t('content.collapseText')
+          : t('content.expandText');
+    }
     let quote = summary.querySelector<HTMLElement>('.stt-quote-summary');
     if (!record.quote) quote?.remove();
     else {
@@ -178,7 +212,7 @@ export class ShareSheet {
         summary.querySelector('.stt-preview-body')?.append(quote);
       }
       const quoteExpanded = quote.querySelector('details')?.open;
-      quote.replaceChildren(node('strong', '', '引用推文'));
+      quote.replaceChildren(node('strong', '', t('content.quotedTweet')));
       const quoted = record.quote.record;
       if (quoted) {
         quote.append(
@@ -186,8 +220,8 @@ export class ShareSheet {
         );
         const details = node('details', '');
         details.append(
-          node('summary', '', '引用正文'),
-          node('p', 'stt-quote-text', quoted.text || '这条推文没有正文。'),
+          node('summary', '', t('content.quotedText')),
+          node('p', 'stt-quote-text', quoted.text || t('content.noText')),
         );
         details.open = quoteExpanded ?? quoted.text.length < 160;
         quote.append(details);
@@ -196,11 +230,17 @@ export class ShareSheet {
           node(
             'p',
             '',
-            record.quote.status === 'unavailable' ? '引用内容不可用' : '尚未获取引用内容',
+            record.quote.status === 'unavailable'
+              ? t('content.quotedUnavailable')
+              : t('content.quotedPending'),
           ),
         );
       if (record.quote.tweetId) {
-        const link = node('a', 'stt-source-link', `查看引用 · ${record.quote.tweetId}`);
+        const link = node(
+          'a',
+          'stt-source-link',
+          t('content.viewQuote', { id: record.quote.tweetId }),
+        );
         link.href = `https://x.com/i/status/${encodeURIComponent(record.quote.tweetId)}`;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
@@ -217,7 +257,7 @@ export class ShareSheet {
       status.textContent = message;
       status.hidden = !message;
       if (state === 'error' && !this.hasRecord) {
-        const reload = node('button', 'stt-source-link', '重新加载页面');
+        const reload = node('button', 'stt-source-link', t('content.reloadPage'));
         reload.type = 'button';
         reload.addEventListener('click', () => location.reload());
         status.append(document.createTextNode(' '), reload);
@@ -243,15 +283,15 @@ export class ShareSheet {
     const brand = node('span', 'stt-brand-mark');
     brand.append(extensionIcon('brand'));
     const headings = node('div', 'stt-headings');
-    headings.append(node('p', 'stt-brand-name', '分享有据 · Share This Tweet'));
-    const title = node('h2', '', '导出推文');
+    headings.append(node('p', 'stt-brand-name', t('content.brand')));
+    const title = node('h2', '', t('content.sheetTitle'));
     title.id = 'stt-sheet-title';
     headings.append(title);
     titleGroup.append(brand, headings);
     const close = node('button', 'stt-sheet-close');
     close.type = 'button';
     close.dataset.sttClose = '';
-    close.setAttribute('aria-label', '关闭分享面板');
+    close.setAttribute('aria-label', t('content.closeSheet'));
     close.append(icon('close'));
     close.addEventListener('click', () => this.close());
     header.append(titleGroup, close);
@@ -263,12 +303,12 @@ export class ShareSheet {
     avatar.setAttribute('aria-hidden', 'true');
     avatar.textContent = 'X';
     const authorNames = node('div', 'stt-author-names');
-    const author = node('strong', '', '正在读取推文');
+    const author = node('strong', '', t('content.readingTweet'));
     author.dataset.sttAuthor = '';
     const handle = node('span', 'stt-handle', '');
     handle.dataset.sttHandle = '';
     authorNames.append(author, handle);
-    const previewToggle = node('button', 'stt-preview-toggle', '推文预览 ▾');
+    const previewToggle = node('button', 'stt-preview-toggle', `${t('content.tweetPreview')} ▾`);
     previewToggle.type = 'button';
     previewToggle.setAttribute('aria-controls', 'stt-preview-body');
     previewToggle.setAttribute('aria-expanded', 'false');
@@ -277,10 +317,10 @@ export class ShareSheet {
       this.updateLayout();
     });
     authorRow.append(avatar, authorNames, node('span', 'stt-source-badge', 'X'), previewToggle);
-    const text = node('p', 'stt-tweet-text', '内容准备好后，就可以保存或复制。');
+    const text = node('p', 'stt-tweet-text', t('content.readyToExport'));
     text.dataset.sttText = '';
     text.id = 'stt-summary-text';
-    const expander = node('button', 'stt-expand-text', '展开正文');
+    const expander = node('button', 'stt-expand-text', t('content.expandText'));
     expander.type = 'button';
     expander.dataset.sttExpandText = '';
     expander.hidden = true;
@@ -289,18 +329,23 @@ export class ShareSheet {
     expander.addEventListener('click', () => {
       const expanded = expander.getAttribute('aria-expanded') !== 'true';
       expander.setAttribute('aria-expanded', String(expanded));
-      expander.textContent = expanded ? '收起正文' : '展开正文';
+      expander.textContent = expanded ? t('content.collapseText') : t('content.expandText');
       text.classList.toggle('stt-expanded', expanded);
     });
     const provenance = node('details', 'stt-provenance');
-    provenance.append(node('summary', '', '来源信息'));
+    provenance.append(node('summary', '', t('content.provenance')));
     const dl = node('dl', '');
     const id = node('dd', '', tweetId);
     id.dataset.sttTweetId = '';
-    const date = node('dd', '', '待读取');
+    const date = node('dd', '', t('content.readingDate'));
     date.dataset.sttDate = '';
-    dl.append(node('dt', '', '推文 ID'), id, node('dt', '', '发布时间'), date);
-    const sourceLink = node('a', 'stt-source-link', '查看原推');
+    dl.append(
+      node('dt', '', t('content.tweetId')),
+      id,
+      node('dt', '', t('content.publishedAt')),
+      date,
+    );
+    const sourceLink = node('a', 'stt-source-link', t('content.viewOriginal'));
     sourceLink.dataset.sttSourceLink = '';
     sourceLink.href = `https://x.com/i/status/${encodeURIComponent(tweetId)}`;
     sourceLink.target = '_blank';
@@ -313,11 +358,11 @@ export class ShareSheet {
     previewBody.append(translation, text, expander, provenance);
     summary.append(authorRow, previewBody);
     const actions = node('div', 'stt-sheet-actions');
-    const skeleton = node('div', 'stt-action-skeleton', '正在准备导出选项…');
+    const skeleton = node('div', 'stt-action-skeleton', t('content.readingOptions'));
     skeleton.setAttribute('aria-hidden', 'true');
     actions.append(skeleton);
     scroll.append(summary, actions);
-    const status = node('p', 'stt-sheet-status', '正在读取推文…');
+    const status = node('p', 'stt-sheet-status', t('content.readingStatus'));
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
     status.setAttribute('aria-atomic', 'true');

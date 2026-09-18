@@ -37,8 +37,23 @@ interface BrowserDownloadDelta {
 
 declare const browser: {
   runtime: BrowserRuntime;
+  i18n?: { getUILanguage(): string };
   storage: {
     local: BrowserStorageArea;
+    onChanged?: {
+      addListener(
+        listener: (
+          changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+          areaName: string,
+        ) => void,
+      ): void;
+      removeListener(
+        listener: (
+          changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+          areaName: string,
+        ) => void,
+      ): void;
+    };
   };
   downloads: BrowserDownloads;
 };
