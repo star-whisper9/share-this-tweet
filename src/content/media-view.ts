@@ -18,6 +18,7 @@ export function appendMediaActions(
   actions: HTMLElement,
   session: ExportSession,
   headingLabel = '所选媒体',
+  dock?: HTMLElement,
 ): void {
   const { record, selection } = session;
   if (record.media.length === 0) return;
@@ -56,10 +57,18 @@ export function appendMediaActions(
     const check = node('span', 'stt-thumb-check');
     check.append(icon('check'));
     thumb.append(check);
+    if (dock)
+      thumb.append(
+        node(
+          'span',
+          'stt-thumb-index',
+          `${media.type === 'photo' ? '' : label + ' '}${media.index}`,
+        ),
+      );
     choice.append(thumb, node('span', 'stt-media-label', `${label} ${media.index}`));
     strip.append(choice);
   }
-  actions.append(heading, strip, mediaActions(session));
+  actions.append(heading, strip, mediaActions(session, dock));
 }
 
 interface SaveChoice<T extends string> {
@@ -111,7 +120,7 @@ function outputFilename(session: ExportSession, media: MediaRecord): string {
   return buildMediaFilename(record, media, settings.filenameTemplate);
 }
 
-function mediaActions(session: ExportSession): HTMLElement {
+function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
   const { selection, record, mediaOptions } = session;
   const selected = selection.selected(record.media);
   const photos = selected.filter((item) => item.type === 'photo').length;
@@ -127,12 +136,12 @@ function mediaActions(session: ExportSession): HTMLElement {
         saveChoices<MediaSaveOptions['photo']>(
           session,
           'photo',
-          `照片 · ${photos}`,
+          dock ? '照片' : `照片 · ${photos}`,
           mediaOptions.photo,
           [
             { value: 'original', label: '原图', symbol: 'original' },
-            { value: 'top', label: '上方画框', symbol: 'top' },
-            { value: 'bottom', label: '下方画框', symbol: 'bottom' },
+            { value: 'top', label: dock ? '上框' : '上方画框', symbol: 'top' },
+            { value: 'bottom', label: dock ? '下框' : '下方画框', symbol: 'bottom' },
           ],
           (photo) => session.configureMedia({ photo }),
         ),
@@ -142,7 +151,7 @@ function mediaActions(session: ExportSession): HTMLElement {
         saveChoices<MediaSaveOptions['video']>(
           session,
           'video',
-          `视频 / GIF · ${dynamic}`,
+          dock ? '动态' : `视频 / GIF · ${dynamic}`,
           mediaOptions.video,
           [
             { value: 'original', label: '原文件', symbol: 'original' },
@@ -170,7 +179,7 @@ function mediaActions(session: ExportSession): HTMLElement {
   } catch (error) {
     filenameError = error instanceof Error ? error.message : String(error);
   }
-  wrapper.append(
+  (dock ?? wrapper).append(
     actionButton({
       key: `save-media-${record.tweetId}`,
       label: actionLabel(state, {
@@ -190,7 +199,7 @@ function mediaActions(session: ExportSession): HTMLElement {
   );
   if (record.media.length > 1) {
     const stitch = session.action('stitch-media');
-    wrapper.append(
+    (dock ?? wrapper).append(
       actionButton({
         key: `stitch-media-${record.tweetId}`,
         label: actionLabel(stitch, {

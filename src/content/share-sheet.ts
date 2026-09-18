@@ -9,6 +9,9 @@ export const SHEET_ID = 'stt-bottom-sheet';
 export class ShareSheet {
   private readonly sheet: HTMLElement;
   private hasRecord = false;
+  private readonly mobileQuery = matchMedia('(max-width: 719px)');
+  private previewExpanded = false;
+  private session?: ExportSession;
   private previousFocus?: HTMLElement;
   private closeTimer?: number;
   private restoreOverlay?: () => void;
@@ -21,19 +24,49 @@ export class ShareSheet {
     document.getElementById(SHEET_ID)?.remove();
     this.sheet = this.createSheet(tweetId);
     document.body.append(this.sheet);
+    this.updateLayout();
+    this.mobileQuery.addEventListener('change', this.onLayoutChange);
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('focusin', this.onFocusIn);
   }
   render(session: ExportSession): void {
+    this.session = session;
     this.updateSummary(session.record);
-    renderActions(this.sheet, session);
+    renderActions(this.sheet, session, this.mobileQuery.matches);
     this.setStatus(session.status.state, session.status.message);
   }
   destroy(): void {
     this.close(true);
     document.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('focusin', this.onFocusIn);
+    this.mobileQuery.removeEventListener('change', this.onLayoutChange);
+    this.session = undefined;
     this.sheet.remove();
+  }
+
+  private readonly onLayoutChange = (): void => {
+    this.updateLayout();
+    if (this.session) this.render(this.session);
+  };
+
+  private updateLayout(): void {
+    const mobile = this.mobileQuery.matches;
+    this.sheet.dataset.layout = mobile ? 'mobile' : 'desktop';
+    const body = this.sheet.querySelector<HTMLElement>('.stt-preview-body');
+    const toggle = this.sheet.querySelector<HTMLButtonElement>('.stt-preview-toggle');
+    if (body) body.hidden = mobile && !this.previewExpanded;
+    if (toggle) {
+      toggle.hidden = !mobile;
+      toggle.setAttribute('aria-expanded', String(this.previewExpanded));
+      toggle.textContent = this.previewExpanded ? '收起预览 ▴' : '推文预览 ▾';
+    }
+    // Status belongs to the scrolling content on mobile, so a long failure
+    // message never pushes the pinned commands off screen.
+    const status = this.sheet.querySelector<HTMLElement>('.stt-sheet-status');
+    const destination = this.sheet.querySelector<HTMLElement>(
+      mobile ? '.stt-sheet-scroll' : '.stt-sheet-footer',
+    );
+    if (status && destination) destination.append(status);
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
@@ -104,6 +137,17 @@ export class ShareSheet {
     update('[data-stt-avatar]', Array.from(name.replace(/^@/, ''))[0] || 'X');
     update('[data-stt-tweet-id]', record.tweetId);
     update('[data-stt-text]', record.text || '这条推文没有正文。');
+    const translation = summary.querySelector<HTMLElement>('.stt-preview-translation');
+    if (translation) {
+      translation.hidden = record.translation?.status !== 'available';
+      translation.replaceChildren();
+      if (record.translation?.status === 'available')
+        translation.append(
+          node('span', 'stt-section-label', '译文'),
+          node('p', 'stt-translation-text', record.translation.text),
+          node('span', 'stt-section-label', '原文'),
+        );
+    }
     const date = record.publishedAt ? new Date(record.publishedAt) : undefined;
     update(
       '[data-stt-date]',
@@ -131,8 +175,9 @@ export class ShareSheet {
     else {
       if (!quote) {
         quote = node('div', 'stt-quote-summary');
-        summary.append(quote);
+        summary.querySelector('.stt-preview-body')?.append(quote);
       }
+      const quoteExpanded = quote.querySelector('details')?.open;
       quote.replaceChildren(node('strong', '', '引用推文'));
       const quoted = record.quote.record;
       if (quoted) {
@@ -144,7 +189,7 @@ export class ShareSheet {
           node('summary', '', '引用正文'),
           node('p', 'stt-quote-text', quoted.text || '这条推文没有正文。'),
         );
-        details.open = quoted.text.length < 160;
+        details.open = quoteExpanded ?? quoted.text.length < 160;
         quote.append(details);
       } else
         quote.append(
@@ -223,7 +268,15 @@ export class ShareSheet {
     const handle = node('span', 'stt-handle', '');
     handle.dataset.sttHandle = '';
     authorNames.append(author, handle);
-    authorRow.append(avatar, authorNames, node('span', 'stt-source-badge', 'X'));
+    const previewToggle = node('button', 'stt-preview-toggle', '推文预览 ▾');
+    previewToggle.type = 'button';
+    previewToggle.setAttribute('aria-controls', 'stt-preview-body');
+    previewToggle.setAttribute('aria-expanded', 'false');
+    previewToggle.addEventListener('click', () => {
+      this.previewExpanded = !this.previewExpanded;
+      this.updateLayout();
+    });
+    authorRow.append(avatar, authorNames, node('span', 'stt-source-badge', 'X'), previewToggle);
     const text = node('p', 'stt-tweet-text', '内容准备好后，就可以保存或复制。');
     text.dataset.sttText = '';
     text.id = 'stt-summary-text';
@@ -253,7 +306,12 @@ export class ShareSheet {
     sourceLink.target = '_blank';
     sourceLink.rel = 'noopener noreferrer';
     provenance.append(dl, sourceLink);
-    summary.append(authorRow, text, expander, provenance);
+    const previewBody = node('div', 'stt-preview-body');
+    previewBody.id = 'stt-preview-body';
+    const translation = node('div', 'stt-preview-translation');
+    translation.hidden = true;
+    previewBody.append(translation, text, expander, provenance);
+    summary.append(authorRow, previewBody);
     const actions = node('div', 'stt-sheet-actions');
     const skeleton = node('div', 'stt-action-skeleton', '正在准备导出选项…');
     skeleton.setAttribute('aria-hidden', 'true');
@@ -265,7 +323,10 @@ export class ShareSheet {
     status.setAttribute('aria-atomic', 'true');
     const footer = node('footer', 'stt-sheet-footer');
     footer.append(status);
-    dialog.append(header, scroll, footer);
+    const dock = node('div', 'stt-mobile-dock');
+    dock.hidden = true;
+    dock.setAttribute('role', 'group');
+    dialog.append(header, scroll, dock, footer);
     backdrop.append(dialog);
     root.append(backdrop);
     return root;
