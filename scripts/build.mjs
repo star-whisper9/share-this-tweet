@@ -16,6 +16,7 @@ const entries = [
   ['src/options/options.ts', 'options/options.js'],
   ['src/popup/popup.ts', 'popup/popup.js'],
   ['src/workers/media-source.worker.ts', 'workers/media-source.worker.js'],
+  ['src/workers/video-render.worker.ts', 'workers/video-render.worker.js'],
 ];
 
 for (const [source, output] of entries) {
@@ -50,3 +51,14 @@ await cp(resolve(root, 'src/options/options.html'), resolve(dist, 'options/optio
 await cp(resolve(root, 'src/options/options.css'), resolve(dist, 'options/options.css'));
 await cp(resolve(root, 'src/popup/popup.html'), resolve(dist, 'popup/popup.html'));
 await cp(resolve(root, 'src/popup/popup.css'), resolve(dist, 'popup/popup.css'));
+
+// Single-thread FFmpeg is loaded only when a dynamic export starts.
+await mkdir(resolve(dist, 'vendor/ffmpeg'), { recursive: true });
+for (const name of ['ffmpeg-core.js', 'ffmpeg-core.wasm']) {
+  await cp(
+    resolve(root, 'node_modules/@ffmpeg/core/dist/umd', name),
+    resolve(dist, 'vendor/ffmpeg', name),
+  );
+}
+
+await cp(resolve(root, 'src/vendor/ffmpeg'), resolve(dist, 'vendor/ffmpeg'), { recursive: true });

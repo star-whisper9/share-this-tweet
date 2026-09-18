@@ -1,3 +1,4 @@
+import { renderDynamicMedia, type VideoProgress } from '../core/video-client.js';
 import { renderStitchedMedia } from '../core/stitch.js';
 import {
   buildCardFilename,
@@ -35,7 +36,7 @@ export type TweetAction = 'copy-text' | 'save-card' | 'save-row-card' | 'stitch-
 export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
 export interface MediaSaveOptions {
   photo: 'original' | FrameOrientation;
-  video: 'original' | 'sourced';
+  video: 'original' | 'sourced' | FrameOrientation;
 }
 interface ActionMessages {
   loading: () => string;
@@ -74,6 +75,8 @@ export class ExportSession {
   private readonly actions = new Map<string, ActionState>();
   private active = true;
   private batchRunning = false;
+  private videoAbort?: AbortController;
+  private mediaCancelled = false;
   private cardFile?: File;
   private cardKey?: string;
   private cardPending?: { key: string; promise: Promise<File> };
@@ -126,7 +129,49 @@ export class ExportSession {
   }
 
   get isSavingBatch(): boolean {
-    return this.batchRunning;
+    return this.batchRunning || this.isProcessingVideo;
+  }
+
+  get isProcessingVideo(): boolean {
+    return !!this.videoAbort || !!this.quoted?.isProcessingVideo;
+  }
+
+  cancelMediaProcessing(): void {
+    this.mediaCancelled = true;
+    this.videoAbort?.abort();
+    this.quoted?.cancelMediaProcessing();
+  }
+
+  private async renderVideo(
+    context: ExportContext,
+    media: MediaRecord[],
+    frame: MediaSaveOptions['photo'],
+  ): Promise<Blob> {
+    if (this.videoAbort) throw new Error(t('dynamic.busy'));
+    const controller = new AbortController();
+    this.videoAbort = controller;
+    this.changed();
+    const onProgress = ({ phase, progress }: VideoProgress): void => {
+      const message = () =>
+        phase === 'encoding'
+          ? t('dynamic.progress.encoding', { percent: Math.round((progress ?? 0) * 100) })
+          : t(`dynamic.progress.${phase}`);
+      this.setStatus('loading', message(), message);
+    };
+    try {
+      return await renderDynamicMedia(
+        context.record,
+        media,
+        context.settings,
+        frame,
+        context.theme,
+        context.locale,
+        { signal: controller.signal, onProgress },
+      );
+    } finally {
+      if (this.videoAbort === controller) this.videoAbort = undefined;
+      this.changed();
+    }
   }
 
   get mediaOptions(): Readonly<MediaSaveOptions> {
@@ -195,6 +240,7 @@ export class ExportSession {
 
   dispose(): void {
     this.active = false;
+    this.videoAbort?.abort();
     this.quoted?.dispose();
     this.cardFile = undefined;
     this.cardPending = undefined;
@@ -356,15 +402,12 @@ export class ExportSession {
         success: () => t('content.stitchSuccess'),
         failure: () => t('content.stitchFailure'),
       },
-      async ({ record, settings, theme, locale }) => {
-        const blob = await renderStitchedMedia(
-          record,
-          settings,
-          theme,
-          this.resources,
-          frame,
-          locale,
-        );
+      async (context) => {
+        const { record, settings, theme, locale } = context;
+        const animated = record.media.some((item) => item.type !== 'photo');
+        const blob = animated
+          ? await this.renderVideo(context, record.media, frame)
+          : await renderStitchedMedia(record, settings, theme, this.resources, frame, locale);
         const extension =
           blob.type === 'image/png'
             ? 'png'
@@ -372,7 +415,9 @@ export class ExportSession {
               ? 'jpg'
               : blob.type === 'image/webp'
                 ? 'webp'
-                : undefined;
+                : blob.type === 'video/mp4'
+                  ? 'mp4'
+                  : undefined;
         if (!extension) throw new Error(t('content.stitchFormatError'));
         const filename = buildStitchFilename(
           record,
@@ -384,7 +429,7 @@ export class ExportSession {
         downloadBlob(blob, filename);
         return this.persist(record, {
           tweetId: record.tweetId,
-          outputType: 'stitched-image',
+          outputType: animated ? 'stitched-video' : 'stitched-image',
           filename,
         });
       },
@@ -399,26 +444,29 @@ export class ExportSession {
   ): Promise<string | undefined> {
     const { record, settings } = context;
     let filename: string;
-    const framed = mode === 'framed' && media.type === 'photo';
+    const framed = mode === 'framed';
     const sourced = mode === 'sourced' && media.type !== 'photo';
     if (framed) {
-      const blob = await renderPhotoFrame(
-        record,
-        media,
-        settings.frameTemplate,
-        orientation,
-        this.resources,
-        context.theme,
-        undefined,
-        context.locale,
-      );
-      if (blob.type !== 'image/jpeg' && blob.type !== 'image/webp')
+      const blob =
+        media.type === 'photo'
+          ? await renderPhotoFrame(
+              record,
+              media,
+              settings.frameTemplate,
+              orientation,
+              this.resources,
+              context.theme,
+              undefined,
+              context.locale,
+            )
+          : await this.renderVideo(context, [media], orientation);
+      if (!['image/jpeg', 'image/webp', 'video/mp4'].includes(blob.type))
         throw new Error(t('content.frameFormatError'));
       filename = buildFrameFilename(
         record,
         media,
         settings.filenameTemplate,
-        blob.type === 'image/webp' ? 'webp' : 'jpg',
+        blob.type === 'video/mp4' ? 'mp4' : blob.type === 'image/webp' ? 'webp' : 'jpg',
       );
       if (!this.active) return;
       downloadBlob(blob, filename);
@@ -433,7 +481,13 @@ export class ExportSession {
     }
     return this.persist(record, {
       tweetId: record.tweetId,
-      outputType: framed ? 'framed-image' : sourced ? 'sourced-media' : 'original-media',
+      outputType: framed
+        ? media.type === 'photo'
+          ? 'framed-image'
+          : 'framed-video'
+        : sourced
+          ? 'sourced-media'
+          : 'original-media',
       filename,
       mediaIndex: media.index,
     });
@@ -463,6 +517,7 @@ export class ExportSession {
           : mode === 'sourced'
             ? t('content.mediaSaveSourceSuccess', { count: selected.length })
             : t('content.mediaSaveOriginalSuccess', { count: selected.length });
+    this.mediaCancelled = false;
     this.batchRunning = true;
     try {
       await this.run(
@@ -477,21 +532,26 @@ export class ExportSession {
           const warnings: { index: number; message: string }[] = [];
           for (const [index, media] of selected.entries()) {
             if (!this.active) return;
-            const itemMode =
+            const videoFrame = options.video === 'top' || options.video === 'bottom';
+            const itemMode: MediaMode =
               mode === 'configured'
                 ? media.type === 'photo'
                   ? options.photo === 'original'
                     ? 'original'
                     : 'framed'
-                  : options.video
-                : mode === 'framed' && media.type === 'photo'
-                  ? 'framed'
-                  : mode === 'sourced' && media.type !== 'photo'
-                    ? 'sourced'
-                    : 'original';
-            const itemKey = mediaKey(media.index, itemMode, orientation);
+                  : videoFrame
+                    ? 'framed'
+                    : (options.video as 'original' | 'sourced')
+                : mode === 'sourced' && media.type === 'photo'
+                  ? 'original'
+                  : mode;
+            const itemOrientation =
+              mode === 'configured' && media.type !== 'photo' && videoFrame
+                ? (options.video as FrameOrientation)
+                : orientation;
+            const itemKey = mediaKey(media.index, itemMode, itemOrientation);
             try {
-              const warning = await this.exportMedia(context, media, itemMode, orientation);
+              const warning = await this.exportMedia(context, media, itemMode, itemOrientation);
               if (!this.active) return;
               if (warning) warnings.push({ index: media.index, message: warning });
               if (batch) this.actions.set(itemKey, { status: 'success' });
@@ -499,7 +559,7 @@ export class ExportSession {
               if (!this.active) return;
               const message = errorMessage(error);
               this.actions.set(itemKey, { status: 'error', error: message });
-              if (!batch) throw error;
+              if (!batch || this.mediaCancelled) throw error;
               failures.push(t('content.itemFailure', { index: media.index, error: message }));
             }
             const progress = () =>

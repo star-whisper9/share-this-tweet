@@ -165,6 +165,22 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
       ),
     );
   }
+  if (session.isProcessingVideo) {
+    if (mobile) {
+      const progress = node('p', 'stt-save-hint', session.status.message);
+      progress.setAttribute('aria-hidden', 'true');
+      dock.append(progress);
+    }
+    (mobile ? dock : actions).append(
+      actionButton({
+        key: 'cancel-video',
+        label: t('dynamic.cancel'),
+        image: 'close',
+        state: { status: 'idle' },
+        onClick: () => session.cancelMediaProcessing(),
+      }),
+    );
+  }
   const exports = node('div', 'stt-export-grid');
   exports.setAttribute('role', 'group');
   exports.setAttribute(

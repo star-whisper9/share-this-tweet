@@ -1,3 +1,4 @@
+import { renderDynamicMedia } from '../src/core/video-client.js';
 import { setLocale } from '../src/shared/i18n.js';
 import { renderStitchedMedia } from '../src/core/stitch.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,7 @@ vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderPhotoFrame: vi.fn(),
 }));
+vi.mock('../src/core/video-client.js', () => ({ renderDynamicMedia: vi.fn() }));
 vi.mock('../src/core/stitch.js', () => ({ renderStitchedMedia: vi.fn() }));
 vi.mock('../src/core/download.js', () => ({ downloadBlob: vi.fn(), downloadMedia: vi.fn() }));
 vi.mock('../src/core/storage-client.js', () => ({
@@ -63,6 +65,7 @@ function deferred<T>() {
 beforeEach(() => {
   vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.4.0' }) } });
   vi.mocked(renderTweetCard).mockResolvedValue({ blob: png, width: 1600, height: 500 });
+  vi.mocked(renderDynamicMedia).mockResolvedValue(new Blob(['mp4'], { type: 'video/mp4' }));
   vi.mocked(renderPhotoFrame).mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }));
   vi.mocked(detectCardTheme).mockReturnValue('light');
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -178,10 +181,11 @@ describe('export session', () => {
 
   it('continues a mixed batch after one failure and records only completed outputs', async () => {
     const session = mixedSession();
-    vi.mocked(downloadMedia).mockRejectedValueOnce(new Error());
+    vi.mocked(renderDynamicMedia).mockRejectedValueOnce(new Error());
     await session.saveSelected('framed', 'top');
     expect(renderPhotoFrame).toHaveBeenCalledTimes(2);
-    expect(downloadMedia).toHaveBeenCalledOnce();
+    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(renderDynamicMedia).toHaveBeenCalledOnce();
     expect(downloadBlob).toHaveBeenCalledTimes(2);
     const outputs = vi.mocked(recordOutput).mock.calls.map(([output]) => output);
     expect(outputs.map(({ mediaIndex }) => mediaIndex)).toEqual([1, 3]);
@@ -193,7 +197,8 @@ describe('export session', () => {
     session.updateRecord({ ...record, media: [photo(1), video, photo(3)] });
     await session.saveSelected('original');
     expect(session.selection.size).toBe(0);
-    expect(downloadMedia).toHaveBeenCalledOnce();
+    expect(downloadMedia).not.toHaveBeenCalled();
+    expect(renderDynamicMedia).toHaveBeenCalledOnce();
   });
 
   it('does not save an in-flight frame or start later batch items after disposal', async () => {
@@ -309,10 +314,10 @@ it('exports quote media with its own identity and cancels child work with the pa
   expect(downloadMedia).not.toHaveBeenCalled();
 });
 
-it('stitches all media independently of selection and records a single output', async () => {
+it('stitches all photos independently of selection and records a single output', async () => {
   vi.mocked(renderStitchedMedia).mockResolvedValue(png);
   const session = new ExportSession(
-    { ...record, media: [photo(1), video, photo(3)] },
+    { ...record, media: [photo(1), photo(2), photo(3)] },
     { ...settings, stitchStyle: 'gallery' },
   );
   session.toggleMedia(1);
@@ -370,7 +375,7 @@ it.each(['original', 'top', 'bottom'] as const)(
   async (frame) => {
     const pending = deferred<Blob>();
     vi.mocked(renderStitchedMedia).mockReturnValueOnce(pending.promise);
-    const session = new ExportSession({ ...record, media: [photo(1), video] }, settings);
+    const session = new ExportSession({ ...record, media: [photo(1), photo(2)] }, settings);
     session.configureMedia({ photo: frame });
     const work = session.stitchMedia();
     session.configureMedia({ photo: frame === 'top' ? 'bottom' : 'top' });
@@ -416,4 +421,75 @@ it('captures the export language and does not reuse a card from another language
     record.media,
     expect.objectContaining({ locale: 'zh-CN' }),
   );
+});
+
+it('exports mixed stitching as MP4 while card previews remain static', async () => {
+  const session = mixedSession();
+  session.configureMedia({ photo: 'top' });
+  await session.stitchMedia();
+  expect(renderDynamicMedia).toHaveBeenCalledWith(
+    session.record,
+    session.record.media,
+    settings,
+    'top',
+    'light',
+    'zh-CN',
+    expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+  );
+  expect(renderStitchedMedia).not.toHaveBeenCalled();
+  expect(downloadBlob).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'video/mp4' }),
+    '42_1_stitched_framed.mp4',
+  );
+  expect(recordOutput).toHaveBeenCalledWith(
+    expect.objectContaining({ outputType: 'stitched-video' }),
+  );
+  await session.saveCard();
+  expect(renderTweetCard).toHaveBeenCalledOnce();
+});
+it('keeps photo and video frame directions independent in a mixed save', async () => {
+  const session = mixedSession();
+  session.configureMedia({ photo: 'top', video: 'bottom' });
+  await session.saveSelected('configured');
+  expect(vi.mocked(renderPhotoFrame).mock.calls.every((call) => call[3] === 'top')).toBe(true);
+  expect(renderDynamicMedia).toHaveBeenCalledWith(
+    session.record,
+    [video],
+    settings,
+    'bottom',
+    'light',
+    'zh-CN',
+    expect.anything(),
+  );
+  expect(vi.mocked(recordOutput).mock.calls.map(([output]) => output.outputType)).toEqual([
+    'framed-image',
+    'framed-video',
+    'framed-image',
+  ]);
+  expect(downloadMedia).not.toHaveBeenCalled();
+});
+it('cancels an in-flight video without downloading or starting later batch items', async () => {
+  vi.mocked(renderDynamicMedia).mockImplementation(
+    (_record, _media, _settings, _frame, _theme, _locale, options) =>
+      new Promise((_resolve, reject) =>
+        options.signal.addEventListener('abort', () => reject(new Error('cancelled')), {
+          once: true,
+        }),
+      ),
+  );
+  const session = new ExportSession(
+    { ...record, media: [video, { ...video, index: 3 }] },
+    settings,
+  );
+  session.toggleMedia(3);
+  session.configureMedia({ video: 'top' });
+  const work = session.saveSelected('configured');
+  expect(session.isProcessingVideo).toBe(true);
+  session.cancelMediaProcessing();
+  await work;
+  expect(session.isProcessingVideo).toBe(false);
+  expect(renderDynamicMedia).toHaveBeenCalledOnce();
+  expect(downloadBlob).not.toHaveBeenCalled();
+  expect(recordOutput).not.toHaveBeenCalled();
+  expect(session.mediaAction('configured').status).toBe('error');
 });

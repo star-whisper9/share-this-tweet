@@ -13,12 +13,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:video": "npm run build && node scripts/verify-video-wasm.mjs",
     "check": "npm run format:check && npm run typecheck && npm test && npm run build",
     "lint:extension": "web-ext lint --source-dir dist --warnings-as-errors --no-config-discovery",
     "package": "npm run check && npm run lint:extension && node scripts/package.mjs",
     "sign:unlisted": "node scripts/sign-unlisted.mjs"
   },
   "devDependencies": {
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/types": "0.12.4",
     "@types/node": "^22.10.0",
     "esbuild": "^0.25.0",
     "jszip": "3.10.1",

@@ -1,3 +1,4 @@
+import { zhCN as videoZh, en as videoEn } from './locales/video.js';
 import { zhCN as commonZh, en as commonEn } from './locales/common.js';
 import { zhCN as contentZh, en as contentEn } from './locales/content.js';
 import { zhCN as coreZh, en as coreEn } from './locales/core.js';
@@ -6,9 +7,15 @@ import { zhCN as optionsZh, en as optionsEn } from './locales/options.js';
 export const SUPPORTED_LANGUAGES = ['auto', 'zh-CN', 'en'] as const;
 export type LanguagePreference = (typeof SUPPORTED_LANGUAGES)[number];
 export type Locale = Exclude<LanguagePreference, 'auto'>;
-const zhCN = { ...commonZh, ...contentZh, ...coreZh, ...optionsZh };
+const zhCN = { ...videoZh, ...commonZh, ...contentZh, ...coreZh, ...optionsZh };
 export type MessageKey = keyof typeof zhCN;
-const en: Record<MessageKey, string> = { ...commonEn, ...contentEn, ...coreEn, ...optionsEn };
+const en: Record<MessageKey, string> = {
+  ...videoEn,
+  ...commonEn,
+  ...contentEn,
+  ...coreEn,
+  ...optionsEn,
+};
 export const catalogs: Record<Locale, Record<MessageKey, string>> = { 'zh-CN': zhCN, en };
 let currentLocale: Locale = 'zh-CN';
 

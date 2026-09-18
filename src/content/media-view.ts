@@ -129,6 +129,8 @@ function outputFilename(session: ExportSession, media: MediaRecord): string {
   const { record, settings, mediaOptions } = session;
   if (media.type === 'photo' && mediaOptions.photo !== 'original')
     return buildFrameFilename(record, media, settings.filenameTemplate);
+  if (media.type !== 'photo' && (mediaOptions.video === 'top' || mediaOptions.video === 'bottom'))
+    return buildFrameFilename(record, media, settings.filenameTemplate, 'mp4');
   if (media.type !== 'photo' && mediaOptions.video === 'sourced')
     return buildSourcedMediaFilename(record, media, settings.filenameTemplate);
   return buildMediaFilename(record, media, settings.filenameTemplate);
@@ -185,11 +187,26 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
           [
             { value: 'original', label: t('content.originalFile'), symbol: 'original' },
             { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
+            {
+              value: 'top',
+              label: dock ? t('content.topFrameShort') : t('content.topFrame'),
+              symbol: 'top',
+            },
+            {
+              value: 'bottom',
+              label: dock ? t('content.bottomFrameShort') : t('content.bottomFrame'),
+              symbol: 'bottom',
+            },
           ],
           (video) => session.configureMedia({ video }),
         ),
       );
     wrapper.append(settings);
+    if (dynamic && (mediaOptions.video === 'top' || mediaOptions.video === 'bottom'))
+      wrapper.append(
+        node('p', 'stt-save-hint', t('dynamic.frameHint')),
+        node('p', 'stt-save-hint', t('dynamic.hint')),
+      );
     if (dynamic && mediaOptions.video === 'sourced')
       wrapper.append(node('p', 'stt-save-hint', t('content.sourceMetadataHint')));
   } else {
@@ -243,13 +260,14 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
         }),
         image: 'download',
         state: stitch,
+        disabled: session.isSavingBatch,
         onClick: () => {
           void session.stitchMedia();
         },
       }),
     );
     if (record.media.some((item) => item.type !== 'photo'))
-      wrapper.append(node('p', 'stt-save-hint', t('content.dynamicStitchHint')));
+      wrapper.append(node('p', 'stt-save-hint', t('dynamic.hint')));
     if (stitch.error) wrapper.append(errorDetails(t('content.stitchFailedDetails'), stitch.error));
   }
   if (filenameError) wrapper.append(errorDetails(t('content.filenameUnavailable'), filenameError));

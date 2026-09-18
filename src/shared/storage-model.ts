@@ -7,6 +7,8 @@ export type OutputType =
   | 'tweet-card'
   | 'row-tweet-card'
   | 'stitched-image'
+  | 'stitched-video'
+  | 'framed-video'
   | 'shared-text'
   | 'shared-image'
   | 'copied-text';

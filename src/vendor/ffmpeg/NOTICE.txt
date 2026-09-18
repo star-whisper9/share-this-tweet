@@ -1,0 +1,15 @@
+This extension bundles the unmodified single-thread @ffmpeg/core 0.12.10
+JavaScript loader and WebAssembly binary from npm. Exact package checksums are
+recorded in package-lock.json. The files are copied by scripts/build.mjs and
+are never downloaded from a CDN at runtime.
+
+Upstream: https://github.com/ffmpegwasm/ffmpeg.wasm
+Corresponding release: https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.15
+Build sources and scripts: https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v12.15
+FFmpeg version reported by this core: 5.1.4
+FFmpeg source: https://ffmpeg.org/releases/ffmpeg-5.1.4.tar.xz
+
+The core package declares GPL-2.0-or-later. Its included FFmpeg and external
+libraries retain their respective upstream copyright and license notices.
+COPYING.GPLv2 is included alongside these files. This project's application
+code continues to be licensed under GPL-3.0.

@@ -5,7 +5,23 @@ interface BrowserStorageArea {
   set(values: StorageValues): Promise<void>;
 }
 
+interface BrowserPort {
+  name: string;
+  postMessage(message: unknown): void;
+  disconnect(): void;
+  onMessage: {
+    addListener(listener: (message: unknown) => void): void;
+    removeListener(listener: (message: unknown) => void): void;
+  };
+  onDisconnect: {
+    addListener(listener: () => void): void;
+    removeListener(listener: () => void): void;
+  };
+}
+
 interface BrowserRuntime {
+  connect(options: { name: string }): BrowserPort;
+  onConnect?: { addListener(listener: (port: BrowserPort) => void): void };
   getURL(path: string): string;
   getManifest(): { version: string };
   sendMessage(message: unknown): Promise<unknown>;

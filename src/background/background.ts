@@ -1,3 +1,4 @@
+import { handleVideoPort } from './video-render.js';
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
 import type { PrepareSourcedMediaResponse } from '../shared/protocol.js';
 import { getLocale, setLocale, t, type Locale } from '../shared/i18n.js';
@@ -14,6 +15,8 @@ import {
   StorageError,
   upsertTweetRecord,
 } from '../core/storage.js';
+
+browser.runtime.onConnect?.addListener(handleVideoPort);
 
 browser.runtime.onMessage.addListener((message: unknown) => {
   if (!isExtensionMessage(message)) return;

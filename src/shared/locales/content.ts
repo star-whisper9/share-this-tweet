@@ -107,13 +107,12 @@ export const zhCN = {
   'content.cardSuccess': '推文卡片已保存。',
   'content.cardFailure': '推文卡片保存失败，请查看详情后重试。',
   'content.stitchLoading': '正在拼接全部媒体…',
-  'content.stitchSuccess': '拼接图片已保存。',
+  'content.stitchSuccess': '合成文件已保存。',
   'content.stitchFailure': '拼接失败，请查看详情后重试。',
   'content.stitchFormatError': '拼接输出格式不正确',
   'content.frameFormatError': '画框输出格式不正确',
   'content.mediaSaveSuccess': '已按所选方式保存，共 {count} 项媒体。',
-  'content.mediaSaveFrameSuccess':
-    '已交给浏览器保存，共 {count} 项媒体；照片带{direction}画框，视频和 GIF 原样保存。',
+  'content.mediaSaveFrameSuccess': '已交给浏览器保存，共 {count} 项媒体，均带{direction}画框。',
   'content.mediaSaveSourceSuccess':
     '已交给浏览器保存，共 {count} 项媒体；视频和 GIF 已写入来源，照片原样保存。',
   'content.mediaSaveOriginalSuccess': '已交给浏览器保存，共 {count} 项原始媒体。',
@@ -238,13 +237,13 @@ export const en: Record<keyof typeof zhCN, string> = {
   'content.cardSuccess': 'Post card saved.',
   'content.cardFailure': 'Could not save the post card. Check details and try again.',
   'content.stitchLoading': 'Stitching all media…',
-  'content.stitchSuccess': 'Stitched image saved.',
+  'content.stitchSuccess': 'Composed media saved.',
   'content.stitchFailure': 'Could not stitch. Check details and try again.',
   'content.stitchFormatError': 'Unsupported stitched image format',
   'content.frameFormatError': 'Unsupported frame image format',
   'content.mediaSaveSuccess': 'Saved {count} media item(s) with the selected options.',
   'content.mediaSaveFrameSuccess':
-    'Handed {count} media item(s) to the browser. Photos use a {direction} frame; videos and GIFs are saved unchanged.',
+    'Handed {count} media item(s) to the browser with a {direction} frame.',
   'content.mediaSaveSourceSuccess':
     'Handed {count} media item(s) to the browser. Source is embedded in videos and GIFs; photos are saved unchanged.',
   'content.mediaSaveOriginalSuccess': 'Handed {count} original media item(s) to the browser.',

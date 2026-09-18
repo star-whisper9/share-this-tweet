@@ -1,0 +1,36 @@
+export const zhCN = {
+  'video.error.invalidRequest': '动态拼图请求无效。',
+  'video.error.busy': '动态拼图正在处理中。',
+  'video.error.loadFailed': '动态拼图引擎加载失败。',
+  'video.error.atLeastOneDynamic': '动态拼图至少需要一项 GIF 或视频。',
+  'video.error.maxInputs': '动态拼图最多支持 {count} 项媒体。',
+  'video.error.inputTooLarge': '动态拼图的媒体总大小不能超过 {size} MiB。',
+  'video.error.invalidProbe': '无法读取媒体的尺寸或时长。',
+  'video.error.unsupportedGeometry': '媒体包含暂不支持的旋转或像素宽高比。',
+  'video.error.sourceTooLarge': '第 {index} 项媒体的尺寸超出处理限制。',
+  'video.error.durationTooLong': '动态内容最长只能为 {seconds} 秒。',
+  'video.error.frameRequired': '当前画框模式需要来源画框图像。',
+  'video.error.invalidFrame': '来源画框尺寸与拼图不匹配。',
+  'video.error.cancelled': '动态拼图已取消。',
+  'video.error.ffmpegFailed': '动态拼图编码失败。',
+  'video.error.emptyOutput': '动态拼图没有生成有效的视频文件。',
+} as const;
+
+export const en: Record<keyof typeof zhCN, string> = {
+  'video.error.invalidRequest': 'The animated collage request is invalid.',
+  'video.error.busy': 'An animated collage is already being processed.',
+  'video.error.loadFailed': 'Could not load the animated collage engine.',
+  'video.error.atLeastOneDynamic': 'An animated collage needs at least one GIF or video.',
+  'video.error.maxInputs': 'An animated collage supports up to {count} media items.',
+  'video.error.inputTooLarge': 'Animated collage media cannot exceed {size} MiB in total.',
+  'video.error.invalidProbe': 'Could not read the media dimensions or duration.',
+  'video.error.unsupportedGeometry':
+    'The media uses an unsupported rotation or pixel aspect ratio.',
+  'video.error.sourceTooLarge': 'Media item {index} exceeds the processing-size limit.',
+  'video.error.durationTooLong': 'Animated content can be at most {seconds} seconds long.',
+  'video.error.frameRequired': 'This frame mode needs a source-frame image.',
+  'video.error.invalidFrame': 'The source-frame dimensions do not match the collage.',
+  'video.error.cancelled': 'The animated collage was cancelled.',
+  'video.error.ffmpegFailed': 'Could not encode the animated collage.',
+  'video.error.emptyOutput': 'The animated collage did not produce a valid video file.',
+};

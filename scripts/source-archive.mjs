@@ -64,7 +64,11 @@ ${override}
 The extension is generated in dist/. The submitted ZIP contains the contents of
 dist/ with manifest.json at its root, including generated source maps.
 TypeScript and esbuild run locally. All image assets are supplied in src/icons/;
-no image service or platform-specific image tools are needed. Dependencies are
+no image service or platform-specific image tools are needed. The locked npm
+package @ffmpeg/core supplies an unmodified FFmpeg JavaScript/WASM runtime;
+build.mjs copies its UMD files into dist/vendor/ffmpeg. See
+src/vendor/ffmpeg/NOTICE.txt for the matching upstream release and build sources.
+The application build does not compile FFmpeg itself or fetch code at runtime. Dependencies are
 installed from npm using package-lock.json; no private dependencies are required.
 
 Optional checks: npm run check and npm run lint:extension.

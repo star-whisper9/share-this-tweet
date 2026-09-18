@@ -57,7 +57,7 @@ export function buildFrameFilename(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
-  extension: 'jpg' | 'webp' = 'jpg',
+  extension: 'jpg' | 'webp' | 'mp4' = 'jpg',
 ): string {
   const rendered = renderTemplate(template, { tweet: record, media, extension });
   const base = forceExtension(sanitizeFilename(rendered), extension).slice(
@@ -87,7 +87,7 @@ export function buildCardFilename(
 export function buildStitchFilename(
   record: TweetRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
-  extension: 'png' | 'jpg' | 'webp' = 'png',
+  extension: 'png' | 'jpg' | 'webp' | 'mp4' = 'png',
   framed = false,
 ): string {
   const rendered = renderTemplate(template, { tweet: record, media: record.media[0], extension });

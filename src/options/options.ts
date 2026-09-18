@@ -470,6 +470,8 @@ function renderRecordDetail(): void {
     'framed-image': t('options.records.output.framedImage'),
     'tweet-card': t('options.records.output.tweetCard'),
     'row-tweet-card': t('options.records.output.rowTweetCard'),
+    'stitched-video': t('dynamic.stitchedVideo'),
+    'framed-video': t('dynamic.framedVideo'),
     'stitched-image': t('options.records.output.stitchedImage'),
     'shared-text': t('options.records.output.sharedText'),
     'shared-image': t('options.records.output.sharedImage'),

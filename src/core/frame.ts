@@ -238,6 +238,15 @@ export function encodeFrame(
   locale: Locale = getLocale(),
 ): Promise<Blob> {
   const type = transparent ? 'image/webp' : 'image/jpeg';
+  return encodeCanvas(canvas, type, locale, 0.92);
+}
+
+function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  type: string,
+  locale: Locale,
+  quality?: number,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -248,7 +257,7 @@ export function encodeFrame(
         resolve(blob);
       },
       type,
-      0.92,
+      quality,
     );
   });
 }
@@ -266,6 +275,81 @@ export function frameOutputSize(
   if (outputWidth > 16384 || outputHeight > 16384 || outputWidth * outputHeight > 32000000)
     throw new Error(t('core.frame.imageTooLarge'));
   return { width: outputWidth, height: outputHeight, scale };
+}
+
+function drawFrameContent(
+  context: CanvasRenderingContext2D,
+  layout: FrameLayout,
+  sourceLines: string[],
+  frameY: number,
+  palette: (typeof IMAGE_PALETTES)[ImageTheme],
+  avatarImage?: LoadedAvatar,
+  brandImage?: HTMLImageElement,
+): void {
+  context.fillStyle = palette.background;
+  context.fillRect(0, frameY, layout.width, layout.barHeight);
+  context.fillStyle = palette.text;
+  context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
+  // Each line occupies a fixed-height cell. Centering the glyph in that cell
+  // keeps the same paddingY on both sides of a top or bottom frame, regardless
+  // of the font's ascent/descent metrics.
+  context.textBaseline = 'middle';
+
+  if (layout.mode === 'double') {
+    context.textAlign = 'left';
+    layout.leftLines.forEach((line, index) => {
+      drawHorizontalTextLine(
+        context,
+        line,
+        layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        layout.fontSize,
+        avatarImage,
+        brandImage,
+      );
+    });
+    context.textAlign = 'right';
+    layout.rightLines.forEach((line, index) => {
+      context.globalAlpha = 0.55;
+      context.fillStyle = palette.muted;
+      context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
+      drawHorizontalTextLine(
+        context,
+        line,
+        layout.width - layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        layout.fontSize,
+        avatarImage,
+        brandImage,
+      );
+    });
+    context.globalAlpha = 1;
+  } else {
+    const measureText = createFrameTextMeasurer(context, layout.fontSize);
+    const sourceLineCount = sourceLines.flatMap((line) =>
+      wrapFrameText(line, layout.width - layout.paddingX * 2, measureText),
+    ).length;
+    const sourceStart = layout.leftLines.length - sourceLineCount;
+    context.textAlign = 'left';
+    layout.leftLines.forEach((line, index) => {
+      context.globalAlpha = index >= sourceStart ? 0.55 : 1;
+      context.fillStyle = index >= sourceStart ? palette.muted : palette.text;
+      drawHorizontalTextLine(
+        context,
+        line,
+        layout.paddingX,
+        frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
+        layout.fontSize,
+        avatarImage,
+        brandImage,
+      );
+    });
+  }
+
+  context.globalAlpha = 1;
+  context.strokeStyle = palette.border;
+  context.lineWidth = 1;
+  context.strokeRect(0.5, frameY + 0.5, layout.width - 1, layout.barHeight - 1);
 }
 
 export async function renderImageFrame(
@@ -343,78 +427,93 @@ export async function renderImageFrame(
     context.imageSmoothingQuality = 'high';
     const imageY = orientation === 'top' ? layout.barHeight : 0;
     context.drawImage(drawable, 0, imageY, logicalWidth, imageHeight);
-    context.fillStyle = palette.background;
-    context.fillRect(0, orientation === 'top' ? 0 : imageHeight, logicalWidth, layout.barHeight);
-    context.fillStyle = palette.text;
-    context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-    // Each line occupies a fixed-height cell. Centering the glyph in that cell
-    // keeps the same paddingY on both sides of a top or bottom frame, regardless
-    // of the font's ascent/descent metrics.
-    context.textBaseline = 'middle';
-
-    if (layout.mode === 'double') {
-      const frameY = orientation === 'top' ? 0 : imageHeight;
-      context.textAlign = 'left';
-      layout.leftLines.forEach((line, index) => {
-        drawHorizontalTextLine(
-          context,
-          line,
-          layout.paddingX,
-          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-          layout.fontSize,
-          avatarImage,
-          brandImage,
-        );
-      });
-      context.textAlign = 'right';
-      layout.rightLines.forEach((line, index) => {
-        context.globalAlpha = 0.55;
-        context.fillStyle = palette.muted;
-        context.font = `${index === 0 ? 450 : 550} ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
-        drawHorizontalTextLine(
-          context,
-          line,
-          logicalWidth - layout.paddingX,
-          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-          layout.fontSize,
-          avatarImage,
-          brandImage,
-        );
-      });
-      context.globalAlpha = 1;
-    } else {
-      const frameY = orientation === 'top' ? 0 : imageHeight;
-      const measureText = createFrameTextMeasurer(context, layout.fontSize);
-      const sourceLineCount = sourceLines.flatMap((line) =>
-        wrapFrameText(line, logicalWidth - layout.paddingX * 2, measureText),
-      ).length;
-      const sourceStart = layout.leftLines.length - sourceLineCount;
-      context.textAlign = 'left';
-      layout.leftLines.forEach((line, index) => {
-        context.globalAlpha = index >= sourceStart ? 0.55 : 1;
-        context.fillStyle = index >= sourceStart ? palette.muted : palette.text;
-        drawHorizontalTextLine(
-          context,
-          line,
-          layout.paddingX,
-          frameY + layout.paddingY + (index + 0.5) * layout.lineHeight,
-          layout.fontSize,
-          avatarImage,
-          brandImage,
-        );
-      });
-    }
-
-    context.globalAlpha = 1;
-    context.strokeStyle = palette.border;
-    context.lineWidth = 1;
-    const frameY = orientation === 'top' ? 0 : imageHeight;
-    context.strokeRect(0.5, frameY + 0.5, logicalWidth - 1, layout.barHeight - 1);
+    drawFrameContent(
+      context,
+      layout,
+      sourceLines,
+      orientation === 'top' ? 0 : imageHeight,
+      palette,
+      avatarImage,
+      brandImage,
+    );
 
     resources.checkActive();
     return await encodeFrame(canvas, transparent, locale);
   } finally {
     if (image) releaseImage(image);
+    if (avatarImage) releaseImage(avatarImage);
+    if (brandImage) releaseImage(brandImage);
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+/**
+ * Render the static credit strip used by an FFmpeg-composited animated frame.
+ * The caller places it above or below the video stream and therefore owns orientation.
+ */
+export async function renderFrameStrip(
+  record: TweetRecord,
+  media: MediaRecord,
+  width: number,
+  template: string,
+  resources: ImageResources,
+  theme: ImageTheme,
+  locale: Locale = getLocale(),
+): Promise<{ blob: Blob; width: number; height: number }> {
+  if (!Number.isInteger(width) || width <= 0)
+    throw new Error(t('core.frame.invalidDimensions', {}, locale));
+  if (width > 16384) throw new Error(t('core.frame.imageTooLarge', {}, locale));
+
+  const palette = IMAGE_PALETTES[theme];
+  const userText = getFrameText(record, media, template, 'mp4', locale);
+  const sourceLines = getSourceLines(record, locale);
+  let avatarImage: LoadedAvatar | undefined;
+  let brandImage: HTMLImageElement | undefined;
+  const canvas = document.createElement('canvas');
+  try {
+    const loaded = await Promise.allSettled([
+      resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((value) => {
+        brandImage = value;
+      }),
+      userText.includes(FRAME_AVATAR_MARKER)
+        ? loadAvatar(record.author.avatarUrl, resources, palette.text).then((value) => {
+            avatarImage = value;
+          })
+        : Promise.resolve(),
+    ]);
+    const failed = loaded.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    resources.checkActive();
+
+    canvas.width = width;
+    // The frame layout depends on text measurement at the final video width.
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error(t('core.frame.canvasUnavailable', {}, locale));
+    const fontSize = Math.max(12, Math.min(32, Math.round(width * 0.035)));
+    context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
+    const layout = calculateFrameLayout({
+      width,
+      userText,
+      sourceLines,
+      fontSize,
+      measureText: createFrameTextMeasurer(context, fontSize),
+    });
+    // yuv420p video outputs require both dimensions to be even. Keep the text
+    // layout unchanged and extend the background/border by at most one pixel.
+    const stripLayout =
+      layout.barHeight % 2 === 0 ? layout : { ...layout, barHeight: layout.barHeight + 1 };
+    if (stripLayout.barHeight > 16384 || width * stripLayout.barHeight > 32000000)
+      throw new Error(t('core.frame.imageTooLarge', {}, locale));
+    canvas.height = stripLayout.barHeight;
+    drawFrameContent(context, stripLayout, sourceLines, 0, palette, avatarImage, brandImage);
+    resources.checkActive();
+    return {
+      blob: await encodeCanvas(canvas, 'image/png', locale),
+      width: canvas.width,
+      height: canvas.height,
+    };
+  } finally {
     if (avatarImage) releaseImage(avatarImage);
     if (brandImage) releaseImage(brandImage);
     canvas.width = 0;

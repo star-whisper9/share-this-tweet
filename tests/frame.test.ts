@@ -1,4 +1,4 @@
-import { frameOutputSize } from '../src/core/frame.js';
+import { frameOutputSize, renderFrameStrip } from '../src/core/frame.js';
 import { describe, expect, it } from 'vitest';
 import {
   calculateFrameLayout,
@@ -6,6 +6,8 @@ import {
   hasTransparentPixels,
   encodeFrame,
 } from '../src/core/frame.js';
+import { ImageResources } from '../src/core/image-resources.js';
+import type { TweetRecord } from '../src/shared/model.js';
 
 const measureText = (text: string): { width: number } => ({ width: [...text].length * 10 });
 
@@ -93,4 +95,66 @@ it('raises small-frame raster resolution proportionally while preserving large i
   expect(small.scale).toBe(small.width / 320);
   expect(frameOutputSize(1200, 900)).toEqual({ width: 1200, height: 900, scale: 1 });
   expect(() => frameOutputSize(1, 10000)).toThrow(Error);
+});
+
+it('renders an even-height PNG source strip at the requested video width', async () => {
+  class Canvas {
+    width = 0;
+    height = 0;
+    getContext() {
+      return {
+        drawImage() {},
+        fillRect() {},
+        fillText() {},
+        measureText: (text: string) => ({ width: [...text].length * 8 }),
+        save() {},
+        restore() {},
+        strokeRect() {},
+      };
+    }
+    toBlob(callback: BlobCallback, type: string) {
+      callback(new Blob(['strip'], { type }));
+    }
+  }
+  const canvas = new Canvas();
+  const brand = { remove: () => {}, removeAttribute: () => {} };
+  const originalDocument = globalThis.document;
+  const originalBrowser = globalThis.browser;
+  const originalCanvas = globalThis.HTMLCanvasElement;
+  Object.assign(globalThis, {
+    HTMLCanvasElement: Canvas,
+    browser: { runtime: { getURL: () => 'brand' } },
+    document: { createElement: () => canvas },
+  });
+  const resources = new ImageResources();
+  const load = resources.load.bind(resources);
+  resources.load = async () => brand as unknown as HTMLImageElement;
+  const record: TweetRecord = {
+    tweetId: '42',
+    url: 'https://x.com/a/status/42',
+    text: '',
+    author: { id: 'a', name: 'Alice', handle: 'alice' },
+    media: [{ index: 0, type: 'video' }],
+  };
+  try {
+    const result = await renderFrameStrip(
+      record,
+      record.media[0]!,
+      318,
+      '{author.name}',
+      resources,
+      'dark',
+      'en',
+    );
+    expect(result.blob.type).toBe('image/png');
+    expect(result.width).toBe(318);
+    expect(result.height % 2).toBe(0);
+  } finally {
+    resources.load = load;
+    Object.assign(globalThis, {
+      HTMLCanvasElement: originalCanvas,
+      browser: originalBrowser,
+      document: originalDocument,
+    });
+  }
 });
