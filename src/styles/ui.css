@@ -820,6 +820,9 @@
   gap: 8px;
   align-items: start;
 }
+.stt-sheet .stt-command[data-stt-focus-key='view-export-jobs'] {
+  margin-top: 8px;
+}
 .stt-export-grid .stt-command {
   width: 100%;
   margin: 0;
