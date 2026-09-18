@@ -1,3 +1,5 @@
+import type { VideoLimits } from './video-experiment.js';
+
 /** Messages exchanged with the isolated ffmpeg renderer worker. */
 export type VideoMediaType = 'photo' | 'video' | 'animated_gif';
 export type VideoStitchStyle = 'seamless' | 'gallery';
@@ -16,6 +18,11 @@ export interface VideoRenderRequest {
   background: `#${string}`;
   frame: VideoFrame;
   locale: 'zh-CN' | 'en';
+  /**
+   * Set only by the background after loading saved settings. Requests from the
+   * content script never get to choose the limits enforced by the Worker.
+   */
+  limits?: VideoLimits;
 }
 
 export interface VideoRenderLayout {
@@ -42,6 +49,77 @@ export interface VideoRenderProgress {
   progress?: number;
 }
 
+/** Coarse stages emitted from the isolated FFmpeg Worker for local diagnostics. */
+export type VideoDiagnosticPhase =
+  | 'loading'
+  | 'writing-input'
+  | 'probing'
+  | 'frame'
+  | 'encoding'
+  | 'finalizing'
+  | 'reading-output'
+  | 'copying-output'
+  | 'cleanup'
+  | 'done'
+  | 'error';
+
+/**
+ * A point-in-time measurement from the renderer Worker. Capacity is the
+ * current WASM heap buffer capacity, not a measurement of process memory use.
+ */
+export interface VideoDiagnosticSample {
+  phase: VideoDiagnosticPhase;
+  workerElapsedMs: number;
+  phaseElapsedMs: number;
+  encodedSeconds?: number;
+  frames?: number;
+  fps?: number;
+  recentFps?: number;
+  speed?: number;
+  recentSpeed?: number;
+  rawProgress?: number;
+  wasmCapacityBytes?: number;
+  wasmPeakCapacityBytes?: number;
+  inputFileBytes?: number;
+  outputFileBytes?: number;
+  /** MEMFS output node buffer capacity; not process memory usage. */
+  outputBufferCapacityBytes?: number;
+  /** Size of the Uint8Array allocated while copying the output from MEMFS. */
+  outputCopyBytes?: number;
+  samplingError?: string;
+}
+
+export interface VideoDiagnosticMetadata {
+  inputBytes: number;
+  inputs?: Array<{
+    type: string;
+    width: number;
+    height: number;
+    duration: number;
+    frameRate?: number;
+    hasAudio: boolean;
+    bytes: number;
+  }>;
+  output?: {
+    width: number;
+    height: number;
+    duration: number;
+    frameRate: number;
+    audioInput?: number;
+  };
+  args?: string[];
+  /** Measured by the extension background before this Worker starts. */
+  downloadMs?: number;
+}
+
+export interface VideoRenderDiagnostics {
+  type: 'diagnostics';
+  id: string;
+  sample: VideoDiagnosticSample;
+  /** May be an incremental update; consumers merge it by job id. */
+  metadata?: VideoDiagnosticMetadata;
+}
+
 export interface VideoRenderDone {
   type: 'done';
   id: string;
@@ -55,9 +133,24 @@ export interface VideoRenderFailure {
   type: 'error';
   id: string;
   error: string;
+  /** A configured experimental guard was exceeded, rather than an encoder failure. */
+  limitExceeded?: boolean;
+}
+
+/** Sent by the background to let the UI choose its static/original fallback. */
+export interface VideoRenderFallback {
+  type: 'fallback';
+  id: string;
+  reason: string;
+  /** Available for a single framed source, which is already fully downloaded. */
+  blob?: Blob;
 }
 
 export type VideoRenderWorkerMessage =
-  VideoRenderLayout | VideoRenderProgress | VideoRenderDone | VideoRenderFailure;
+  | VideoRenderLayout
+  | VideoRenderProgress
+  | VideoRenderDiagnostics
+  | VideoRenderDone
+  | VideoRenderFailure;
 
 export type VideoRenderInboundMessage = VideoRenderRequest | VideoRenderFrame;

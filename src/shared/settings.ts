@@ -1,3 +1,8 @@
+import {
+  DEFAULT_VIDEO_LIMITS,
+  normalizeVideoLimits,
+  type VideoLimits,
+} from './video-experiment.js';
 import { isLanguagePreference, resolveLocale, setLocale, type LanguagePreference } from './i18n.js';
 import { DEFAULT_FILENAME_TEMPLATE } from '../core/filename.js';
 import {
@@ -18,6 +23,8 @@ let latestLanguage: LanguagePreference | undefined;
 
 export interface ExtensionSettings {
   language: LanguagePreference;
+  experimentalVideo: boolean;
+  videoLimits: VideoLimits;
   filenameTemplate: string;
   frameTemplate: string;
   frameOrientation: FrameOrientation;
@@ -27,6 +34,8 @@ export interface ExtensionSettings {
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   language: 'auto',
+  experimentalVideo: false,
+  videoLimits: { ...DEFAULT_VIDEO_LIMITS },
   filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
   frameTemplate: DEFAULT_FRAME_TEMPLATE,
   frameOrientation: DEFAULT_FRAME_ORIENTATION,
@@ -52,6 +61,8 @@ export function normalizeSettings(values: Record<string, unknown>): ExtensionSet
   const stored = asObject(values[SETTINGS_STORAGE_KEY]);
   const language = values[LANGUAGE_STORAGE_KEY] ?? stored?.language;
   return {
+    experimentalVideo: stored?.experimentalVideo === true,
+    videoLimits: normalizeVideoLimits(stored?.videoLimits),
     language: isLanguagePreference(language) ? language : DEFAULT_SETTINGS.language,
     filenameTemplate: readTemplate(stored?.filenameTemplate, DEFAULT_SETTINGS.filenameTemplate),
     frameTemplate: readTemplate(stored?.frameTemplate, DEFAULT_SETTINGS.frameTemplate),

@@ -168,6 +168,7 @@ form {
   border: 1px solid var(--border);
   border-radius: 15px;
   background: #eaf0f680;
+  overflow-x: auto;
   margin-bottom: 22px;
 }
 .settings-tabs button {
@@ -345,6 +346,237 @@ h2 {
 }
 .text-presets {
   grid-template-columns: 1fr 1fr;
+}
+.experiment-panel {
+  min-height: 560px;
+}
+.experiment-editor {
+  display: flex;
+  flex-direction: column;
+}
+.experiment-toggle {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+.experiment-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.experiment-toggle-control {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.experiment-toggle-control::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px #1c2b4026;
+  transition: transform 0.15s;
+}
+.experiment-toggle input:checked + .experiment-toggle-control {
+  background: var(--accent);
+}
+.experiment-toggle input:checked + .experiment-toggle-control::after {
+  transform: translateX(16px);
+}
+.experiment-toggle input:focus-visible + .experiment-toggle-control {
+  box-shadow: var(--focus);
+}
+.experiment-toggle strong,
+.experiment-toggle small {
+  display: block;
+}
+.experiment-toggle strong {
+  font-size: 13px;
+}
+.experiment-toggle small,
+.experiment-block-heading p,
+.experiment-environment,
+.experiment-reference {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.experiment-reference {
+  margin-top: 7px;
+}
+.experiment-reference a {
+  color: var(--accent);
+}
+.experiment-settings {
+  display: grid;
+  gap: 22px;
+  margin-top: 22px;
+}
+.experiment-block {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.experiment-block-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: -0.2px;
+}
+.experiment-presets,
+.experiment-calculator-presets {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+.experiment-presets {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.experiment-calculator-presets {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.experiment-presets button,
+.experiment-calculator-presets button {
+  min-height: 38px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+.experiment-presets button[aria-pressed='true'],
+.experiment-calculator-presets button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--tint);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 0.5px var(--accent);
+}
+.experiment-limits-grid,
+.experiment-calculator-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.experiment-limits-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.experiment-calculator-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.experiment-limits-grid label,
+.experiment-calculator-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.experiment-limits-grid label > span,
+.experiment-calculator-grid label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.experiment-limits-grid input,
+.experiment-calculator-grid input {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+.experiment-limits-grid small,
+.experiment-calculator-grid small {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+.experiment-error {
+  min-height: 18px;
+  margin: 9px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+.experiment-estimate {
+  display: block;
+  margin-top: 15px;
+  padding: 12px;
+  border: 1px solid var(--tint-border);
+  border-radius: 10px;
+  background: var(--tint);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.experiment-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+.experiment-preview .preview-heading {
+  margin-bottom: 0;
+}
+.experiment-preview-card {
+  padding: 19px;
+  border: 1px solid var(--tint-border);
+  border-radius: 15px;
+  background: var(--tint);
+}
+.experiment-preview-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 13px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.experiment-preview-card strong {
+  display: block;
+  font-size: 14px;
+}
+.experiment-preview-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.experiment-preview-points {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+.experiment-preview-points > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.experiment-preview-points dt {
+  color: var(--muted);
+}
+.experiment-preview-points dd {
+  margin: 0;
+  text-align: end;
 }
 form[data-active-tab='records'] .save-bar {
   display: none;
@@ -1089,6 +1321,13 @@ form[data-state='loading'] .state-dot {
     min-height: 97px;
     padding: 12px 9px 10px;
   }
+  .experiment-presets,
+  .experiment-calculator-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .experiment-calculator-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .settings-preview {
     order: -1;
     padding: 18px 24px;
@@ -1156,6 +1395,10 @@ form[data-state='loading'] .state-dot {
   .settings-editor {
     padding: 20px 16px;
   }
+  .experiment-limits-grid,
+  .experiment-calculator-grid {
+    grid-template-columns: 1fr;
+  }
   .save-state {
     flex-basis: 100%;
   }
@@ -1214,7 +1457,7 @@ html {
 }
 .settings-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   width: 100%;
   box-sizing: border-box;
 }

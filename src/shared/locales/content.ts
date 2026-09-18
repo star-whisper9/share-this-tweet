@@ -84,7 +84,6 @@ export const zhCN = {
   'content.bottomFrameShort': '下框',
   'content.originalFile': '原文件',
   'content.writeProvenance': '写入来源',
-  'content.sourceMetadataHint': '作者与原推链接写入文件，不加水印。平台转码可能移除。',
   'content.selectMediaHint': '选择上方媒体，再设置保存方式。',
   'content.saveMedia': '保存 {count} 项媒体',
   'content.selectMedia': '请选择媒体',
@@ -213,8 +212,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'content.bottomFrameShort': 'Bottom',
   'content.originalFile': 'Original file',
   'content.writeProvenance': 'Add source',
-  'content.sourceMetadataHint':
-    'The author and original-post link are embedded in the file without a watermark. Platform processing may remove them.',
   'content.selectMediaHint': 'Select media above, then choose how to save it.',
   'content.saveMedia': 'Save {count} media item(s)',
   'content.selectMedia': 'Select media',

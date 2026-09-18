@@ -101,6 +101,22 @@
               <circle cx="18" cy="19" r="2" /></svg
             ><span data-i18n="options.tab.records">来源记录</span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-experiment"
+            aria-controls="panel-experiment"
+            aria-selected="false"
+            tabindex="-1"
+            data-settings-tab="experiment"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M9 3h6M10 3v5l-5.7 9.2A2.5 2.5 0 0 0 6.4 21h11.2a2.5 2.5 0 0 0 2.1-3.8L14 8V3"
+              />
+              <path d="M8.2 15h7.6" /></svg
+            ><span data-i18n="experiment.tab">实验功能</span>
+          </button>
         </div>
         <fieldset class="settings-body" data-editable disabled>
           <legend class="sr-only" data-i18n="options.preferences">分享偏好</legend>
@@ -429,6 +445,258 @@
               </p>
             </aside>
           </section>
+          <section
+            class="settings-panel experiment-panel"
+            id="panel-experiment"
+            role="tabpanel"
+            aria-labelledby="tab-experiment"
+            data-panel="experiment"
+            hidden
+          >
+            <div class="settings-editor experiment-editor">
+              <div class="section-heading">
+                <span class="step-number">04</span>
+                <div>
+                  <h2 data-i18n="experiment.title">动态拼图与视频画框（实验性）</h2>
+                  <p data-i18n="experiment.description">
+                    在浏览器中处理 GIF、视频与来源画框。启用后，分享面板会显示相应操作。
+                  </p>
+                </div>
+              </div>
+              <label class="experiment-toggle">
+                <input type="checkbox" data-experimental-video />
+                <span class="experiment-toggle-control" aria-hidden="true"></span>
+                <span>
+                  <strong data-i18n="experiment.enable">启用动态拼图与视频画框</strong>
+                  <small data-i18n="experiment.enableDescription"
+                    >它会使用本机 CPU，处理期间保持页面打开。</small
+                  >
+                </span>
+              </label>
+              <div class="experiment-settings" data-experiment-settings hidden>
+                <div class="experiment-block">
+                  <div class="experiment-block-heading">
+                    <div>
+                      <h3 data-i18n="experiment.limits.title">处理限制</h3>
+                      <p data-i18n="experiment.limits.description">
+                        超出限制时，单项动态媒体会保存原文件；拼图会保存静态图片版本。
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    class="experiment-presets"
+                    data-video-presets
+                    role="group"
+                    data-i18n-aria-label="experiment.limits.presets"
+                    aria-label="限制预设"
+                  ></div>
+                  <div class="experiment-limits-grid">
+                    <label>
+                      <span data-i18n="experiment.limit.input">输入媒体总大小</span>
+                      <input
+                        data-video-limit="maxInputMiB"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                      />
+                      <small data-i18n="experiment.unit.mib">MiB，0 为不限制</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.limit.duration">动态内容时长</span>
+                      <input
+                        data-video-limit="maxDurationSeconds"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                      />
+                      <small data-i18n="experiment.unit.seconds">秒，0 为不限制</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.limit.pixels">单项/成品最大像素数</span>
+                      <input
+                        data-video-limit="maxOutputPixels"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                      />
+                      <small data-i18n="experiment.unit.pixels">像素，0 为不限制</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.limit.fps">最高帧率</span>
+                      <input
+                        data-video-limit="maxFrameRate"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                      />
+                      <small data-i18n="experiment.unit.fps">fps，0 为不限制</small>
+                    </label>
+                  </div>
+                  <p
+                    class="experiment-error"
+                    data-experiment-limits-error
+                    role="alert"
+                    aria-live="polite"
+                  ></p>
+                </div>
+                <div class="experiment-block experiment-calculator">
+                  <div class="experiment-block-heading">
+                    <div>
+                      <h3 data-i18n="experiment.calculator.title">处理时间参考</h3>
+                      <p data-i18n="experiment.calculator.description">
+                        仅用于判断是否适合在浏览器中处理；不同画面内容的差异会很大。
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    class="experiment-calculator-presets"
+                    role="group"
+                    data-i18n-aria-label="experiment.calculator.presets"
+                    aria-label="估算样例"
+                  >
+                    <button
+                      type="button"
+                      data-calculator-preset="480p"
+                      data-i18n="experiment.calculator.preset480p"
+                    >
+                      480p 短视频
+                    </button>
+                    <button
+                      type="button"
+                      data-calculator-preset="720p"
+                      data-i18n="experiment.calculator.preset720p"
+                    >
+                      720p 短视频
+                    </button>
+                    <button
+                      type="button"
+                      data-calculator-preset="1080p"
+                      data-i18n="experiment.calculator.preset1080p"
+                    >
+                      1080p 短视频
+                    </button>
+                    <button
+                      type="button"
+                      data-calculator-preset="long1080p"
+                      data-i18n="experiment.calculator.presetLong1080p"
+                    >
+                      1080p 长视频
+                    </button>
+                  </div>
+                  <div class="experiment-calculator-grid">
+                    <label>
+                      <span data-i18n="experiment.calculator.width">宽</span>
+                      <input
+                        data-calculator="width"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="numeric"
+                        value="1280"
+                      />
+                      <small>px</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.calculator.height">高</span>
+                      <input
+                        data-calculator="height"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="numeric"
+                        value="720"
+                      />
+                      <small>px</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.calculator.duration">时长</span>
+                      <input
+                        data-calculator="durationSeconds"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="numeric"
+                        value="140"
+                      />
+                      <small data-i18n="experiment.unit.seconds.short">秒</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.calculator.frameRate">帧率</span>
+                      <input
+                        data-calculator="frameRate"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="numeric"
+                        value="30"
+                      />
+                      <small>fps</small>
+                    </label>
+                    <label>
+                      <span data-i18n="experiment.calculator.bitrate">码率</span>
+                      <input
+                        data-calculator="bitrateMbps"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        inputmode="decimal"
+                        value="2.5"
+                      />
+                      <small>Mbps</small>
+                    </label>
+                  </div>
+                  <output
+                    class="experiment-estimate"
+                    data-video-estimate
+                    aria-live="polite"
+                  ></output>
+                  <p class="experiment-environment" data-i18n="experiment.calculator.environment">
+                    参考环境：Apple M4 · Firefox Desktop。码率仅用于估算输入文件大小。
+                  </p>
+                  <p class="experiment-reference">
+                    <a
+                      href="https://blog.x.com/engineering/en_us/topics/infrastructure/2020/introducing-vmaf-percentiles-for-video-quality-measurements"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-i18n="experiment.calculator.reference"
+                      >示例码率来自 X Engineering 2020 的历史质量样例，并非当前上传规则。</a
+                    >
+                  </p>
+                </div>
+              </div>
+            </div>
+            <aside class="settings-preview experiment-preview">
+              <div class="preview-heading">
+                <span data-i18n="experiment.preview.title">实验功能说明</span
+                ><span class="preview-tag" data-i18n="experiment.preview.tag">本机处理</span>
+              </div>
+              <div class="experiment-preview-card">
+                <span class="experiment-preview-icon" aria-hidden="true">▰</span>
+                <strong data-i18n="experiment.preview.heading">动态媒体会生成 MP4</strong>
+                <p data-i18n="experiment.preview.body">
+                  GIF 和视频可与静态图片横向拼接；如选择来源画框，也会一并编码进视频。
+                </p>
+              </div>
+              <dl class="experiment-preview-points">
+                <div>
+                  <dt data-i18n="experiment.preview.cpu">处理方式</dt>
+                  <dd data-i18n="experiment.preview.cpuValue">CPU 编码</dd>
+                </div>
+                <div>
+                  <dt data-i18n="experiment.preview.storage">临时文件</dt>
+                  <dd data-i18n="experiment.preview.storageValue">浏览器内存</dd>
+                </div>
+                <div>
+                  <dt data-i18n="experiment.preview.cancel">随时取消</dt>
+                  <dd data-i18n="experiment.preview.cancelValue">停止后清理任务</dd>
+                </div>
+              </dl>
+            </aside>
+          </section>
         </fieldset>
         <section
           class="settings-panel records-panel"
@@ -440,7 +708,7 @@
         >
           <div class="settings-editor records-editor">
             <div class="section-heading">
-              <span class="step-number">04</span>
+              <span class="step-number">05</span>
               <div>
                 <h2 data-i18n="options.records.title">查找你保存过的来源</h2>
                 <p data-i18n="options.records.description">
@@ -587,7 +855,7 @@
         </section>
         <div class="reset-confirm" data-reset-confirm hidden>
           <div>
-            <strong data-i18n="options.reset.title">恢复三项默认设置？</strong>
+            <strong data-i18n="options.reset.title">恢复默认设置？</strong>
             <p data-i18n="options.reset.description">这只会修改当前草稿，点击保存后才会生效。</p>
           </div>
           <div>

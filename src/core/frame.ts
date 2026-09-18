@@ -463,7 +463,6 @@ export async function renderFrameStrip(
 ): Promise<{ blob: Blob; width: number; height: number }> {
   if (!Number.isInteger(width) || width <= 0)
     throw new Error(t('core.frame.invalidDimensions', {}, locale));
-  if (width > 16384) throw new Error(t('core.frame.imageTooLarge', {}, locale));
 
   const palette = IMAGE_PALETTES[theme];
   const userText = getFrameText(record, media, template, 'mp4', locale);
@@ -503,8 +502,6 @@ export async function renderFrameStrip(
     // layout unchanged and extend the background/border by at most one pixel.
     const stripLayout =
       layout.barHeight % 2 === 0 ? layout : { ...layout, barHeight: layout.barHeight + 1 };
-    if (stripLayout.barHeight > 16384 || width * stripLayout.barHeight > 32000000)
-      throw new Error(t('core.frame.imageTooLarge', {}, locale));
     canvas.height = stripLayout.barHeight;
     drawFrameContent(context, stripLayout, sourceLines, 0, palette, avatarImage, brandImage);
     resources.checkActive();

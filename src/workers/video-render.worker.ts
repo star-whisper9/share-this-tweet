@@ -1,12 +1,12 @@
 import type { FFmpegCoreModule, FFmpegCoreModuleFactory, Log } from '@ffmpeg/types';
 import { executeVideoJob, type VideoCoreAdapter } from '../core/video-engine.js';
 import {
-  MAX_VIDEO_DURATION_SECONDS,
-  MAX_VIDEO_INPUTS,
-  MAX_VIDEO_INPUT_BYTES,
-  VideoPlanError,
-} from '../core/video-plan.js';
+  VideoDiagnosticReporter,
+  type VideoDiagnosticMemorySample,
+} from '../core/video-diagnostics.js';
+import { MAX_VIDEO_INPUTS, VideoPlanError } from '../core/video-plan.js';
 import { t, type MessageKey } from '../shared/i18n.js';
+import { VideoLimitError } from '../shared/video-experiment.js';
 import type {
   VideoRenderFrame,
   VideoRenderInboundMessage,
@@ -17,6 +17,10 @@ import type {
 type RawFfprobeCore = FFmpegCoreModule & {
   _ffprobe?: (argc: number, argv: number) => number;
   stringsToPtr?: (args: string[]) => number;
+  HEAPU8?: Uint8Array;
+};
+type RawFs = RawFfprobeCore['FS'] & {
+  lookupPath?: (path: string, options?: { follow?: boolean }) => { node?: { contents?: unknown } };
 };
 type CoreWorkerGlobal = {
   location: Location;
@@ -35,6 +39,7 @@ let active:
     }
   | undefined;
 let recentLogs: string[] = [];
+let diagnostics: VideoDiagnosticReporter | undefined;
 
 function post(message: VideoRenderWorkerMessage): void {
   scope.postMessage(message);
@@ -45,6 +50,7 @@ function appendLog(log: Log): void {
   if (!line) return;
   recentLogs.push(line);
   if (recentLogs.length > 20) recentLogs = recentLogs.slice(-20);
+  diagnostics?.noteFfmpegLog(line);
 }
 
 function fsExists(core: RawFfprobeCore, path: string): boolean {
@@ -77,9 +83,79 @@ async function getCore(): Promise<RawFfprobeCore> {
   return corePromise;
 }
 
+function withMachineProgress(args: string[]): string[] {
+  const output = args.at(-1);
+  if (!output) throw new Error('FFmpeg output path missing');
+  return [
+    ...args.slice(0, -1),
+    '-loglevel',
+    'info',
+    '-progress',
+    'pipe:1',
+    '-stats_period',
+    '2',
+    '-nostats',
+    output,
+  ];
+}
+
+function fileSize(core: RawFfprobeCore, path: string): number | undefined {
+  try {
+    const size = core.FS.stat(path).size;
+    return Number.isFinite(size) && size >= 0 ? size : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function outputBufferCapacity(core: RawFfprobeCore, path: string): number | undefined {
+  try {
+    const node = (core.FS as RawFs).lookupPath?.(path, { follow: true }).node;
+    const contents = node?.contents;
+    if (
+      contents &&
+      typeof contents === 'object' &&
+      'byteLength' in contents &&
+      typeof (contents as { byteLength?: unknown }).byteLength === 'number'
+    ) {
+      const bytes = (contents as { byteLength: number }).byteLength;
+      return Number.isFinite(bytes) && bytes >= 0 ? bytes : undefined;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readMemorySample(core: RawFfprobeCore, inputCount: number): VideoDiagnosticMemorySample {
+  // Input extensions differ by media type, so find the known names without reading their bytes.
+  const paths = Array.from({ length: inputCount }, (_, index) => [
+    `input-${index}.image`,
+    `input-${index}.gif.mp4`,
+    `input-${index}.video.mp4`,
+  ]).flat();
+  let foundInput = false;
+  const totalInputFileBytes = paths.reduce((total, path) => {
+    const bytes = fileSize(core, path);
+    if (bytes !== undefined) foundInput = true;
+    return total + (bytes ?? 0);
+  }, 0);
+  const outputFileBytes = fileSize(core, 'output.mp4');
+  const outputCapacity = outputBufferCapacity(core, 'output.mp4');
+  const result: VideoDiagnosticMemorySample = {
+    ...(core.HEAPU8?.buffer.byteLength !== undefined
+      ? { wasmCapacityBytes: core.HEAPU8.buffer.byteLength }
+      : {}),
+    ...(foundInput ? { inputFileBytes: totalInputFileBytes } : {}),
+    ...(outputFileBytes !== undefined ? { outputFileBytes } : {}),
+    ...(outputCapacity !== undefined ? { outputBufferCapacityBytes: outputCapacity } : {}),
+  };
+  return result;
+}
+
 function createAdapter(
   core: RawFfprobeCore,
-  onEncodingProgress: (progress: number) => void,
+  onEncodingProgress: (progress: number, time: number) => void,
 ): VideoCoreAdapter {
   return {
     writeFile: (path, bytes) => core.FS.writeFile(path, bytes),
@@ -91,17 +167,16 @@ function createAdapter(
     },
     exists: (path) => fsExists(core, path),
     unlink: (path) => core.FS.unlink(path),
+    diagnosticArgs: withMachineProgress,
     exec: (args) => {
       recentLogs = [];
       core.reset();
-      core.setTimeout(120_000);
-      core.setProgress(({ progress }) => onEncodingProgress(Math.max(0, Math.min(1, progress))));
-      return core.exec(...args);
+      core.setProgress(({ progress, time }) => onEncodingProgress(progress, time));
+      return core.exec(...withMachineProgress(args));
     },
     ffprobe: (args) => {
       recentLogs = [];
       core.reset();
-      core.setTimeout(15_000);
       // ffmpeg.wasm 0.12's public ffprobe wrapper can leave `ret` at -1 even
       // after success. The packaged UMD core exposes this C entry point and its
       // argument allocator, so use the actual C return code instead.
@@ -146,14 +221,13 @@ function isRequest(value: unknown): value is VideoRenderRequest {
 }
 
 function errorFor(error: unknown, request: VideoRenderRequest): string {
+  if (error instanceof VideoLimitError) return error.message;
   let code: MessageKey = 'video.error.ffmpegFailed';
   const params: Record<string, string | number> = {};
   if (error instanceof VideoPlanError) {
     code = `video.error.${error.code}` as MessageKey;
   }
   if (code === 'video.error.maxInputs') params.count = MAX_VIDEO_INPUTS;
-  if (code === 'video.error.inputTooLarge') params.size = MAX_VIDEO_INPUT_BYTES / 1024 / 1024;
-  if (code === 'video.error.durationTooLong') params.seconds = MAX_VIDEO_DURATION_SECONDS;
   const cause = error instanceof Error && !(error instanceof VideoPlanError) ? error.message : '';
   const details = [cause, ...recentLogs.slice(-20)].filter(Boolean).join('\n');
   return details
@@ -172,17 +246,39 @@ async function start(request: VideoRenderRequest): Promise<void> {
   });
   active = { id: request.id, resolveFrame: resolveFrame! };
   let coreLoaded = false;
+  let diagnosticCore: RawFfprobeCore | undefined;
+  const reporter = new VideoDiagnosticReporter({
+    emit: (sample) => post({ type: 'diagnostics', id: request.id, sample }),
+    readMemory: () =>
+      diagnosticCore ? readMemorySample(diagnosticCore, request.inputs.length) : {},
+  });
+  diagnostics = reporter;
   try {
+    reporter.setPhase('loading');
     post({ type: 'progress', id: request.id, phase: 'loading' });
     const core = await getCore();
     coreLoaded = true;
+    diagnosticCore = core;
+    reporter.update({ wasmCapacityBytes: core.HEAPU8?.buffer.byteLength });
+    reporter.sample(true);
     const result = await executeVideoJob(
-      createAdapter(core, (progress) => {
+      createAdapter(core, (progress, time) => {
+        // This library callback is only a reference ratio. Machine `-progress`
+        // blocks below provide the time paired with frame and speed metrics.
+        void time;
+        reporter.update({ rawProgress: progress });
         post({ type: 'progress', id: request.id, phase: 'encoding', progress });
       }),
       request,
       {
-        onProgress: (phase) => post({ type: 'progress', id: request.id, phase }),
+        onProgress: (phase) => {
+          reporter.setPhase(phase);
+          post({ type: 'progress', id: request.id, phase });
+        },
+        onDiagnosticStage: (phase) => reporter.setPhase(phase),
+        onDiagnosticMetadata: (metadata) =>
+          post({ type: 'diagnostics', id: request.id, sample: reporter.snapshot(), metadata }),
+        onDiagnosticOutputCopyBytes: (bytes) => reporter.update({ outputCopyBytes: bytes }),
         onLayout: async (layout) => {
           post({
             type: 'layout',
@@ -195,16 +291,20 @@ async function start(request: VideoRenderRequest): Promise<void> {
         },
       },
     );
+    reporter.setPhase('done');
     post({ type: 'done', id: request.id, ...result });
   } catch (error) {
+    reporter.setPhase('error');
     post({
       type: 'error',
       id: request.id,
       error: coreLoaded
         ? errorFor(error, request)
         : `${t('video.error.loadFailed', {}, request.locale)} ${error instanceof Error ? error.message : String(error)}`,
+      ...(error instanceof VideoLimitError ? { limitExceeded: true } : {}),
     });
   } finally {
+    diagnostics = undefined;
     active = undefined;
   }
 }

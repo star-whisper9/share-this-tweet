@@ -204,6 +204,15 @@ it.each([true, false])(
     };
     const session = new ExportSession(record, DEFAULT_SETTINGS);
     ui.render(session, mobile);
+    const hiddenKeys = ui.sheet
+      .querySelectorAll('[data-stt-focus-key]')
+      .map((item) => item.dataset.sttFocusKey);
+    expect(hiddenKeys).not.toContain('stitch-media-1');
+    expect(hiddenKeys).not.toContain('save-choice-1-video-top');
+    expect(hiddenKeys).toContain('save-choice-1-video-sourced');
+    session.updateSettings({ ...DEFAULT_SETTINGS, experimentalVideo: true });
+    ui.render(session, mobile);
+    expect(ui.button('save-choice-1-video-top').disabled).toBe(false);
     ui.button('save-choice-1-photo-top').click();
     expect(session.mediaOptions.photo).toBe('top');
     session.toggleMedia(1);

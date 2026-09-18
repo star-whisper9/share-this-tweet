@@ -28,10 +28,15 @@ import {
   type ExtensionSettings,
 } from '../shared/settings.js';
 import { getLocale, localizeDocument, t, type LanguagePreference } from '../shared/i18n.js';
+import {
+  estimateVideoProcessing,
+  VIDEO_LIMIT_PRESETS,
+  type VideoLimits,
+} from '../shared/video-experiment.js';
 
 type SettingKey = 'filenameTemplate' | 'frameTemplate' | 'textTemplate';
-type Tab = 'frame' | 'filename' | 'text' | 'records';
-type SettingsTab = Exclude<Tab, 'records'>;
+type Tab = 'frame' | 'filename' | 'text' | 'records' | 'experiment';
+type SettingsTab = Exclude<Tab, 'records' | 'experiment'>;
 interface Preset {
   label: string;
   description: string;
@@ -44,6 +49,18 @@ const fieldTabs: Record<SettingKey, SettingsTab> = {
   textTemplate: 'text',
 };
 const frameOrientations: FrameOrientation[] = ['top', 'bottom'];
+const videoLimitKeys = [
+  'maxInputMiB',
+  'maxDurationSeconds',
+  'maxOutputPixels',
+  'maxFrameRate',
+] as const satisfies ReadonlyArray<keyof VideoLimits>;
+const calculatorPresets = {
+  '480p': { width: 854, height: 480, durationSeconds: 140, frameRate: 30, bitrateMbps: 1.25 },
+  '720p': { width: 1280, height: 720, durationSeconds: 140, frameRate: 30, bitrateMbps: 2.5 },
+  '1080p': { width: 1920, height: 1080, durationSeconds: 140, frameRate: 30, bitrateMbps: 5 },
+  long1080p: { width: 1920, height: 1080, durationSeconds: 600, frameRate: 30, bitrateMbps: 5 },
+} as const;
 const form = document.querySelector<HTMLFormElement>('[data-settings-form]');
 const status = document.querySelector<HTMLOutputElement>('[data-status]');
 const editable = document.querySelector<HTMLFieldSetElement>('[data-editable]');
@@ -55,6 +72,27 @@ const inputs = {
   frameTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="frameTemplate"]'),
   textTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="textTemplate"]'),
 };
+const experimentalVideoInput = document.querySelector<HTMLInputElement>(
+  '[data-experimental-video]',
+);
+const experimentSettings = document.querySelector<HTMLElement>('[data-experiment-settings]');
+const experimentLimitsError = document.querySelector<HTMLElement>('[data-experiment-limits-error]');
+const videoLimitInputs: Record<keyof VideoLimits, HTMLInputElement | null> = {
+  maxInputMiB: document.querySelector<HTMLInputElement>('[data-video-limit="maxInputMiB"]'),
+  maxDurationSeconds: document.querySelector<HTMLInputElement>(
+    '[data-video-limit="maxDurationSeconds"]',
+  ),
+  maxOutputPixels: document.querySelector<HTMLInputElement>('[data-video-limit="maxOutputPixels"]'),
+  maxFrameRate: document.querySelector<HTMLInputElement>('[data-video-limit="maxFrameRate"]'),
+};
+const calculatorInputs = {
+  width: document.querySelector<HTMLInputElement>('[data-calculator="width"]'),
+  height: document.querySelector<HTMLInputElement>('[data-calculator="height"]'),
+  durationSeconds: document.querySelector<HTMLInputElement>('[data-calculator="durationSeconds"]'),
+  frameRate: document.querySelector<HTMLInputElement>('[data-calculator="frameRate"]'),
+  bitrateMbps: document.querySelector<HTMLInputElement>('[data-calculator="bitrateMbps"]'),
+};
+const videoEstimate = document.querySelector<HTMLOutputElement>('[data-video-estimate]');
 const previews = {
   filename: document.querySelector<HTMLElement>('[data-preview="filename"]'),
   frame: document.querySelector<HTMLElement>('[data-preview="frame"]'),
@@ -165,7 +203,10 @@ function getPresets(): Record<SettingKey, Preset[]> {
   };
 }
 let presets = getPresets();
-let baseline: ExtensionSettings = { ...DEFAULT_SETTINGS };
+function copySettings(settings: ExtensionSettings): ExtensionSettings {
+  return { ...settings, videoLimits: { ...settings.videoLimits } };
+}
+let baseline: ExtensionSettings = copySettings(DEFAULT_SETTINGS);
 let ready = false;
 let saving = false;
 let languageSaving = false;
@@ -176,12 +217,53 @@ function setStatus(state: string, message: string): void {
   if (form) form.dataset.state = state;
   if (status) status.textContent = message;
 }
+function readVideoLimits(): VideoLimits {
+  const read = (input: HTMLInputElement | null): number =>
+    input?.value.trim() === '' ? Number.NaN : Number(input?.value);
+  return {
+    maxInputMiB: read(videoLimitInputs.maxInputMiB),
+    maxDurationSeconds: read(videoLimitInputs.maxDurationSeconds),
+    maxOutputPixels: read(videoLimitInputs.maxOutputPixels),
+    maxFrameRate: read(videoLimitInputs.maxFrameRate),
+  };
+}
+function sameVideoLimits(left: VideoLimits, right: VideoLimits): boolean {
+  return videoLimitKeys.every((key) => left[key] === right[key]);
+}
+function validVideoLimits(limits: VideoLimits): boolean {
+  return videoLimitKeys.every((key) => Number.isSafeInteger(limits[key]) && limits[key] >= 0);
+}
+function validateExperimentSettings(settings: ExtensionSettings): boolean {
+  if (!settings.experimentalVideo) {
+    if (experimentLimitsError) experimentLimitsError.textContent = '';
+    for (const key of videoLimitKeys) videoLimitInputs[key]?.setAttribute('aria-invalid', 'false');
+    return true;
+  }
+  const valid = validVideoLimits(settings.videoLimits);
+  if (experimentLimitsError)
+    experimentLimitsError.textContent = valid ? '' : t('experiment.invalidLimits');
+  for (const key of videoLimitKeys)
+    videoLimitInputs[key]?.setAttribute('aria-invalid', String(!valid));
+  return valid;
+}
+function setExperimentEnabled(enabled: boolean): void {
+  if (experimentalVideoInput) experimentalVideoInput.checked = enabled;
+  if (experimentSettings) experimentSettings.hidden = !enabled;
+}
+function writeVideoLimits(limits: VideoLimits): void {
+  for (const key of videoLimitKeys) {
+    const input = videoLimitInputs[key];
+    if (input) input.value = String(limits[key]);
+  }
+}
 function readSettings(): ExtensionSettings {
   const selectedOrientation = document.querySelector<HTMLButtonElement>(
     '[data-frame-orientation][aria-pressed="true"]',
   )?.dataset.frameOrientation;
   return {
     language: (languageSelect?.value as LanguagePreference) ?? baseline.language,
+    experimentalVideo: experimentalVideoInput?.checked ?? DEFAULT_SETTINGS.experimentalVideo,
+    videoLimits: readVideoLimits(),
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
     frameTemplate: inputs.frameTemplate?.value ?? DEFAULT_SETTINGS.frameTemplate,
     frameOrientation: frameOrientations.includes(selectedOrientation as FrameOrientation)
@@ -272,15 +354,99 @@ function updatePresetSelection(settings: ExtensionSettings): void {
     });
   }
 }
+function videoPresetLabel(id: (typeof VIDEO_LIMIT_PRESETS)[number]['id']): string {
+  switch (id) {
+    case 'cautious':
+      return t('experiment.preset.cautious');
+    case 'standard':
+      return t('experiment.preset.standard');
+    case 'hd':
+      return t('experiment.preset.hd');
+    case 'unlimited':
+      return t('experiment.preset.unlimited');
+  }
+}
+function updateVideoPresetSelection(limits: VideoLimits): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-video-preset]').forEach((button) => {
+    const preset = VIDEO_LIMIT_PRESETS.find((item) => item.id === button.dataset.videoPreset);
+    button.setAttribute(
+      'aria-pressed',
+      String(Boolean(preset && sameVideoLimits(limits, preset.limits))),
+    );
+  });
+}
+function buildVideoControls(): void {
+  const container = document.querySelector<HTMLElement>('[data-video-presets]');
+  if (!container) return;
+  container.replaceChildren();
+  for (const preset of VIDEO_LIMIT_PRESETS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.videoPreset = preset.id;
+    button.setAttribute('aria-pressed', 'false');
+    button.textContent = videoPresetLabel(preset.id);
+    button.addEventListener('click', () => {
+      if (!ready || saving) return;
+      writeVideoLimits(preset.limits);
+      updateDraft();
+    });
+    container.append(button);
+  }
+  updateVideoPresetSelection(readVideoLimits());
+}
+function formatEstimateNumber(value: number): string {
+  return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(value);
+}
+function updateCalculatorPresetSelection(id?: keyof typeof calculatorPresets): void {
+  document
+    .querySelectorAll<HTMLButtonElement>('[data-calculator-preset]')
+    .forEach((button) =>
+      button.setAttribute('aria-pressed', String(button.dataset.calculatorPreset === id)),
+    );
+}
+function updateVideoEstimate(): void {
+  const input = {
+    width: Number(calculatorInputs.width?.value),
+    height: Number(calculatorInputs.height?.value),
+    durationSeconds: Number(calculatorInputs.durationSeconds?.value),
+    frameRate: Number(calculatorInputs.frameRate?.value),
+    bitrateMbps: Number(calculatorInputs.bitrateMbps?.value),
+  };
+  try {
+    const estimate = estimateVideoProcessing(input);
+    if (videoEstimate)
+      videoEstimate.textContent = t('experiment.calculator.result', {
+        min: formatEstimateNumber(Math.ceil(estimate.minSeconds)),
+        max: formatEstimateNumber(Math.ceil(estimate.maxSeconds)),
+        input: formatEstimateNumber(estimate.inputMiB),
+      });
+  } catch (error) {
+    if (videoEstimate)
+      videoEstimate.textContent =
+        error instanceof Error ? error.message : t('experiment.invalidEstimate');
+  }
+}
+function applyCalculatorPreset(id: keyof typeof calculatorPresets): void {
+  const preset = calculatorPresets[id];
+  for (const [key, value] of Object.entries(preset)) {
+    const input = calculatorInputs[key as keyof typeof calculatorInputs];
+    if (input) input.value = String(value);
+  }
+  updateCalculatorPresetSelection(id);
+  updateVideoEstimate();
+}
 function updateDraft(announce = true): void {
   for (const key of keys) inputs[key]?.dispatchEvent(new Event('templatechange'));
   const settings = readSettings();
-  const valid = validateAndPreview(settings);
+  const valid = validateAndPreview(settings) && validateExperimentSettings(settings);
   dirty =
     keys.some((key) => settings[key] !== baseline[key]) ||
     settings.frameOrientation !== baseline.frameOrientation ||
-    settings.stitchStyle !== baseline.stitchStyle;
+    settings.stitchStyle !== baseline.stitchStyle ||
+    settings.experimentalVideo !== baseline.experimentalVideo ||
+    !sameVideoLimits(settings.videoLimits, baseline.videoLimits);
   updatePresetSelection(settings);
+  updateVideoPresetSelection(settings.videoLimits);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
   // first invalid field even if it is currently in another tab.
   if (submit) submit.disabled = !ready || saving || languageSaving || !dirty;
@@ -293,6 +459,8 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
+  setExperimentEnabled(settings.experimentalVideo);
+  writeVideoLimits(settings.videoLimits);
   if (languageSelect) languageSelect.value = settings.language;
   for (const [attribute, value] of [['data-stitch-style', settings.stitchStyle]]) {
     for (const button of Array.from(document.querySelectorAll(`[${attribute}]`)))
@@ -678,6 +846,7 @@ function buildControls(): void {
     if (tokenContainer && input)
       mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft);
   }
+  buildVideoControls();
 }
 
 function refreshLocalizedUi(): void {
@@ -696,7 +865,10 @@ function refreshLocalizedUi(): void {
   buildControls();
   const settings = readSettings();
   validateAndPreview(settings);
+  validateExperimentSettings(settings);
   updatePresetSelection(settings);
+  updateVideoPresetSelection(settings.videoLimits);
+  updateVideoEstimate();
   renderRecords();
   if (displayedSource && !sourceMediaResult?.hidden)
     renderSourceMedia(displayedSource.source, displayedSource.filename);
@@ -705,7 +877,7 @@ function refreshLocalizedUi(): void {
 for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {
   tab.addEventListener('click', () => activateTab(tab.dataset.settingsTab as Tab));
   tab.addEventListener('keydown', (event: KeyboardEvent) => {
-    const order: Tab[] = ['frame', 'filename', 'text', 'records'];
+    const order: Tab[] = ['frame', 'filename', 'text', 'records', 'experiment'];
     let index = order.indexOf(tab.dataset.settingsTab as Tab);
     if (event.key === 'ArrowRight') index = (index + 1) % order.length;
     else if (event.key === 'ArrowLeft') index = (index + order.length - 1) % order.length;
@@ -724,6 +896,29 @@ for (const button of Array.from(
     if (!ready || saving || !frameOrientations.includes(orientation as FrameOrientation)) return;
     setFrameOrientation(orientation as FrameOrientation);
     updateDraft();
+  });
+}
+experimentalVideoInput?.addEventListener('change', () => {
+  if (!ready || saving) return;
+  if (!experimentalVideoInput.checked && !validVideoLimits(readVideoLimits()))
+    writeVideoLimits(baseline.videoLimits);
+  setExperimentEnabled(experimentalVideoInput.checked);
+  updateDraft();
+});
+for (const input of Object.values(videoLimitInputs))
+  input?.addEventListener('input', () => updateDraft());
+for (const input of Object.values(calculatorInputs)) {
+  input?.addEventListener('input', () => {
+    updateCalculatorPresetSelection();
+    updateVideoEstimate();
+  });
+}
+for (const button of Array.from(
+  document.querySelectorAll<HTMLButtonElement>('[data-calculator-preset]'),
+)) {
+  button.addEventListener('click', () => {
+    const id = button.dataset.calculatorPreset as keyof typeof calculatorPresets | undefined;
+    if (id && id in calculatorPresets) applyCalculatorPreset(id);
   });
 }
 for (const attribute of ['data-stitch-style']) {
@@ -839,9 +1034,15 @@ form?.addEventListener('submit', async (event) => {
   if (form.dataset.activeTab === 'records') return;
   if (!ready || saving || languageSaving || !dirty) return;
   const settings = readSettings();
-  if (!validateAndPreview(settings)) {
+  const templatesValid = validateAndPreview(settings);
+  const experimentValid = validateExperimentSettings(settings);
+  if (!templatesValid || !experimentValid) {
     setStatus('error', t('options.status.fixFirst'));
     if (invalidFields[0]) openEditor(invalidFields[0]);
+    else {
+      activateTab('experiment');
+      videoLimitInputs.maxInputMiB?.focus();
+    }
     return;
   }
   saving = true;
@@ -852,7 +1053,7 @@ form?.addEventListener('submit', async (event) => {
   setStatus('saving', t('options.status.saving'));
   try {
     await saveSettings(settings);
-    baseline = { ...settings };
+    baseline = copySettings(settings);
     updateDraft(false);
     setStatus('saved', t('options.status.savedApply'));
   } catch (error) {
@@ -888,7 +1089,7 @@ async function initialize(): Promise<void> {
   setStatus('loading', t('options.status.loading'));
   try {
     const settings = await loadSettings();
-    baseline = { ...settings };
+    baseline = copySettings(settings);
     ready = true;
     refreshLocalizedUi();
     writeSettings(settings);

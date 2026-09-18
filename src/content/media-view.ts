@@ -1,3 +1,4 @@
+import { videoDiagnosticsView } from './video-diagnostics-view.js';
 import {
   buildFrameFilename,
   buildMediaFilename,
@@ -141,7 +142,9 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
   const selected = selection.selected(record.media);
   const photos = selected.filter((item) => item.type === 'photo').length;
   const dynamic = selected.length - photos;
-  const canStitch = record.media.length > 1;
+  const canStitch =
+    record.media.length > 1 &&
+    (session.settings.experimentalVideo || record.media.every((item) => item.type === 'photo'));
   const wrapper = node('div', 'stt-media-action');
   wrapper.dataset.tweetId = record.tweetId;
   const state = session.mediaAction('configured');
@@ -177,38 +180,36 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
           (photo) => session.configureMedia({ photo }),
         ),
       );
-    if (dynamic)
+    if (dynamic) {
+      const videoChoices: SaveChoice<MediaSaveOptions['video']>[] = [
+        { value: 'original', label: t('content.originalFile'), symbol: 'original' },
+        { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
+      ];
+      if (session.settings.experimentalVideo)
+        videoChoices.push(
+          {
+            value: 'top',
+            label: dock ? t('content.topFrameShort') : t('content.topFrame'),
+            symbol: 'top',
+          },
+          {
+            value: 'bottom',
+            label: dock ? t('content.bottomFrameShort') : t('content.bottomFrame'),
+            symbol: 'bottom',
+          },
+        );
       settings.append(
         saveChoices<MediaSaveOptions['video']>(
           session,
           'video',
           dock ? t('content.dynamic') : t('content.dynamicCount', { count: dynamic }),
           mediaOptions.video,
-          [
-            { value: 'original', label: t('content.originalFile'), symbol: 'original' },
-            { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
-            {
-              value: 'top',
-              label: dock ? t('content.topFrameShort') : t('content.topFrame'),
-              symbol: 'top',
-            },
-            {
-              value: 'bottom',
-              label: dock ? t('content.bottomFrameShort') : t('content.bottomFrame'),
-              symbol: 'bottom',
-            },
-          ],
+          videoChoices,
           (video) => session.configureMedia({ video }),
         ),
       );
+    }
     wrapper.append(settings);
-    if (dynamic && (mediaOptions.video === 'top' || mediaOptions.video === 'bottom'))
-      wrapper.append(
-        node('p', 'stt-save-hint', t('dynamic.frameHint')),
-        node('p', 'stt-save-hint', t('dynamic.hint')),
-      );
-    if (dynamic && mediaOptions.video === 'sourced')
-      wrapper.append(node('p', 'stt-save-hint', t('content.sourceMetadataHint')));
   } else {
     wrapper.append(node('p', 'stt-save-empty', t('content.selectMediaHint')));
   }
@@ -247,7 +248,7 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       },
     }),
   );
-  if (record.media.length > 1) {
+  if (canStitch) {
     const stitch = session.action('stitch-media');
     (dock ?? wrapper).append(
       actionButton({
@@ -266,8 +267,6 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
         },
       }),
     );
-    if (record.media.some((item) => item.type !== 'photo'))
-      wrapper.append(node('p', 'stt-save-hint', t('dynamic.hint')));
     if (stitch.error) wrapper.append(errorDetails(t('content.stitchFailedDetails'), stitch.error));
   }
   if (filenameError) wrapper.append(errorDetails(t('content.filenameUnavailable'), filenameError));
@@ -283,5 +282,7 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       details.append(node('p', '', t('content.transparentFrameWebp')));
     wrapper.append(details);
   }
+  const diagnostics = videoDiagnosticsView(session);
+  if (diagnostics) wrapper.append(diagnostics);
   return wrapper;
 }

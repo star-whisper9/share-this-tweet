@@ -61,6 +61,7 @@ function textAction(session: ExportSession, mobile = false, errors?: HTMLElement
 interface ActionsViewState {
   scope: 'main' | 'quote';
   expandedFiles: Map<string, boolean>;
+  expandedDiagnostics: Map<string, boolean>;
   stripPositions: Map<string, number>;
 }
 const views = new WeakMap<HTMLElement, ActionsViewState>();
@@ -73,6 +74,7 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   const state: ActionsViewState = views.get(sheet) ?? {
     scope: 'main',
     expandedFiles: new Map(),
+    expandedDiagnostics: new Map(),
     stripPositions: new Map(),
   };
   views.set(sheet, state);
@@ -88,6 +90,13 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
       state.expandedFiles.set(
         group.dataset.tweetId,
         group.querySelector<HTMLDetailsElement>('.stt-file-details')?.open ?? false,
+      );
+  }
+  for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
+    if (group.dataset.tweetId)
+      state.expandedDiagnostics.set(
+        group.dataset.tweetId,
+        group.querySelector<HTMLDetailsElement>('.stt-video-diagnostics')?.open ?? false,
       );
   }
   for (const strip of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-strip'))) {
@@ -201,6 +210,9 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
     const details = group.querySelector<HTMLDetailsElement>('.stt-file-details');
     if (details) details.open = state.expandedFiles.get(group.dataset.tweetId ?? '') ?? false;
+    const diagnostics = group.querySelector<HTMLDetailsElement>('.stt-video-diagnostics');
+    if (diagnostics)
+      diagnostics.open = state.expandedDiagnostics.get(group.dataset.tweetId ?? '') ?? false;
   }
   for (const strip of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-strip'))) {
     strip.scrollLeft = state.stripPositions.get(strip.dataset.tweetId ?? '') ?? 0;

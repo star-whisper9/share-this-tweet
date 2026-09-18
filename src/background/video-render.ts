@@ -5,9 +5,14 @@ import { IMAGE_PALETTES } from '../core/image-theme.js';
 import { renderFrameStrip } from '../core/frame.js';
 import { isLocale, t, type Locale } from '../shared/i18n.js';
 import type { MediaRecord } from '../shared/model.js';
+import { loadSettings } from '../shared/settings.js';
+import {
+  assertVideoLimits,
+  VideoLimitError,
+  type VideoLimits,
+} from '../shared/video-experiment.js';
 import type { VideoRenderInput, VideoRenderWorkerMessage } from '../shared/video-render.js';
 
-const MAX_INPUT_BYTES = 64 * 1024 * 1024;
 let activePort: BrowserPort | undefined;
 function validateRequest(value: unknown): value is VideoRenderRequest {
   if (!value || typeof value !== 'object') return false;
@@ -49,19 +54,43 @@ function allowedURL(value: string, locale: Locale): string {
     throw new Error(t('dynamic.badUrl', {}, locale));
   return url.href;
 }
+interface FetchedInput {
+  blob: Blob;
+  limitError?: VideoLimitError;
+}
+
 async function fetchInput(
   media: MediaRecord,
-  remaining: number,
+  totalInputBytes: number,
+  limits: VideoLimits,
+  keepDownloadingOnLimit: boolean,
   signal: AbortSignal,
   locale: Locale,
-): Promise<Blob> {
+): Promise<FetchedInput> {
   const url = allowedURL(getMediaDownloadTarget(media).url, locale);
   const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal });
   if (!response.ok) throw new Error(t('dynamic.fetchFailed', { status: response.status }, locale));
   const size = Number(response.headers.get('content-length'));
-  if (size > remaining) {
-    await response.body?.cancel();
-    throw new Error(t('dynamic.inputLimit', {}, locale));
+  let limitError: VideoLimitError | undefined;
+  const checkLimit = (inputBytes: number): void => {
+    if (limitError) return;
+    try {
+      assertVideoLimits(limits, { inputBytes }, locale);
+    } catch (error) {
+      if (error instanceof VideoLimitError && keepDownloadingOnLimit) {
+        limitError = error;
+        return;
+      }
+      throw error;
+    }
+  };
+  if (Number.isFinite(size) && size > 0) {
+    try {
+      checkLimit(totalInputBytes + size);
+    } catch (error) {
+      await response.body?.cancel();
+      throw error;
+    }
   }
   if (!response.body) throw new Error(t('dynamic.emptyInput', {}, locale));
   const reader = response.body.getReader();
@@ -73,9 +102,13 @@ async function fetchInput(
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > remaining) {
+      try {
+        // Content-Length is absent on some X responses, so this must be
+        // enforced while streaming too. Do it before retaining the chunk.
+        checkLimit(totalInputBytes + bytes);
+      } catch (error) {
         await reader.cancel();
-        throw new Error(t('dynamic.inputLimit', {}, locale));
+        throw error;
       }
       chunks.push(new Uint8Array(value));
     }
@@ -83,10 +116,15 @@ async function fetchInput(
     reader.releaseLock();
   }
   if (!bytes || (size > 0 && bytes !== size)) throw new Error(t('dynamic.emptyInput', {}, locale));
-  return new Blob(chunks);
+  return {
+    // X dynamic variants are selected as MP4. Preserve that MIME type so the
+    // single-item fallback can save the already-downloaded source directly.
+    blob: new Blob(chunks, { type: media.type === 'photo' ? '' : 'video/mp4' }),
+    ...(limitError ? { limitError } : {}),
+  };
 }
 
-/** A live port owns each Worker: disconnect, cancel, timeout and errors all terminate it. */
+/** A live port owns each Worker: disconnect, cancel and errors all terminate it. */
 export function handleVideoPort(port: BrowserPort): void {
   if (port.name !== VIDEO_PORT_NAME) return;
   const controller = new AbortController();
@@ -97,11 +135,9 @@ export function handleVideoPort(port: BrowserPort): void {
   let finished = false;
   let layoutReceived = false;
   let lastProgressAt = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   const finish = (error?: unknown, blob?: Blob): void => {
     if (finished) return;
     finished = true;
-    clearTimeout(timer);
     controller.abort();
     resources.dispose();
     worker?.terminate();
@@ -121,14 +157,41 @@ export function handleVideoPort(port: BrowserPort): void {
     }
     port.disconnect();
   };
+  const finishFallback = (error: VideoLimitError, blob?: Blob): void => {
+    if (finished) return;
+    finished = true;
+    controller.abort();
+    resources.dispose();
+    worker?.terminate();
+    if (activePort === port) activePort = undefined;
+    port.onMessage.removeListener(onMessage);
+    port.onDisconnect.removeListener(onDisconnect);
+    if (id) {
+      try {
+        port.postMessage({
+          type: 'fallback',
+          id,
+          reason: error.message,
+          ...(blob ? { blob } : {}),
+        });
+      } catch {
+        /* The peer already disconnected; resources above are still released. */
+      }
+    }
+    port.disconnect();
+  };
   const onDisconnect = () => finish(new Error(t('dynamic.cancelled', {}, locale)));
   const post = (message: object) => {
     if (!finished) port.postMessage({ ...message, id });
   };
   const run = async (request: VideoRenderRequest): Promise<void> => {
+    // Always load this in the privileged background. The content script can
+    // request a job, but cannot turn on the experiment or choose its guards.
+    const settings = await loadSettings();
+    controller.signal.throwIfAborted();
+    if (!settings.experimentalVideo) throw new Error(t('experiment.disabled', {}, locale));
     if (activePort) throw new Error(t('dynamic.busy', {}, locale));
     activePort = port;
-    timer = setTimeout(() => finish(new Error(t('dynamic.timeout', {}, locale))), 300_000);
     const media = request.indexes.map((index) =>
       request.record.media.find((item) => item.index === index),
     );
@@ -137,14 +200,26 @@ export function handleVideoPort(port: BrowserPort): void {
       !media.some((item) => item?.type !== 'photo')
     )
       throw new Error(t('dynamic.invalidRequest', {}, locale));
+    const downloadStarted = performance.now();
     post({ type: 'progress', phase: 'downloading' });
     const inputs: VideoRenderInput[] = [];
-    let total = 0;
+    let inputBytes = 0;
+    let inputLimitError: VideoLimitError | undefined;
     for (const item of media as MediaRecord[]) {
-      const blob = await fetchInput(item, MAX_INPUT_BYTES - total, controller.signal, locale);
-      total += blob.size;
-      inputs.push({ blob, type: item.type });
+      const result = await fetchInput(
+        item,
+        inputBytes,
+        settings.videoLimits,
+        media.length === 1,
+        controller.signal,
+        locale,
+      );
+      inputs.push({ blob: result.blob, type: item.type });
+      inputBytes += result.blob.size;
+      inputLimitError ??= result.limitError;
     }
+    if (inputLimitError) return finishFallback(inputLimitError, inputs[0]?.blob);
+    const downloadMs = performance.now() - downloadStarted;
     controller.signal.throwIfAborted();
     worker = new Worker(browser.runtime.getURL('workers/video-render.worker.js'));
     worker.onerror = (event) => {
@@ -156,7 +231,9 @@ export function handleVideoPort(port: BrowserPort): void {
       const message = event.data;
       if (!message || message.id !== id)
         return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
-      if (message.type === 'progress') {
+      if (message.type === 'diagnostics') {
+        post({ ...message, metadata: { ...message.metadata, inputBytes, downloadMs } });
+      } else if (message.type === 'progress') {
         if (
           message.phase !== 'encoding' ||
           Date.now() - lastProgressAt >= 200 ||
@@ -170,10 +247,8 @@ export function handleVideoPort(port: BrowserPort): void {
           layoutReceived ||
           !Number.isInteger(message.width) ||
           message.width < 2 ||
-          message.width > 1280 ||
           !Number.isFinite(message.duration) ||
-          message.duration <= 0 ||
-          message.duration > 30
+          message.duration <= 0
         )
           return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
         layoutReceived = true;
@@ -189,7 +264,7 @@ export function handleVideoPort(port: BrowserPort): void {
               request.theme,
               locale,
             );
-            if (strip.width !== message.width || strip.height > 1024 || strip.height % 2)
+            if (strip.width !== message.width || strip.height % 2)
               throw new Error(t('dynamic.frameLimit', {}, locale));
             if (!finished)
               worker?.postMessage({ type: 'frame', id, blob: strip.blob, height: strip.height });
@@ -199,10 +274,14 @@ export function handleVideoPort(port: BrowserPort): void {
         message.type === 'done' &&
         message.blob instanceof Blob &&
         message.blob.type === 'video/mp4' &&
-        message.blob.size > 0 &&
-        message.blob.size <= MAX_INPUT_BYTES
+        message.blob.size > 0
       )
         finish(undefined, message.blob);
+      else if (message.type === 'error' && message.limitExceeded)
+        finishFallback(
+          new VideoLimitError(message.error),
+          inputs.length === 1 ? inputs[0]?.blob : undefined,
+        );
       else if (message.type === 'error') finish(new Error(message.error));
       else finish(new Error(t('dynamic.invalidResponse', {}, locale)));
     };
@@ -214,6 +293,7 @@ export function handleVideoPort(port: BrowserPort): void {
       background: IMAGE_PALETTES[request.theme].background,
       frame: request.frame,
       locale,
+      limits: settings.videoLimits,
     });
   };
   const onMessage = (message: unknown): void => {
@@ -235,7 +315,10 @@ export function handleVideoPort(port: BrowserPort): void {
     }
     id = message.id;
     locale = message.locale;
-    void run(message).catch(finish);
+    void run(message).catch((error) => {
+      if (error instanceof VideoLimitError) finishFallback(error);
+      else finish(error);
+    });
   };
   port.onMessage.addListener(onMessage);
   port.onDisconnect.addListener(onDisconnect);

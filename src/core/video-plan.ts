@@ -1,13 +1,7 @@
 import type { VideoFrame, VideoMediaType, VideoStitchStyle } from '../shared/video-render.js';
 
 export const MAX_VIDEO_INPUTS = 4;
-export const MAX_VIDEO_INPUT_BYTES = 64 * 1024 * 1024;
-export const MAX_VIDEO_DURATION_SECONDS = 30;
-export const MAX_VIDEO_SOURCE_EDGE = 8192;
-export const MAX_VIDEO_SOURCE_PIXELS = 32_000_000;
-export const MAX_VIDEO_OUTPUT_WIDTH = 1280;
-export const MAX_VIDEO_CONTENT_HEIGHT = 720;
-export const VIDEO_FRAME_RATE = 24;
+export const DEFAULT_VIDEO_FRAME_RATE = 24;
 
 export type VideoPlanErrorCode =
   | 'invalidRequest'
@@ -38,6 +32,7 @@ export interface ProbedVideoInput {
   height: number;
   duration: number;
   hasAudio: boolean;
+  frameRate?: number;
 }
 
 export interface VideoPlanInput {
@@ -56,6 +51,7 @@ export interface VideoRenderPlan {
   height: number;
   duration: number;
   gap: number;
+  frameRate: number;
   tiles: VideoTile[];
   audioInput?: number;
 }
@@ -76,15 +72,11 @@ function validateProbe(probe: ProbedVideoInput, index: number): void {
     !Number.isFinite(probe.duration)
   )
     throw new VideoPlanError('invalidProbe', index);
-  if (probe.width > MAX_VIDEO_SOURCE_EDGE || probe.height > MAX_VIDEO_SOURCE_EDGE)
-    throw new VideoPlanError('sourceTooLarge', index);
-  if (probe.width * probe.height > MAX_VIDEO_SOURCE_PIXELS)
-    throw new VideoPlanError('sourceTooLarge', index);
 }
 
 /**
  * Creates an equal-height, horizontal layout without cropping or upscaling.  The
- * output is deliberately bounded for mobile browsers before FFmpeg decodes it.
+ * output follows source dimensions; no experimental size cap is applied.
  */
 export function createVideoRenderPlan(
   inputs: VideoPlanInput[],
@@ -102,31 +94,15 @@ export function createVideoRenderPlan(
     throw new VideoPlanError('invalidProbe');
 
   const duration = Math.max(...dynamic.map(({ input }) => input.probe.duration));
-  if (duration > MAX_VIDEO_DURATION_SECONDS) throw new VideoPlanError('durationTooLong');
-
-  const naturalHeight = Math.min(
-    MAX_VIDEO_CONTENT_HEIGHT,
-    ...inputs.map(({ probe }) => probe.height),
-  );
-  const naturalGap = style === 'gallery' ? Math.max(2, Math.round(naturalHeight * 0.012)) : 0;
-  const naturalWidths = inputs.map(({ probe }) => (probe.width / probe.height) * naturalHeight);
-  const naturalWidth =
-    naturalWidths.reduce((sum, width) => sum + width, 0) + naturalGap * (inputs.length - 1);
-  const scale = Math.min(1, MAX_VIDEO_OUTPUT_WIDTH / naturalWidth);
-  const height = evenAtLeastTwo(naturalHeight * scale);
-  const gap = style === 'gallery' ? evenAtLeastTwo(naturalGap * scale) : 0;
+  const naturalHeight = Math.min(...inputs.map(({ probe }) => probe.height));
+  const height = evenAtLeastTwo(naturalHeight);
+  const gap = style === 'gallery' ? evenAtLeastTwo(Math.round(height * 0.012)) : 0;
   const widths = inputs.map(({ probe }) => evenAtLeastTwo((probe.width / probe.height) * height));
   const width = widths.reduce((sum, tileWidth) => sum + tileWidth, 0) + gap * (inputs.length - 1);
-
-  // Rounding to chroma-safe dimensions can only add a few pixels. Scale one more
-  // time when that would exceed the promised output limit.
-  if (width > MAX_VIDEO_OUTPUT_WIDTH) {
-    const reducedInputs = inputs.map(({ type, probe }) => ({
-      type,
-      probe: { ...probe, width: (probe.width / probe.height) * (height - 2), height: height - 2 },
-    }));
-    return createVideoRenderPlan(reducedInputs, style);
-  }
+  const rates = dynamic
+    .map(({ input }) => input.probe.frameRate)
+    .filter((rate): rate is number => typeof rate === 'number' && finitePositive(rate));
+  const frameRate = rates.length ? Math.max(...rates) : DEFAULT_VIDEO_FRAME_RATE;
 
   let x = 0;
   const tiles = widths.map((tileWidth) => {
@@ -140,6 +116,7 @@ export function createVideoRenderPlan(
     height,
     duration,
     gap,
+    frameRate,
     tiles,
     audioInput: audioInput < 0 ? undefined : audioInput,
   };
@@ -171,7 +148,7 @@ export function createVideoFfmpegArgs(
         '-loop',
         '1',
         '-framerate',
-        String(VIDEO_FRAME_RATE),
+        String(plan.frameRate),
         '-t',
         duration,
         '-i',
@@ -184,7 +161,7 @@ export function createVideoFfmpegArgs(
   const parts = inputs.map((input, index) => {
     const tile = plan.tiles[index]!;
     const sourceDuration = input.type === 'photo' ? '' : `,trim=duration=${duration}`;
-    return `[${index}:v]setpts=PTS-STARTPTS,fps=${VIDEO_FRAME_RATE},scale=${tile.width}:${tile.height}:flags=lanczos,setsar=1${sourceDuration},tpad=stop_mode=clone:stop_duration=${duration}[v${index}]`;
+    return `[${index}:v]setpts=PTS-STARTPTS,fps=${plan.frameRate},scale=${tile.width}:${tile.height}:flags=lanczos,setsar=1${sourceDuration},tpad=stop_mode=clone:stop_duration=${duration}[v${index}]`;
   });
   let videoLabel = '[v0]';
   if (inputs.length > 1) {
@@ -210,7 +187,7 @@ export function createVideoFfmpegArgs(
     '-t',
     duration,
     '-r',
-    String(VIDEO_FRAME_RATE),
+    String(plan.frameRate),
     '-c:v',
     'libx264',
     '-preset',

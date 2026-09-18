@@ -2,10 +2,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { handleVideoPort } from '../src/background/video-render.js';
 import { renderFrameStrip } from '../src/core/frame.js';
 import type { VideoRenderRequest } from '../src/core/video-client.js';
+import { loadSettings } from '../src/shared/settings.js';
 vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderFrameStrip: vi.fn(),
 }));
+vi.mock('../src/shared/settings.js', () => ({ loadSettings: vi.fn() }));
 class Port {
   name = 'stt-video-render';
   messages = new Set<(message: unknown) => void>();
@@ -72,6 +74,15 @@ function start(value = request) {
   return port;
 }
 beforeEach(() => {
+  vi.mocked(loadSettings).mockResolvedValue({
+    experimentalVideo: true,
+    videoLimits: {
+      maxInputMiB: 0,
+      maxDurationSeconds: 0,
+      maxOutputPixels: 0,
+      maxFrameRate: 0,
+    },
+  } as Awaited<ReturnType<typeof loadSettings>>);
   vi.stubGlobal('Worker', FakeWorker);
   vi.stubGlobal('browser', {
     runtime: { getURL: (path: string) => `moz-extension://test/${path}` },
@@ -96,6 +107,17 @@ it('renders a frame after the real layout handshake and cleans up after output',
   const port = start();
   await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
   const worker = FakeWorker.instances[0];
+  worker.emit({
+    type: 'diagnostics',
+    id: 'one',
+    sample: { phase: 'loading', workerElapsedMs: 1, phaseElapsedMs: 1 },
+  });
+  expect(port.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'diagnostics',
+      metadata: { inputBytes: 3, downloadMs: expect.any(Number) },
+    }),
+  );
   worker.emit({ type: 'layout', id: 'one', width: 64, height: 32, duration: 1 });
   await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
   expect(renderFrameStrip).toHaveBeenCalledWith(
@@ -125,7 +147,18 @@ it('rejects concurrent jobs and terminates the active worker on disconnect', asy
   first.disconnect();
   expect(FakeWorker.instances[0].terminate).toHaveBeenCalledOnce();
 });
-it('rejects unapproved hosts before downloading and oversized input before starting FFmpeg', async () => {
+it('rejects dynamic jobs while the experimental switch is off', async () => {
+  vi.mocked(loadSettings).mockResolvedValueOnce({
+    experimentalVideo: false,
+  } as Awaited<ReturnType<typeof loadSettings>>);
+  const port = start();
+  await vi.waitFor(() =>
+    expect(port.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })),
+  );
+  expect(fetch).not.toHaveBeenCalled();
+  expect(FakeWorker.instances).toHaveLength(0);
+});
+it('rejects unapproved hosts and incomplete downloads before starting FFmpeg', async () => {
   const bad = start({
     ...request,
     record: {
@@ -145,7 +178,7 @@ it('rejects unapproved hosts before downloading and oversized input before start
   );
   expect(fetch).not.toHaveBeenCalled();
   vi.mocked(fetch).mockResolvedValueOnce(
-    new Response(new Uint8Array([1]), { headers: { 'content-length': String(65 * 1024 * 1024) } }),
+    new Response(new Uint8Array([1]), { headers: { 'content-length': '2' } }),
   );
   const big = start();
   await vi.waitFor(() =>
@@ -153,3 +186,91 @@ it('rejects unapproved hosts before downloading and oversized input before start
   );
   expect(FakeWorker.instances).toHaveLength(0);
 });
+
+it('keeps a single source download for the original-media fallback when it crosses a limit', async () => {
+  vi.mocked(loadSettings).mockResolvedValueOnce({
+    experimentalVideo: true,
+    videoLimits: {
+      maxInputMiB: 0.000001,
+      maxDurationSeconds: 0,
+      maxOutputPixels: 0,
+      maxFrameRate: 0,
+    },
+  } as Awaited<ReturnType<typeof loadSettings>>);
+  const port = start();
+  await vi.waitFor(() =>
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fallback', blob: expect.any(Blob) }),
+    ),
+  );
+  expect(FakeWorker.instances).toHaveLength(0);
+});
+
+it('turns a worker-reported limit into a fallback and reuses a single source blob', async () => {
+  const port = start();
+  await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+  FakeWorker.instances[0]!.emit({
+    type: 'error',
+    id: 'one',
+    error: 'configured limit exceeded',
+    limitExceeded: true,
+  });
+  await vi.waitFor(() =>
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fallback', blob: expect.any(Blob) }),
+    ),
+  );
+  const fallback = port.postMessage.mock.calls.find(
+    ([message]) => message.type === 'fallback',
+  )![0] as {
+    blob: Blob;
+  };
+  expect(fallback.blob.type).toBe('video/mp4');
+});
+
+it('accepts layout messages above the former dimensions and duration caps', async () => {
+  const port = start({ ...request, frame: 'original' });
+  await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+  const worker = FakeWorker.instances[0];
+  worker.emit({ type: 'layout', id: 'one', width: 4096, height: 2160, duration: 600 });
+  await vi.waitFor(() =>
+    expect(worker.postMessage).toHaveBeenCalledWith({ type: 'frame', id: 'one' }),
+  );
+  expect(port.postMessage.mock.calls.some(([message]) => message.type === 'error')).toBe(false);
+});
+
+it.each([true, false])(
+  'stops an oversized collage download and returns a static fallback, declared size=%s',
+  async (declaredSize) => {
+    vi.mocked(loadSettings).mockResolvedValueOnce({
+      experimentalVideo: true,
+      videoLimits: {
+        maxInputMiB: 1 / 1048576,
+        maxDurationSeconds: 0,
+        maxOutputPixels: 0,
+        maxFrameRate: 0,
+      },
+    } as Awaited<ReturnType<typeof loadSettings>>);
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        new Uint8Array([1, 2, 3]),
+        declaredSize ? { headers: { 'content-length': '3' } } : undefined,
+      ),
+    );
+    const port = start({
+      ...request,
+      indexes: [1, 2],
+      record: {
+        ...request.record,
+        media: [request.record.media[0]!, { ...request.record.media[0]!, index: 2 }],
+      },
+    });
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'fallback' })),
+    );
+    const message = port.postMessage.mock.calls.find(([value]) => value.type === 'fallback')![0];
+    expect(message.blob).toBeUndefined();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(FakeWorker.instances).toHaveLength(0);
+  },
+);

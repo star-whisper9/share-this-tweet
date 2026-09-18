@@ -1,3 +1,9 @@
+import {
+  appendVideoDiagnostic,
+  isVideoDiagnosticSample,
+  type VideoDiagnosticsReport,
+} from './video-report.js';
+import type { VideoDiagnosticMetadata } from '../shared/video-render.js';
 import type { TweetRecord, MediaRecord } from '../shared/model.js';
 import type { ExtensionSettings } from '../shared/settings.js';
 import { t, type Locale } from '../shared/i18n.js';
@@ -16,6 +22,16 @@ export interface VideoRenderRequest {
   theme: ImageTheme;
   locale: Locale;
 }
+/** A declared processing limit was exceeded; unrelated failures never use this path. */
+export class VideoLimitFallback extends Error {
+  constructor(
+    reason: string,
+    public readonly originalBlob?: Blob,
+  ) {
+    super(reason);
+    this.name = 'VideoLimitFallback';
+  }
+}
 export interface VideoProgress {
   phase: 'downloading' | 'loading' | 'probing' | 'encoding';
   progress?: number;
@@ -29,20 +45,48 @@ export function renderDynamicMedia(
   frame: 'original' | FrameOrientation,
   theme: ImageTheme,
   locale: Locale,
-  options: { signal: AbortSignal; onProgress?: (progress: VideoProgress) => void },
+  options: {
+    signal: AbortSignal;
+    onProgress?: (progress: VideoProgress) => void;
+    onDiagnostics?: (report: VideoDiagnosticsReport) => void;
+  },
 ): Promise<Blob> {
   options.signal.throwIfAborted();
   return new Promise((resolve, reject) => {
     const port = browser.runtime.connect({ name: VIDEO_PORT_NAME });
     const id = crypto.randomUUID();
+    const started = performance.now();
+    const report: VideoDiagnosticsReport = {
+      schemaVersion: 1,
+      jobId: id,
+      tweetId: record.tweetId,
+      engine: { name: 'ffmpeg.wasm', coreVersion: '0.12.10', threading: 'single', gpu: false },
+      startedAt: new Date().toISOString(),
+      userAgent: typeof navigator === 'undefined' ? undefined : navigator.userAgent,
+      extensionVersion: browser.runtime.getManifest?.().version,
+      status: 'running',
+      elapsedMs: 0,
+      mediaIndexes: media.map((item) => item.index),
+      frame,
+      style: settings.stitchStyle,
+      samples: [],
+      phaseDurationsMs: {},
+      droppedSamples: 0,
+      memoryMeasurement: 'wasm-linear-memory-capacity-and-memfs-files-not-process-rss',
+    };
+    options.onDiagnostics?.(report);
     let finished = false;
     let heartbeat: ReturnType<typeof setInterval>;
-    let timer: ReturnType<typeof setTimeout>;
     const finish = (error?: unknown, blob?: Blob): void => {
       if (finished) return;
       finished = true;
+      report.elapsedMs = performance.now() - started;
+      report.finishedAt = new Date().toISOString();
+      report.status = options.signal.aborted ? 'cancelled' : error || !blob ? 'error' : 'completed';
+      if (error) report.error = error instanceof Error ? error.message : String(error);
+      if (blob) report.resultBytes = blob.size;
+      options.onDiagnostics?.(report);
       clearInterval(heartbeat);
-      clearTimeout(timer);
       options.signal.removeEventListener('abort', abort);
       port.onMessage.removeListener(onMessage);
       port.onDisconnect.removeListener(onDisconnect);
@@ -63,10 +107,41 @@ export function renderDynamicMedia(
         error?: unknown;
         phase?: unknown;
         progress?: unknown;
+        sample?: unknown;
+        metadata?: unknown;
+        reason?: unknown;
       };
       if (message.id !== id) return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
       if (message.type === 'pong') return;
-      if (message.type === 'progress') {
+      if (message.type === 'fallback') {
+        if (
+          typeof message.reason !== 'string' ||
+          (message.blob !== undefined && (!(message.blob instanceof Blob) || !message.blob.size))
+        )
+          return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
+        return finish(new VideoLimitFallback(message.reason, message.blob as Blob | undefined));
+      }
+      if (message.type === 'diagnostics') {
+        if (!isVideoDiagnosticSample(message.sample))
+          return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
+        const metadata = message.metadata;
+        if (
+          metadata !== undefined &&
+          (!metadata ||
+            typeof metadata !== 'object' ||
+            !('inputBytes' in metadata) ||
+            typeof metadata.inputBytes !== 'number' ||
+            !Number.isFinite(metadata.inputBytes))
+        )
+          return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
+        appendVideoDiagnostic(
+          report,
+          message.sample,
+          performance.now() - started,
+          metadata as VideoDiagnosticMetadata | undefined,
+        );
+        options.onDiagnostics?.(report);
+      } else if (message.type === 'progress') {
         if (!['downloading', 'loading', 'probing', 'encoding'].includes(String(message.phase)))
           return finish(new Error(t('dynamic.invalidResponse', {}, locale)));
         options.onProgress?.({
@@ -96,7 +171,6 @@ export function renderDynamicMedia(
         finish(error);
       }
     }, 10_000);
-    timer = setTimeout(() => finish(new Error(t('dynamic.timeout', {}, locale))), 300_000);
     const request: VideoRenderRequest = {
       type: 'start',
       id,

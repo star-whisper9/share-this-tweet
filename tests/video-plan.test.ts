@@ -5,13 +5,12 @@ import {
   type VideoCoreAdapter,
 } from '../src/core/video-engine.js';
 import {
-  MAX_VIDEO_OUTPUT_WIDTH,
   VideoPlanError,
   createVideoFfmpegArgs,
   createVideoRenderPlan,
 } from '../src/core/video-plan.js';
 
-it('plans a bounded equal-height strip with the first video audio track', () => {
+it('plans a source-sized equal-height strip with the first video audio track', () => {
   const plan = createVideoRenderPlan(
     [
       { type: 'photo', probe: { width: 1200, height: 800, duration: 0, hasAudio: false } },
@@ -20,7 +19,8 @@ it('plans a bounded equal-height strip with the first video audio track', () => 
     ],
     'gallery',
   );
-  expect(plan.width).toBeLessThanOrEqual(MAX_VIDEO_OUTPUT_WIDTH);
+  expect(plan.width).toBeGreaterThan(1280);
+  expect(plan.height).toBe(800);
   expect(plan.height % 2).toBe(0);
   expect(plan.duration).toBe(8);
   expect(plan.audioInput).toBe(2);
@@ -29,23 +29,19 @@ it('plans a bounded equal-height strip with the first video audio track', () => 
   expect(plan.tiles[2]!.x).toBe(plan.tiles[1]!.x + plan.tiles[1]!.width + plan.gap);
 });
 
-it('rejects static-only, oversized, malformed, and too-long dynamic sources', () => {
-  const valid = { width: 640, height: 360, duration: 3, hasAudio: false };
-  expect(() => createVideoRenderPlan([{ type: 'photo', probe: valid }], 'seamless')).toThrow(
+it('accepts long high-resolution media while rejecting invalid metadata', () => {
+  const probe = { width: 9000, height: 4000, duration: 600, hasAudio: true, frameRate: 60 };
+  const plan = createVideoRenderPlan([{ type: 'video', probe }], 'seamless');
+  expect(plan).toMatchObject({ width: 9000, height: 4000, duration: 600, frameRate: 60 });
+  expect(() => createVideoRenderPlan([{ type: 'photo', probe }], 'seamless')).toThrow(
     VideoPlanError,
   );
   expect(() =>
-    createVideoRenderPlan([{ type: 'video', probe: { ...valid, width: 9000 } }], 'seamless'),
+    createVideoRenderPlan([{ type: 'video', probe: { ...probe, width: 0 } }], 'seamless'),
   ).toThrow(VideoPlanError);
   expect(() =>
     createVideoRenderPlan(
-      [{ type: 'animated_gif', probe: { ...valid, duration: 30.001 } }],
-      'seamless',
-    ),
-  ).toThrow(VideoPlanError);
-  expect(() =>
-    createVideoRenderPlan(
-      [{ type: 'video', probe: { ...valid, duration: Number.NaN } }],
+      [{ type: 'video', probe: { ...probe, duration: Number.NaN } }],
       'seamless',
     ),
   ).toThrow(VideoPlanError);
@@ -168,5 +164,109 @@ it('waits for the exact-width PNG frame before encoding and removes job files', 
   expect(result.blob.type).toBe('video/mp4');
   expect(calls).toHaveLength(1);
   expect(calls[0]!.join(' ')).toContain('vstack=inputs=2');
+  expect(files.size).toBe(0);
+});
+
+it('applies a configured duration limit after probing and before rendering or encoding', async () => {
+  const files = new Map<string, Uint8Array>();
+  let encoded = false;
+  const core: VideoCoreAdapter = {
+    writeFile: (path, bytes) => files.set(path, bytes),
+    readFile: (path) => files.get(path)!,
+    exists: (path) => files.has(path),
+    unlink: (path) => files.delete(path),
+    exec: () => {
+      encoded = true;
+      return 0;
+    },
+    ffprobe: () => ({
+      exitCode: 0,
+      output: JSON.stringify({
+        streams: [{ codec_type: 'video', width: 640, height: 360, duration: 1 }],
+        format: { duration: 1 },
+      }),
+    }),
+  };
+  const request = {
+    type: 'start' as const,
+    id: 'limited-video-job',
+    inputs: [{ type: 'video' as const, blob: new Blob(['video']) }],
+    style: 'seamless' as const,
+    background: '#000000' as const,
+    frame: 'original' as const,
+    locale: 'en' as const,
+    limits: {
+      maxInputMiB: 0,
+      maxDurationSeconds: 0.5,
+      maxOutputPixels: 0,
+      maxFrameRate: 0,
+    },
+  };
+  await expect(
+    executeVideoJob(core, request, {
+      onProgress: () => undefined,
+      onLayout: async () => {
+        throw new Error('frame should not render');
+      },
+    }),
+  ).rejects.toThrow('0.5');
+  expect(encoded).toBe(false);
+  expect(files.size).toBe(0);
+});
+
+it('applies the output-pixel limit again after a source frame is added', async () => {
+  const files = new Map<string, Uint8Array>();
+  let encoded = false;
+  const core: VideoCoreAdapter = {
+    writeFile: (path, bytes) => files.set(path, bytes),
+    readFile: (path) => files.get(path)!,
+    exists: (path) => files.has(path),
+    unlink: (path) => files.delete(path),
+    exec: () => {
+      encoded = true;
+      return 0;
+    },
+    ffprobe: (args) => ({
+      exitCode: 0,
+      output: JSON.stringify({
+        streams: [
+          {
+            codec_type: 'video',
+            width: 640,
+            height: args.at(-1) === 'frame.png' ? 72 : 360,
+            duration: args.at(-1) === 'frame.png' ? 0 : 1,
+          },
+        ],
+        format: { duration: args.at(-1) === 'frame.png' ? 0 : 1 },
+      }),
+    }),
+  };
+  const request = {
+    type: 'start' as const,
+    id: 'frame-pixel-limit',
+    inputs: [{ type: 'video' as const, blob: new Blob(['video']) }],
+    style: 'seamless' as const,
+    background: '#000000' as const,
+    frame: 'bottom' as const,
+    locale: 'en' as const,
+    limits: {
+      maxInputMiB: 0,
+      maxDurationSeconds: 0,
+      maxOutputPixels: 640 * 400,
+      maxFrameRate: 0,
+    },
+  };
+  await expect(
+    executeVideoJob(core, request, {
+      onProgress: () => undefined,
+      onLayout: async () => ({
+        type: 'frame',
+        id: request.id,
+        blob: new Blob(['frame'], { type: 'image/png' }),
+        height: 72,
+      }),
+    }),
+  ).rejects.toThrow();
+  expect(encoded).toBe(false);
   expect(files.size).toBe(0);
 });

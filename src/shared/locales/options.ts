@@ -90,7 +90,7 @@ export const zhCN = {
   'options.records.originalLink': '原文链接',
   'options.records.delete': '删除这条记录',
   'options.records.select': '选择一条记录查看详情。',
-  'options.reset.title': '恢复三项默认设置？',
+  'options.reset.title': '恢复默认设置？',
   'options.reset.description': '这只会修改当前草稿，点击保存后才会生效。',
   'options.cancel': '取消',
   'options.reset': '恢复默认',
@@ -299,7 +299,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.records.originalLink': 'Original link',
   'options.records.delete': 'Delete this record',
   'options.records.select': 'Select a record to view its details.',
-  'options.reset.title': 'Restore the three default settings?',
+  'options.reset.title': 'Restore default settings?',
   'options.reset.description':
     'This changes only the current draft. It takes effect after you save.',
   'options.cancel': 'Cancel',

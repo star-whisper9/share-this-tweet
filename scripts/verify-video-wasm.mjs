@@ -45,6 +45,24 @@ function png(width, height) {
 }
 const directory = await mkdtemp(join(tmpdir(), 'stt-video-wasm-'));
 const clip = new Blob([await readFile('tests/fixtures/source-media.mp4')], { type: 'video/mp4' });
+const rateCheck = spawnSync(
+  'ffprobe',
+  [
+    '-v',
+    'error',
+    '-select_streams',
+    'v:0',
+    '-show_entries',
+    'stream=avg_frame_rate',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    'tests/fixtures/source-media.mp4',
+  ],
+  { encoding: 'utf8' },
+);
+if (rateCheck.error) throw rateCheck.error;
+assert.equal(rateCheck.status, 0, rateCheck.stderr);
+const sourceFrameRate = rateCheck.stdout.trim();
 const cases = [
   {
     name: 'mixed-seamless',
@@ -88,6 +106,7 @@ try {
       workerData: { dist: resolve('dist') },
     });
     let layout;
+    const diagnostics = [];
     try {
       const result = await new Promise((done, fail) => {
         const timer = setTimeout(() => fail(new Error('WASM smoke test timed out')), 60_000);
@@ -97,7 +116,9 @@ try {
         };
         worker.on('error', (error) => finish(error));
         worker.on('message', (message) => {
-          if (message.type === 'layout') {
+          if (message.type === 'diagnostics') {
+            diagnostics.push(message);
+          } else if (message.type === 'layout') {
             layout = message;
             worker.postMessage(
               job.frame === 'original'
@@ -117,6 +138,38 @@ try {
           locale: 'en',
         });
       });
+      const samples = diagnostics.map((event) => event.sample);
+      for (const phase of [
+        'loading',
+        'writing-input',
+        'probing',
+        'encoding',
+        'finalizing',
+        'reading-output',
+        'copying-output',
+        'cleanup',
+        'done',
+      ])
+        assert.ok(
+          samples.some((sample) => sample.phase === phase),
+          `Missing diagnostic phase: ${phase}`,
+        );
+      assert.ok(samples.some((sample) => sample.wasmCapacityBytes > 0));
+      assert.ok(samples.some((sample) => sample.frames > 0 && sample.encodedSeconds > 0));
+      assert.ok(
+        samples.some(
+          (sample) =>
+            sample.outputFileBytes > 0 &&
+            sample.outputBufferCapacityBytes >= sample.outputFileBytes,
+        ),
+      );
+      assert.ok(samples.some((sample) => sample.outputCopyBytes === result.blob.size));
+      for (const phase of ['reading-output', 'copying-output', 'finalizing'])
+        assert.ok(
+          samples.some((sample) => sample.phase === phase && sample.phaseElapsedMs > 0),
+          `Missing final phase duration: ${phase}`,
+        );
+      assert.ok(diagnostics.some((event) => event.metadata?.args?.includes('-progress')));
       const output = join(directory, `${job.name}.mp4`);
       await writeFile(output, new Uint8Array(await result.blob.arrayBuffer()));
       const check = spawnSync(
@@ -139,7 +192,7 @@ try {
       assert.equal(video.codec_name, 'h264');
       assert.equal(video.width, layout.width);
       assert.equal(video.height, layout.height + (job.frame === 'original' ? 0 : 32));
-      assert.equal(video.r_frame_rate, '24/1');
+      assert.equal(video.r_frame_rate, sourceFrameRate);
       assert.equal(
         probe.streams.some((stream) => stream.codec_type === 'audio'),
         job.audio,

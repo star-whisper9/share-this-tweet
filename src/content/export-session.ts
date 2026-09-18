@@ -1,4 +1,9 @@
-import { renderDynamicMedia, type VideoProgress } from '../core/video-client.js';
+import type { VideoDiagnosticsReport } from '../core/video-report.js';
+import {
+  renderDynamicMedia,
+  VideoLimitFallback,
+  type VideoProgress,
+} from '../core/video-client.js';
 import { renderStitchedMedia } from '../core/stitch.js';
 import {
   buildCardFilename,
@@ -76,6 +81,7 @@ export class ExportSession {
   private active = true;
   private batchRunning = false;
   private videoAbort?: AbortController;
+  private videoReport?: VideoDiagnosticsReport;
   private mediaCancelled = false;
   private cardFile?: File;
   private cardKey?: string;
@@ -136,6 +142,19 @@ export class ExportSession {
     return !!this.videoAbort || !!this.quoted?.isProcessingVideo;
   }
 
+  get videoDiagnostics(): Readonly<VideoDiagnosticsReport> | undefined {
+    return this.videoReport;
+  }
+
+  saveVideoDiagnostics(): void {
+    if (!this.videoReport) return;
+    const report = this.videoReport;
+    downloadBlob(
+      new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }),
+      `X_${this.record.tweetId}_diagnostics_${report.jobId}.json`,
+    );
+  }
+
   cancelMediaProcessing(): void {
     this.mediaCancelled = true;
     this.videoAbort?.abort();
@@ -147,11 +166,19 @@ export class ExportSession {
     media: MediaRecord[],
     frame: MediaSaveOptions['photo'],
   ): Promise<Blob> {
+    if (!context.settings.experimentalVideo) throw new Error(t('experiment.disabled'));
     if (this.videoAbort) throw new Error(t('dynamic.busy'));
     const controller = new AbortController();
     this.videoAbort = controller;
     this.changed();
     const onProgress = ({ phase, progress }: VideoProgress): void => {
+      const diagnosticPhase = this.videoReport?.samples.at(-1)?.phase;
+      if (
+        phase === 'encoding' &&
+        diagnosticPhase &&
+        !['loading', 'writing-input', 'probing', 'frame', 'encoding'].includes(diagnosticPhase)
+      )
+        return;
       const message = () =>
         phase === 'encoding'
           ? t('dynamic.progress.encoding', { percent: Math.round((progress ?? 0) * 100) })
@@ -166,7 +193,24 @@ export class ExportSession {
         frame,
         context.theme,
         context.locale,
-        { signal: controller.signal, onProgress },
+        {
+          signal: controller.signal,
+          onProgress,
+          onDiagnostics: (report) => {
+            this.videoReport = report;
+            const phase = report.samples.at(-1)?.phase;
+            if (
+              report.status === 'running' &&
+              phase &&
+              phase !== 'encoding' &&
+              phase !== 'done' &&
+              phase !== 'error'
+            ) {
+              const message = () => t(`diagnostics.phase.${phase}`);
+              this.setStatus('loading', message(), message);
+            } else this.changed();
+          },
+        },
       );
     } finally {
       if (this.videoAbort === controller) this.videoAbort = undefined;
@@ -223,6 +267,12 @@ export class ExportSession {
   updateSettings(settings: ExtensionSettings): void {
     if (settings.filenameTemplate !== this.preferences.filenameTemplate) this.invalidateCard();
     this.preferences = settings;
+    if (
+      !settings.experimentalVideo &&
+      (this.mediaPreferences.video === 'top' || this.mediaPreferences.video === 'bottom')
+    ) {
+      this.mediaPreferences = { ...this.mediaPreferences, video: 'sourced' };
+    }
     this.quoted?.updateSettings(settings);
   }
 
@@ -404,10 +454,21 @@ export class ExportSession {
       },
       async (context) => {
         const { record, settings, theme, locale } = context;
-        const animated = record.media.some((item) => item.type !== 'photo');
-        const blob = animated
-          ? await this.renderVideo(context, record.media, frame)
-          : await renderStitchedMedia(record, settings, theme, this.resources, frame, locale);
+        let animated = record.media.some((item) => item.type !== 'photo');
+        let fallbackWarning: string | undefined;
+        let blob: Blob;
+        try {
+          blob = animated
+            ? await this.renderVideo(context, record.media, frame)
+            : await renderStitchedMedia(record, settings, theme, this.resources, frame, locale);
+        } catch (error) {
+          if (!(error instanceof VideoLimitFallback)) throw error;
+          if (!this.active) return;
+          fallbackWarning = t('experiment.fallbackStitch', { reason: error.message }, locale);
+          this.setStatus('loading', error.message);
+          blob = await renderStitchedMedia(record, settings, theme, this.resources, frame, locale);
+          animated = false;
+        }
         const extension =
           blob.type === 'image/png'
             ? 'png'
@@ -427,11 +488,12 @@ export class ExportSession {
         );
         if (!this.active) return;
         downloadBlob(blob, filename);
-        return this.persist(record, {
+        const persistenceWarning = await this.persist(record, {
           tweetId: record.tweetId,
           outputType: animated ? 'stitched-video' : 'stitched-image',
           filename,
         });
+        return [fallbackWarning, persistenceWarning].filter(Boolean).join('\n') || undefined;
       },
     );
   }
@@ -444,30 +506,41 @@ export class ExportSession {
   ): Promise<string | undefined> {
     const { record, settings } = context;
     let filename: string;
-    const framed = mode === 'framed';
+    let framed = mode === 'framed';
+    let fallbackWarning: string | undefined;
     const sourced = mode === 'sourced' && media.type !== 'photo';
     if (framed) {
-      const blob =
-        media.type === 'photo'
-          ? await renderPhotoFrame(
-              record,
-              media,
-              settings.frameTemplate,
-              orientation,
-              this.resources,
-              context.theme,
-              undefined,
-              context.locale,
-            )
-          : await this.renderVideo(context, [media], orientation);
+      let blob: Blob;
+      try {
+        blob =
+          media.type === 'photo'
+            ? await renderPhotoFrame(
+                record,
+                media,
+                settings.frameTemplate,
+                orientation,
+                this.resources,
+                context.theme,
+                undefined,
+                context.locale,
+              )
+            : await this.renderVideo(context, [media], orientation);
+      } catch (error) {
+        if (!(error instanceof VideoLimitFallback) || !error.originalBlob) throw error;
+        blob = error.originalBlob;
+        framed = false;
+        fallbackWarning = t('experiment.fallbackFrame', { reason: error.message }, context.locale);
+      }
       if (!['image/jpeg', 'image/webp', 'video/mp4'].includes(blob.type))
         throw new Error(t('content.frameFormatError'));
-      filename = buildFrameFilename(
-        record,
-        media,
-        settings.filenameTemplate,
-        blob.type === 'video/mp4' ? 'mp4' : blob.type === 'image/webp' ? 'webp' : 'jpg',
-      );
+      filename = framed
+        ? buildFrameFilename(
+            record,
+            media,
+            settings.filenameTemplate,
+            blob.type === 'video/mp4' ? 'mp4' : blob.type === 'image/webp' ? 'webp' : 'jpg',
+          )
+        : buildMediaFilename(record, media, settings.filenameTemplate);
       if (!this.active) return;
       downloadBlob(blob, filename);
     } else {
@@ -479,7 +552,7 @@ export class ExportSession {
         : undefined;
       await downloadMedia(media, filename, source);
     }
-    return this.persist(record, {
+    const persistenceWarning = await this.persist(record, {
       tweetId: record.tweetId,
       outputType: framed
         ? media.type === 'photo'
@@ -491,6 +564,7 @@ export class ExportSession {
       filename,
       mediaIndex: media.index,
     });
+    return [fallbackWarning, persistenceWarning].filter(Boolean).join('\n') || undefined;
   }
 
   async saveSelected(mode: MediaMode, orientation = this.settings.frameOrientation): Promise<void> {
@@ -568,8 +642,7 @@ export class ExportSession {
           }
           if (failures.length > 0) throw new Error(failures.join('; '));
           return warnings.length > 0
-            ? t('content.partialPersistWarning', {
-                success: success(),
+            ? t('experiment.outputWarnings', {
                 warnings: warnings
                   .map((warning) =>
                     t('content.itemWarning', {

@@ -1,4 +1,4 @@
-import { renderDynamicMedia } from '../src/core/video-client.js';
+import { renderDynamicMedia, VideoLimitFallback } from '../src/core/video-client.js';
 import { setLocale } from '../src/shared/i18n.js';
 import { renderStitchedMedia } from '../src/core/stitch.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,10 @@ vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderPhotoFrame: vi.fn(),
 }));
-vi.mock('../src/core/video-client.js', () => ({ renderDynamicMedia: vi.fn() }));
+vi.mock('../src/core/video-client.js', async (original) => ({
+  ...(await original<typeof import('../src/core/video-client.js')>()),
+  renderDynamicMedia: vi.fn(),
+}));
 vi.mock('../src/core/stitch.js', () => ({ renderStitchedMedia: vi.fn() }));
 vi.mock('../src/core/download.js', () => ({ downloadBlob: vi.fn(), downloadMedia: vi.fn() }));
 vi.mock('../src/core/storage-client.js', () => ({
@@ -33,7 +36,11 @@ const record: TweetRecord = {
   author: { id: '7', name: 'Alice', handle: 'alice' },
   media: [],
 };
-const settings = { ...DEFAULT_SETTINGS, filenameTemplate: '{tweet.id}_{media.index}.{extension}' };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  experimentalVideo: true,
+  filenameTemplate: '{tweet.id}_{media.index}.{extension}',
+};
 const png = new Blob(['png'], { type: 'image/png' });
 const photo = (index: number): MediaRecord => ({
   index,
@@ -492,4 +499,59 @@ it('cancels an in-flight video without downloading or starting later batch items
   expect(downloadBlob).not.toHaveBeenCalled();
   expect(recordOutput).not.toHaveBeenCalled();
   expect(session.mediaAction('configured').status).toBe('error');
+});
+
+it('rejects dynamic rendering when disabled while retaining static stitching', async () => {
+  const session = new ExportSession(
+    { ...record, media: [photo(1), video] },
+    { ...settings, experimentalVideo: false },
+  );
+  await session.stitchMedia();
+  expect(renderDynamicMedia).not.toHaveBeenCalled();
+  expect(session.action('stitch-media').status).toBe('error');
+  const staticSession = new ExportSession(
+    { ...record, media: [photo(1), photo(2)] },
+    { ...settings, experimentalVideo: false },
+  );
+  vi.mocked(renderStitchedMedia).mockResolvedValue(png);
+  await staticSession.stitchMedia();
+  expect(renderStitchedMedia).toHaveBeenCalledOnce();
+});
+
+it('clears a dynamic frame selection when experiments are disabled', () => {
+  const session = new ExportSession({ ...record, media: [video] }, settings);
+  session.configureMedia({ video: 'bottom' });
+  session.updateSettings({ ...settings, experimentalVideo: false });
+  expect(session.mediaOptions.video).toBe('sourced');
+});
+
+it('falls back to an original download only for a typed frame limit', async () => {
+  const original = new Blob(['original bytes'], { type: 'video/mp4' });
+  vi.mocked(renderDynamicMedia).mockRejectedValueOnce(new VideoLimitFallback('limit', original));
+  const session = new ExportSession({ ...record, media: [video] }, settings);
+  session.configureMedia({ video: 'bottom' });
+  await session.saveSelected('configured');
+  expect(downloadBlob).toHaveBeenCalledWith(original, '42_2.mp4');
+  expect(downloadMedia).not.toHaveBeenCalled();
+  expect(recordOutput).toHaveBeenCalledWith(
+    expect.objectContaining({ outputType: 'original-media' }),
+  );
+  expect(session.mediaAction('configured').status).toBe('success');
+  expect(session.status.state).toBe('error');
+});
+
+it('falls back to static stitching on limits and preserves unrelated failures', async () => {
+  const session = new ExportSession({ ...record, media: [photo(1), video] }, settings);
+  vi.mocked(renderDynamicMedia).mockRejectedValueOnce(new VideoLimitFallback('limit'));
+  vi.mocked(renderStitchedMedia).mockResolvedValueOnce(png);
+  await session.stitchMedia();
+  expect(renderStitchedMedia).toHaveBeenCalledOnce();
+  expect(recordOutput).toHaveBeenCalledWith(
+    expect.objectContaining({ outputType: 'stitched-image' }),
+  );
+  expect(session.action('stitch-media').status).toBe('success');
+  vi.mocked(renderDynamicMedia).mockRejectedValueOnce(new Error('codec failure'));
+  await session.stitchMedia();
+  expect(renderStitchedMedia).toHaveBeenCalledOnce();
+  expect(session.action('stitch-media').status).toBe('error');
 });
