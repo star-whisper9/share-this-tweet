@@ -5,6 +5,8 @@ export type OutputType =
   | 'sourced-media'
   | 'framed-image'
   | 'tweet-card'
+  | 'row-tweet-card'
+  | 'stitched-image'
   | 'shared-text'
   | 'shared-image'
   | 'copied-text';

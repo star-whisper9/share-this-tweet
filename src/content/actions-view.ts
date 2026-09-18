@@ -3,20 +3,24 @@ import type { ExportSession } from './export-session.js';
 import { appendMediaActions } from './media-view.js';
 import { actionButton, actionLabel, errorDetails, node } from './ui-components.js';
 
-function cardSaveButton(session: ExportSession): HTMLButtonElement {
-  const state = session.action('save-card');
+function cardSaveButton(session: ExportSession, row = false): HTMLButtonElement {
+  const key = row ? 'save-row-card' : 'save-card';
+  const state = session.action(key);
+  const label = row ? '保存单行卡片' : '保存推文卡片';
   const button = actionButton({
-    key: 'save-card',
+    key,
     label: actionLabel(state, {
-      idle: '保存推文卡片',
-      loading: '正在保存推文卡片…',
-      success: '再次保存推文卡片',
-      error: '保存推文卡片',
+      idle: label,
+      loading: '正在保存…',
+      success: `再次${label}`,
+      error: label,
     }),
     image: 'download',
+    disabled:
+      row && session.record.media.length < 2 && (session.quoted?.record.media.length ?? 0) < 2,
     state,
     onClick: () => {
-      void session.saveCard();
+      void session.saveCard(row);
     },
   });
   return button;
@@ -91,11 +95,13 @@ export function renderActions(sheet: HTMLElement, session: ExportSession): void 
     ),
   );
   const exports = node('div', 'stt-export-grid');
-  exports.append(cardSaveButton(session), textAction(session));
+  exports.append(cardSaveButton(session), cardSaveButton(session, true), textAction(session));
   actions.append(exports);
-  const save = session.action('save-card');
-  if (save.status === 'error')
-    actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
+  for (const key of ['save-card', 'save-row-card'] as const) {
+    const save = session.action(key);
+    if (save.status === 'error')
+      actions.append(errorDetails('卡片保存失败，请重试。', save.error ?? ''));
+  }
   for (const group of Array.from(actions.querySelectorAll<HTMLElement>('.stt-media-action'))) {
     const details = group.querySelector<HTMLDetailsElement>('.stt-file-details');
     if (details) details.open = expandedFiles.has(group.dataset.tweetId);

@@ -1,5 +1,7 @@
+import { renderStitchedMedia } from '../core/stitch.js';
 import {
   buildCardFilename,
+  buildStitchFilename,
   buildFrameFilename,
   buildMediaFilename,
   buildSourcedMediaFilename,
@@ -25,7 +27,7 @@ export interface SheetStatus {
   state: 'loading' | 'ready' | 'error';
   message: string;
 }
-export type TweetAction = 'copy-text' | 'save-card';
+export type TweetAction = 'copy-text' | 'save-card' | 'save-row-card' | 'stitch-media';
 export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
 export interface MediaSaveOptions {
   photo: 'original' | FrameOrientation;
@@ -252,9 +254,15 @@ export class ExportSession {
     );
   }
 
-  private async getCard({ record, settings, theme }: ExportContext): Promise<File> {
-    const filename = buildCardFilename(record, record.media[0], settings.filenameTemplate);
-    const key = JSON.stringify([record, theme, filename]);
+  private async getCard({ record, settings, theme }: ExportContext, row = false): Promise<File> {
+    const filename = buildCardFilename(record, record.media[0], settings.filenameTemplate, row);
+    const key = JSON.stringify([
+      record,
+      theme,
+      filename,
+      row,
+      row ? settings.stitchStyle : undefined,
+    ]);
     if (this.cardKey === key && this.cardFile) return this.cardFile;
     if (this.cardPending?.key === key) return this.cardPending.promise;
     this.cardFile = undefined;
@@ -263,6 +271,7 @@ export class ExportSession {
       const result = await renderTweetCard(record, record.media, {
         theme,
         resources: this.resources,
+        ...(row ? { mediaLayout: 'row' as const, stitchStyle: settings.stitchStyle } : {}),
       });
       const file = new File([result.blob], filename, { type: 'image/png' });
       if (this.active && this.cardKey === key && file.size <= 32 * 1024 * 1024)
@@ -277,29 +286,65 @@ export class ExportSession {
     }
   }
 
-  private cardOutput(record: TweetRecord, file: File): OutputRecordInput {
+  private cardOutput(record: TweetRecord, file: File, row: boolean): OutputRecordInput {
     const firstMedia = record.media[0];
     return {
       tweetId: record.tweetId,
-      outputType: 'tweet-card',
+      outputType: row ? 'row-tweet-card' : 'tweet-card',
       filename: file.name,
       ...(firstMedia ? { mediaIndex: firstMedia.index } : {}),
     };
   }
 
-  saveCard(): Promise<void> {
+  saveCard(row = false): Promise<void> {
     return this.run(
-      'save-card',
+      row ? 'save-row-card' : 'save-card',
       {
         loading: '正在保存推文卡片…',
         success: '推文卡片已保存。',
         failure: '推文卡片保存失败，请查看详情后重试。',
       },
       async (context) => {
-        const file = await this.getCard(context);
+        const file = await this.getCard(context, row);
         if (!this.active) return;
         downloadBlob(file, file.name);
-        return this.persist(context.record, this.cardOutput(context.record, file));
+        return this.persist(context.record, this.cardOutput(context.record, file, row));
+      },
+    );
+  }
+
+  stitchMedia(): Promise<void> {
+    return this.run(
+      'stitch-media',
+      {
+        loading: '正在拼接全部媒体…',
+        success: '拼接图片已保存。',
+        failure: '拼接失败，请查看详情后重试。',
+      },
+      async ({ record, settings, theme }) => {
+        const blob = await renderStitchedMedia(record, settings, theme, this.resources);
+        const extension =
+          blob.type === 'image/png'
+            ? 'png'
+            : blob.type === 'image/jpeg'
+              ? 'jpg'
+              : blob.type === 'image/webp'
+                ? 'webp'
+                : undefined;
+        if (!extension) throw new Error('拼接输出格式不正确');
+        const filename = buildStitchFilename(
+          record,
+          settings.filenameTemplate,
+          extension,
+          settings.stitchFrame,
+        );
+        if (!this.active) return;
+        downloadBlob(blob, filename);
+        return this.persist(record, {
+          tweetId: record.tweetId,
+          outputType: 'stitched-image',
+          filename,
+        });
       },
     );
   }

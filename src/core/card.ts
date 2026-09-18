@@ -1,3 +1,4 @@
+import { calculateStitchLayout, type StitchStyle } from './stitch.js';
 import { tagRunsForLines, type CardTextRun } from './card-tags.js';
 import { languageName } from '../shared/translation.js';
 import {
@@ -51,6 +52,8 @@ export interface TweetCardLayoutInput extends CardTextMeasurement {
   translation?: { text: string; sourceLanguage: string };
   measureLabelText?: CardTextMeasurement['measureText'];
   cardWidth?: number;
+  mediaLayout?: 'grid' | 'row';
+  stitchStyle?: StitchStyle;
 }
 
 export interface TweetCardLayout {
@@ -75,6 +78,13 @@ export interface TweetCardResult {
   blob: Blob;
   width: number;
   height: number;
+}
+
+interface CardRenderOptions {
+  theme?: CardTheme;
+  resources?: ImageResources;
+  mediaLayout?: 'grid' | 'row';
+  stitchStyle?: StitchStyle;
 }
 
 interface LoadedCardMedia {
@@ -194,22 +204,34 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       height: imageHeight,
     });
   } else if (input.images.length > 1) {
-    const gridGap = Math.max(10, Math.round(width * 0.012));
-    let y = 0;
-    for (let index = 0; index < input.images.length; index += 2) {
-      const row = input.images.slice(index, index + 2);
-      const ratios = row.map((image) => image.width / image.height);
-      const available = contentWidth - gridGap * (row.length - 1);
-      const rowHeight = Math.min(480, available / ratios.reduce((sum, ratio) => sum + ratio, 0));
-      const rowWidth =
-        ratios.reduce((sum, ratio) => sum + ratio * rowHeight, 0) + gridGap * (row.length - 1);
-      let x = (width - rowWidth) / 2;
-      for (const ratio of ratios) {
-        const imageWidth = ratio * rowHeight;
-        imageRects.push({ x, y, width: imageWidth, height: rowHeight });
-        x += imageWidth + gridGap;
+    if (input.mediaLayout === 'row') {
+      const row = calculateStitchLayout(
+        input.images,
+        input.stitchStyle ?? 'seamless',
+        contentWidth,
+        CARD_MAX_SINGLE_IMAGE_HEIGHT,
+      );
+      imageRects.push(
+        ...row.rects.map((rect) => ({ ...rect, x: rect.x + (width - row.width) / 2 })),
+      );
+    } else {
+      const gridGap = Math.max(10, Math.round(width * 0.012));
+      let y = 0;
+      for (let index = 0; index < input.images.length; index += 2) {
+        const row = input.images.slice(index, index + 2);
+        const ratios = row.map((image) => image.width / image.height);
+        const available = contentWidth - gridGap * (row.length - 1);
+        const rowHeight = Math.min(480, available / ratios.reduce((sum, ratio) => sum + ratio, 0));
+        const rowWidth =
+          ratios.reduce((sum, ratio) => sum + ratio * rowHeight, 0) + gridGap * (row.length - 1);
+        let x = (width - rowWidth) / 2;
+        for (const ratio of ratios) {
+          const imageWidth = ratio * rowHeight;
+          imageRects.push({ x, y, width: imageWidth, height: rowHeight });
+          x += imageWidth + gridGap;
+        }
+        y += rowHeight + gridGap;
       }
-      y += rowHeight + gridGap;
     }
   }
 
@@ -372,7 +394,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 async function renderCardCanvas(
   record: TweetRecord,
   mediaInput: MediaRecord | MediaRecord[],
-  options: { theme?: CardTheme; resources?: ImageResources; cardWidth?: number } = {},
+  options: CardRenderOptions & { cardWidth?: number } = {},
 ): Promise<HTMLCanvasElement> {
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
   if (media.length > 4) {
@@ -394,7 +416,7 @@ async function renderCardCanvas(
   let completed = false;
   try {
     // Two preview images at a time bound concurrent decoding. Video/GIF previews
-    // degrade to a visible slot; photos retain the established fail-fast contract.
+    // use a visible slot in grid cards; row cards require every preview to load.
     const results = await Promise.allSettled([
       (async () => {
         for (let index = 0; index < cardMedia.length; index += 2) {
@@ -402,7 +424,8 @@ async function renderCardCanvas(
           const pair = await Promise.allSettled(
             pairMedia.map(async (item) => {
               if (!item.preview.url) {
-                if (item.media.type === 'photo') throw new Error('当前照片没有可用的原图地址');
+                if (item.media.type === 'photo' || options.mediaLayout === 'row')
+                  throw new Error(`第 ${item.media.index} 项媒体没有可用的静态图像`);
                 return;
               }
               const image = await resources.load(item.preview.url);
@@ -412,7 +435,10 @@ async function renderCardCanvas(
             }),
           );
           for (const [pairIndex, result] of pair.entries()) {
-            if (result.status === 'rejected' && pairMedia[pairIndex]!.media.type === 'photo')
+            if (
+              result.status === 'rejected' &&
+              (pairMedia[pairIndex]!.media.type === 'photo' || options.mediaLayout === 'row')
+            )
               throw result.reason;
           }
         }
@@ -462,6 +488,8 @@ async function renderCardCanvas(
           }
         : undefined,
       cardWidth: options.cardWidth,
+      mediaLayout: options.mediaLayout,
+      stitchStyle: options.stitchStyle,
       measureText: (text) => context.measureText(text),
       measureLabelText: (text) => {
         context.save();
@@ -547,7 +575,13 @@ async function renderCardCanvas(
     cardMedia.forEach((item, index) => {
       const rect = layout.imageRects[index]!;
       const positionedRect = { ...rect, y: rect.y + layout.imageY };
-      if (item.image) drawContainedImage(context, item.image, positionedRect, palette);
+      if (item.image && options.mediaLayout === 'row') {
+        const left = Math.round(positionedRect.x * CARD_RENDER_SCALE) / CARD_RENDER_SCALE;
+        const right =
+          Math.round((positionedRect.x + positionedRect.width) * CARD_RENDER_SCALE) /
+          CARD_RENDER_SCALE;
+        context.drawImage(item.image, left, positionedRect.y, right - left, positionedRect.height);
+      } else if (item.image) drawContainedImage(context, item.image, positionedRect, palette);
       else drawMediaPlaceholder(context, positionedRect, palette, item.media);
       if (item.media.type !== 'photo')
         drawMediaBadge(context, positionedRect, item.media, !!item.image);
@@ -573,14 +607,14 @@ async function renderCardCanvas(
 export async function renderTweetCard(
   record: TweetRecord,
   mediaInput: MediaRecord | MediaRecord[],
-  options: { theme?: CardTheme; resources?: ImageResources } = {},
+  options: CardRenderOptions = {},
 ): Promise<TweetCardResult> {
   const resources = options.resources ?? new ImageResources();
   const theme = options.theme ?? detectCardTheme();
   const canvases: HTMLCanvasElement[] = [];
   let brand: HTMLImageElement | undefined;
   try {
-    const main = await renderCardCanvas(record, mediaInput, { theme, resources });
+    const main = await renderCardCanvas(record, mediaInput, { ...options, theme, resources });
     canvases.push(main);
     let output = main;
     if (record.quote) {
@@ -589,6 +623,7 @@ export async function renderTweetCard(
       const heading = 36 * CARD_RENDER_SCALE;
       const quoted = quote.record
         ? await renderCardCanvas(quote.record, quote.record.media, {
+            ...options,
             theme,
             resources,
             cardWidth: (main.width - inset * 2) / CARD_RENDER_SCALE,

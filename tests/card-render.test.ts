@@ -109,67 +109,70 @@ afterEach(() => {
 });
 
 describe('renderTweetCard media previews', () => {
-  it('renders supplied still previews in media order, including a quoted post, without requesting video', async () => {
-    installCanvas();
-    const photo = new FakeImage('media:photo');
-    const video = new FakeImage('media:video');
-    const gif = new FakeImage('media:gif');
-    const quoteVideo = new FakeImage('media:quote-video');
-    const store = resources(
-      new Map([
-        ['photo', photo],
-        ['video-preview', video],
-        ['gif-preview', gif],
-        ['quote-preview', quoteVideo],
-        ['avatar-main', new FakeImage('avatar:main')],
-        ['avatar-quote', new FakeImage('avatar:quote')],
-        ['extension:/icons/icon-48.png', new FakeImage('brand')],
-      ]),
-    );
-    const quoted = {
-      ...record([{ index: 1, type: 'video' as const, previewUrl: 'quote-preview' }]),
-      tweetId: '2',
-      url: 'https://x.com/quote/status/2',
-      author: { id: 'quote', handle: 'quote', name: 'Quote', avatarUrl: 'avatar-quote' },
-    };
-    const main = record(
-      [
-        { index: 1, type: 'photo', originalUrl: 'photo' },
-        {
-          index: 2,
-          type: 'video',
-          previewUrl: 'video-preview',
-          variants: [{ url: 'video.mp4', mime: 'video/mp4' }],
-        },
-        {
-          index: 3,
-          type: 'animated_gif',
-          previewUrl: 'gif-preview',
-          variants: [{ url: 'gif.mp4', mime: 'video/mp4' }],
-        },
-      ],
-      quoted,
-    );
+  it.each(['grid', 'row'] as const)(
+    'renders %s still previews in media order, including a quoted post, without requesting video',
+    async (mediaLayout) => {
+      installCanvas();
+      const photo = new FakeImage('media:photo');
+      const video = new FakeImage('media:video');
+      const gif = new FakeImage('media:gif');
+      const quoteVideo = new FakeImage('media:quote-video');
+      const store = resources(
+        new Map([
+          ['photo', photo],
+          ['video-preview', video],
+          ['gif-preview', gif],
+          ['quote-preview', quoteVideo],
+          ['avatar-main', new FakeImage('avatar:main')],
+          ['avatar-quote', new FakeImage('avatar:quote')],
+          ['extension:/icons/icon-48.png', new FakeImage('brand')],
+        ]),
+      );
+      const quoted = {
+        ...record([{ index: 1, type: 'video' as const, previewUrl: 'quote-preview' }]),
+        tweetId: '2',
+        url: 'https://x.com/quote/status/2',
+        author: { id: 'quote', handle: 'quote', name: 'Quote', avatarUrl: 'avatar-quote' },
+      };
+      const main = record(
+        [
+          { index: 1, type: 'photo', originalUrl: 'photo' },
+          {
+            index: 2,
+            type: 'video',
+            previewUrl: 'video-preview',
+            variants: [{ url: 'video.mp4', mime: 'video/mp4' }],
+          },
+          {
+            index: 3,
+            type: 'animated_gif',
+            previewUrl: 'gif-preview',
+            variants: [{ url: 'gif.mp4', mime: 'video/mp4' }],
+          },
+        ],
+        quoted,
+      );
 
-    await expect(
-      renderTweetCard(main, main.media, { theme: 'light', resources: store }),
-    ).resolves.toMatchObject({
-      blob: expect.any(Blob),
-    });
+      await expect(
+        renderTweetCard(main, main.media, { theme: 'light', resources: store, mediaLayout }),
+      ).resolves.toMatchObject({
+        blob: expect.any(Blob),
+      });
 
-    expect(drawCalls.filter((id) => id.startsWith('media:'))).toEqual([
-      'media:photo',
-      'media:video',
-      'media:gif',
-      'media:quote-video',
-    ]);
-    expect(vi.mocked(store.load)).not.toHaveBeenCalledWith('video.mp4');
-    expect(vi.mocked(store.load)).not.toHaveBeenCalledWith('gif.mp4');
-    for (const image of [photo, video, gif, quoteVideo]) {
-      expect(image.removeAttribute).toHaveBeenCalledWith('src');
-      expect(image.remove).toHaveBeenCalledOnce();
-    }
-  });
+      expect(drawCalls.filter((id) => id.startsWith('media:'))).toEqual([
+        'media:photo',
+        'media:video',
+        'media:gif',
+        'media:quote-video',
+      ]);
+      expect(vi.mocked(store.load)).not.toHaveBeenCalledWith('video.mp4');
+      expect(vi.mocked(store.load)).not.toHaveBeenCalledWith('gif.mp4');
+      for (const image of [photo, video, gif, quoteVideo]) {
+        expect(image.removeAttribute).toHaveBeenCalledWith('src');
+        expect(image.remove).toHaveBeenCalledOnce();
+      }
+    },
+  );
 
   it('keeps a card slot when a dynamic preview fails but rejects when a photo fails', async () => {
     installCanvas();
@@ -200,3 +203,18 @@ describe('renderTweetCard media previews', () => {
     ).rejects.toThrow('failed: photo');
   });
 });
+
+it.each([undefined, 'broken'])(
+  'fails row cards when a dynamic preview is unavailable: %s',
+  async (previewUrl) => {
+    installCanvas();
+    const main = record([{ index: 1, type: 'video', previewUrl }]);
+    const store = resources(
+      new Map([['avatar-main', new FakeImage('avatar')]]),
+      new Set(['broken']),
+    );
+    await expect(
+      renderTweetCard(main, main.media, { theme: 'light', resources: store, mediaLayout: 'row' }),
+    ).rejects.toThrow();
+  },
+);

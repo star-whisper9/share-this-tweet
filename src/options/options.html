@@ -120,6 +120,30 @@
                   <span aria-hidden="true">↓</span><strong>下</strong>
                 </button>
               </div>
+              <p class="field-label frame-orientation-label" id="stitch-frame-label">
+                拼接图片画框
+              </p>
+              <div class="frame-orientation-grid" role="group" aria-labelledby="stitch-frame-label">
+                <button type="button" data-stitch-frame="false" aria-pressed="true">
+                  <strong>不带画框</strong>
+                </button>
+                <button type="button" data-stitch-frame="true" aria-pressed="false">
+                  <strong>带画框</strong>
+                </button>
+              </div>
+              <p class="field-help">只影响拼接全部媒体，画框沿用上面的方向与文字设置。</p>
+              <p class="field-label frame-orientation-label" id="stitch-style-label">
+                横向连接样式
+              </p>
+              <div class="frame-orientation-grid" role="group" aria-labelledby="stitch-style-label">
+                <button type="button" data-stitch-style="seamless" aria-pressed="true">
+                  <strong>无缝连接</strong>
+                </button>
+                <button type="button" data-stitch-style="gallery" aria-pressed="false">
+                  <strong>画廊间隔</strong>
+                </button>
+              </div>
+              <p class="field-help">用于拼接图片与单行卡片；画廊间隔底色跟随导出主题。</p>
               <details class="template-editor" data-editor="frameTemplate">
                 <summary>
                   <span>自定义文字与变量</span

@@ -13,6 +13,8 @@ export interface ExtensionSettings {
   frameTemplate: string;
   frameOrientation: FrameOrientation;
   textTemplate: string;
+  stitchFrame: boolean;
+  stitchStyle: 'seamless' | 'gallery';
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -20,6 +22,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   frameTemplate: DEFAULT_FRAME_TEMPLATE,
   frameOrientation: DEFAULT_FRAME_ORIENTATION,
   textTemplate: DEFAULT_TEXT_TEMPLATE,
+  stitchFrame: false,
+  stitchStyle: 'seamless',
 };
 
 function asObject(value: unknown): Record<string, unknown> | undefined {
@@ -42,6 +46,9 @@ export function normalizeSettings(values: Record<string, unknown>): ExtensionSet
     filenameTemplate: readTemplate(stored?.filenameTemplate, DEFAULT_SETTINGS.filenameTemplate),
     frameTemplate: readTemplate(stored?.frameTemplate, DEFAULT_SETTINGS.frameTemplate),
     frameOrientation: readOrientation(stored?.frameOrientation),
+    stitchFrame:
+      typeof stored?.stitchFrame === 'boolean' ? stored.stitchFrame : DEFAULT_SETTINGS.stitchFrame,
+    stitchStyle: stored?.stitchStyle === 'gallery' ? 'gallery' : DEFAULT_SETTINGS.stitchStyle,
     textTemplate: readTemplate(stored?.textTemplate, DEFAULT_SETTINGS.textTemplate),
   };
 }

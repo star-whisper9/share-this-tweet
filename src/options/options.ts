@@ -151,6 +151,14 @@ function readSettings(): ExtensionSettings {
       ? (selectedOrientation as FrameOrientation)
       : DEFAULT_SETTINGS.frameOrientation,
     textTemplate: inputs.textTemplate?.value ?? DEFAULT_SETTINGS.textTemplate,
+    stitchFrame:
+      document.querySelector<HTMLButtonElement>('[data-stitch-frame][aria-pressed="true"]')?.dataset
+        .stitchFrame === 'true',
+    stitchStyle:
+      document.querySelector<HTMLButtonElement>('[data-stitch-style][aria-pressed="true"]')?.dataset
+        .stitchStyle === 'gallery'
+        ? 'gallery'
+        : 'seamless',
   };
 }
 function setFrameOrientation(orientation: FrameOrientation): void {
@@ -235,7 +243,9 @@ function updateDraft(announce = true): void {
   const valid = validateAndPreview(settings);
   dirty =
     keys.some((key) => settings[key] !== baseline[key]) ||
-    settings.frameOrientation !== baseline.frameOrientation;
+    settings.frameOrientation !== baseline.frameOrientation ||
+    settings.stitchFrame !== baseline.stitchFrame ||
+    settings.stitchStyle !== baseline.stitchStyle;
   updatePresetSelection(settings);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
   // first invalid field even if it is currently in another tab.
@@ -249,6 +259,13 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
+  for (const [attribute, value] of [
+    ['data-stitch-frame', String(settings.stitchFrame)],
+    ['data-stitch-style', settings.stitchStyle],
+  ]) {
+    for (const button of Array.from(document.querySelectorAll(`[${attribute}]`)))
+      button.setAttribute('aria-pressed', String(button.getAttribute(attribute!) === value));
+  }
   updateDraft();
 }
 function openEditor(name: SettingKey, focus = true): void {
@@ -405,6 +422,8 @@ function renderRecordDetail(): void {
     'sourced-media': '来源媒体',
     'framed-image': '来源画框',
     'tweet-card': '推文卡片',
+    'row-tweet-card': '单行推文卡片',
+    'stitched-image': '拼接图片',
     'shared-text': '分享文本',
     'shared-image': '分享图像',
     'copied-text': '复制文本',
@@ -608,6 +627,16 @@ for (const button of Array.from(
     setFrameOrientation(orientation as FrameOrientation);
     updateDraft();
   });
+}
+for (const attribute of ['data-stitch-frame', 'data-stitch-style']) {
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>(`[${attribute}]`))) {
+    button.addEventListener('click', () => {
+      if (!ready || saving) return;
+      for (const item of Array.from(document.querySelectorAll(`[${attribute}]`)))
+        item.setAttribute('aria-pressed', String(item === button));
+      updateDraft();
+    });
+  }
 }
 for (const input of Object.values(inputs)) input?.addEventListener('input', () => updateDraft());
 recordSearch?.addEventListener('input', () => renderRecords());

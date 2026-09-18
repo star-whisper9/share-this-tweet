@@ -188,6 +188,28 @@ function mediaActions(session: ExportSession): HTMLElement {
       },
     }),
   );
+  if (record.media.length > 1) {
+    const stitch = session.action('stitch-media');
+    wrapper.append(
+      actionButton({
+        key: `stitch-media-${record.tweetId}`,
+        label: actionLabel(stitch, {
+          idle: '拼接全部媒体',
+          loading: '正在拼接…',
+          success: '再次拼接全部媒体',
+          error: '重试拼接全部媒体',
+        }),
+        image: 'download',
+        state: stitch,
+        onClick: () => {
+          void session.stitchMedia();
+        },
+      }),
+    );
+    if (record.media.some((item) => item.type !== 'photo'))
+      wrapper.append(node('p', 'stt-save-hint', '含动态媒体，拼接时使用静态预览。'));
+    if (stitch.error) wrapper.append(errorDetails('拼接未完成，请重试。', stitch.error));
+  }
   if (filenameError)
     wrapper.append(errorDetails('文件名暂不可用，请检查文件名模板。', filenameError));
   if (state.error) wrapper.append(errorDetails('保存未完成，可重试或切换保存方式。', state.error));

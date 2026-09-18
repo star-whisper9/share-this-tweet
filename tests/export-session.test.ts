@@ -1,3 +1,4 @@
+import { renderStitchedMedia } from '../src/core/stitch.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExportSession } from '../src/content/export-session.js';
 import { detectCardTheme, renderTweetCard } from '../src/core/card.js';
@@ -15,6 +16,7 @@ vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderPhotoFrame: vi.fn(),
 }));
+vi.mock('../src/core/stitch.js', () => ({ renderStitchedMedia: vi.fn() }));
 vi.mock('../src/core/download.js', () => ({ downloadBlob: vi.fn(), downloadMedia: vi.fn() }));
 vi.mock('../src/core/storage-client.js', () => ({
   recordOutput: vi.fn(),
@@ -303,4 +305,58 @@ it('exports quote media with its own identity and cancels child work with the pa
   parent.dispose();
   await parent.quoted!.saveSelected('original');
   expect(downloadMedia).not.toHaveBeenCalled();
+});
+
+it('stitches all media independently of selection and records a single output', async () => {
+  vi.mocked(renderStitchedMedia).mockResolvedValue(png);
+  const session = new ExportSession(
+    { ...record, media: [photo(1), video, photo(3)] },
+    { ...settings, stitchStyle: 'gallery', stitchFrame: true },
+  );
+  session.toggleMedia(1);
+  expect(session.selection.size).toBe(0);
+  await session.stitchMedia();
+  expect(renderStitchedMedia).toHaveBeenCalledWith(
+    session.record,
+    expect.objectContaining({ stitchStyle: 'gallery', stitchFrame: true }),
+    'light',
+    expect.anything(),
+  );
+  expect(downloadBlob).toHaveBeenCalledOnce();
+  expect(recordOutput).toHaveBeenCalledWith(
+    expect.objectContaining({ outputType: 'stitched-image' }),
+  );
+  vi.mocked(renderStitchedMedia).mockRejectedValueOnce(new Error('preview unavailable'));
+  await session.stitchMedia();
+  expect(session.action('stitch-media').status).toBe('error');
+  expect(downloadBlob).toHaveBeenCalledOnce();
+});
+
+it('separates grid and row card caches and refreshes the row style after settings change', async () => {
+  const session = new ExportSession({ ...record, media: [photo(1), photo(2)] }, settings);
+  await session.saveCard();
+  await session.saveCard(true);
+  await session.saveCard(true);
+  expect(renderTweetCard).toHaveBeenCalledTimes(2);
+  expect(renderTweetCard).toHaveBeenLastCalledWith(
+    session.record,
+    session.record.media,
+    expect.objectContaining({ mediaLayout: 'row', stitchStyle: 'seamless' }),
+  );
+  session.updateSettings({ ...settings, stitchStyle: 'gallery' });
+  await session.saveCard(true);
+  expect(renderTweetCard).toHaveBeenCalledTimes(3);
+  expect(renderTweetCard).toHaveBeenLastCalledWith(
+    session.record,
+    session.record.media,
+    expect.objectContaining({ mediaLayout: 'row', stitchStyle: 'gallery' }),
+  );
+  const names = vi.mocked(downloadBlob).mock.calls.map((call) => call[1]);
+  expect(names[0]).not.toEqual(names[1]);
+  expect(vi.mocked(recordOutput).mock.calls.map(([output]) => output.outputType)).toEqual([
+    'tweet-card',
+    'row-tweet-card',
+    'row-tweet-card',
+    'row-tweet-card',
+  ]);
 });

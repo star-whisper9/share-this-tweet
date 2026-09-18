@@ -255,18 +255,19 @@ export function frameOutputSize(
   return { width: outputWidth, height: outputHeight, scale };
 }
 
-export async function renderPhotoFrame(
+export async function renderImageFrame(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FRAME_TEMPLATE,
   orientation: FrameOrientation = DEFAULT_FRAME_ORIENTATION,
   resources = new ImageResources(),
   theme: ImageTheme = detectImageTheme(),
+  source?: HTMLCanvasElement,
 ): Promise<Blob> {
   const palette = IMAGE_PALETTES[theme];
-  if (media.type !== 'photo') throw new Error('只有照片支持生成画框');
+  if (!source && media.type !== 'photo') throw new Error('只有照片支持生成画框');
   let userText = getFrameText(record, media, template);
-  if (!media.originalUrl) throw new Error('当前照片没有可用的原图地址');
+  if (!source && !media.originalUrl) throw new Error('当前照片没有可用的原图地址');
   let image: HTMLImageElement | undefined;
   let avatarImage: LoadedAvatar | undefined;
   let brandImage: HTMLImageElement | undefined;
@@ -276,9 +277,11 @@ export async function renderPhotoFrame(
       resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((value) => {
         brandImage = value;
       }),
-      resources.load(media.originalUrl).then((value) => {
-        image = value;
-      }),
+      source
+        ? Promise.resolve()
+        : resources.load(media.originalUrl!).then((value) => {
+            image = value;
+          }),
       userText.includes(FRAME_AVATAR_MARKER)
         ? loadAvatar(record.author.avatarUrl, resources, palette.text).then((value) => {
             avatarImage = value;
@@ -288,28 +291,27 @@ export async function renderPhotoFrame(
     const failed = loaded.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
     resources.checkActive();
-    if (!image) throw new Error('原图无法解码');
+    const drawable = source ?? image;
+    if (!drawable) throw new Error('原图无法解码');
+    const imageWidth = 'naturalWidth' in drawable ? drawable.naturalWidth : drawable.width;
+    const imageHeight = 'naturalHeight' in drawable ? drawable.naturalHeight : drawable.height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('浏览器不支持 Canvas 画框渲染');
 
-    if (
-      image.naturalWidth > 16384 ||
-      image.naturalHeight > 16384 ||
-      image.naturalWidth * image.naturalHeight > 32000000
-    ) {
+    if (imageWidth > 16384 || imageHeight > 16384 || imageWidth * imageHeight > 32000000) {
       throw new Error('图片超出画框尺寸限制，无法完整生成。');
     }
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    context.drawImage(image, 0, 0);
-    const transparent = hasTransparentPixels(context, image.naturalWidth, image.naturalHeight);
+    canvas.width = imageWidth;
+    canvas.height = imageHeight;
+    context.drawImage(drawable, 0, 0);
+    const transparent = hasTransparentPixels(context, imageWidth, imageHeight);
     userText = getFrameText(record, media, template, transparent ? 'webp' : 'jpg');
 
     const sourceLines = getSourceLines(record);
-    const fontSize = Math.max(12, Math.min(32, Math.round(image.naturalWidth * 0.035)));
+    const fontSize = Math.max(12, Math.min(32, Math.round(imageWidth * 0.035)));
     context.font = `500 ${fontSize}px ${FRAME_FONT_FAMILY}`;
     const layout = calculateFrameLayout({
-      width: image.naturalWidth,
+      width: imageWidth,
       userText,
       sourceLines,
       fontSize,
@@ -317,22 +319,17 @@ export async function renderPhotoFrame(
       measureText: createFrameTextMeasurer(context, fontSize),
     });
 
-    const logicalWidth = image.naturalWidth;
-    const output = frameOutputSize(logicalWidth, image.naturalHeight + layout.barHeight);
+    const logicalWidth = imageWidth;
+    const output = frameOutputSize(logicalWidth, imageHeight + layout.barHeight);
     canvas.width = output.width;
     canvas.height = output.height;
     context.scale(output.scale, output.scale);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     const imageY = orientation === 'top' ? layout.barHeight : 0;
-    context.drawImage(image, 0, imageY, logicalWidth, image.naturalHeight);
+    context.drawImage(drawable, 0, imageY, logicalWidth, imageHeight);
     context.fillStyle = palette.background;
-    context.fillRect(
-      0,
-      orientation === 'top' ? 0 : image.naturalHeight,
-      logicalWidth,
-      layout.barHeight,
-    );
+    context.fillRect(0, orientation === 'top' ? 0 : imageHeight, logicalWidth, layout.barHeight);
     context.fillStyle = palette.text;
     context.font = `500 ${layout.fontSize}px ${FRAME_FONT_FAMILY}`;
     // Each line occupies a fixed-height cell. Centering the glyph in that cell
@@ -341,7 +338,7 @@ export async function renderPhotoFrame(
     context.textBaseline = 'middle';
 
     if (layout.mode === 'double') {
-      const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+      const frameY = orientation === 'top' ? 0 : imageHeight;
       context.textAlign = 'left';
       layout.leftLines.forEach((line, index) => {
         drawHorizontalTextLine(
@@ -371,7 +368,7 @@ export async function renderPhotoFrame(
       });
       context.globalAlpha = 1;
     } else {
-      const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+      const frameY = orientation === 'top' ? 0 : imageHeight;
       const measureText = createFrameTextMeasurer(context, layout.fontSize);
       const sourceLineCount = sourceLines.flatMap((line) =>
         wrapFrameText(line, logicalWidth - layout.paddingX * 2, measureText),
@@ -396,7 +393,7 @@ export async function renderPhotoFrame(
     context.globalAlpha = 1;
     context.strokeStyle = palette.border;
     context.lineWidth = 1;
-    const frameY = orientation === 'top' ? 0 : image.naturalHeight;
+    const frameY = orientation === 'top' ? 0 : imageHeight;
     context.strokeRect(0.5, frameY + 0.5, logicalWidth - 1, layout.barHeight - 1);
 
     resources.checkActive();
@@ -409,3 +406,6 @@ export async function renderPhotoFrame(
     canvas.height = 0;
   }
 }
+
+/** Add a source frame to an original photo. */
+export const renderPhotoFrame = renderImageFrame;

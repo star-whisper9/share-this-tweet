@@ -70,6 +70,7 @@ export function buildCardFilename(
   record: TweetRecord,
   media?: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
+  row = false,
 ): string {
   const rendered = renderTemplate(template, {
     tweet: record,
@@ -78,5 +79,21 @@ export function buildCardFilename(
     card: true,
   });
   const base = forceExtension(sanitizeFilename(rendered), 'png').slice(0, -4);
-  return forceExtension(`${base}_card.png`, 'png');
+  const suffix = row ? '_row_card.png' : '_card.png';
+  return `${[...base].slice(0, MAX_FILENAME_LENGTH - suffix.length).join('')}${suffix}`;
+}
+
+export function buildStitchFilename(
+  record: TweetRecord,
+  template = DEFAULT_FILENAME_TEMPLATE,
+  extension: 'png' | 'jpg' | 'webp' = 'png',
+  framed = false,
+): string {
+  const rendered = renderTemplate(template, { tweet: record, media: record.media[0], extension });
+  const base = forceExtension(sanitizeFilename(rendered), extension).slice(
+    0,
+    -(extension.length + 1),
+  );
+  const suffix = `_stitched${framed ? '_framed' : ''}.${extension}`;
+  return `${[...base].slice(0, MAX_FILENAME_LENGTH - suffix.length).join('')}${suffix}`;
 }

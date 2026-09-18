@@ -33,3 +33,11 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({})).toEqual(DEFAULT_SETTINGS);
   });
 });
+
+it('normalizes stitch preferences while migrating older settings', () => {
+  const values = { [SETTINGS_STORAGE_KEY]: { stitchFrame: true, stitchStyle: 'gallery' } };
+  expect(normalizeSettings(values)).toMatchObject({ stitchFrame: true, stitchStyle: 'gallery' });
+  expect(
+    normalizeSettings({ [SETTINGS_STORAGE_KEY]: { stitchFrame: 'true', stitchStyle: 'other' } }),
+  ).toEqual(DEFAULT_SETTINGS);
+});
