@@ -57,7 +57,7 @@ describe('language resources', () => {
     expect(() => t('popup.loadError', {}, 'en')).toThrow();
   });
   it('uses valid translation keys in static extension pages', () => {
-    for (const file of ['popup/popup.html', 'options/options.html']) {
+    for (const file of ['popup/popup.html', 'options/options.html', 'tasks/tasks.html']) {
       const html = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
       const markers = html.matchAll(/data-i18n(?:-(?:aria-label|placeholder|title))?="([^"]+)"/g);
       for (const [, key] of markers) expect(Object.hasOwn(catalogs.en, key!), key).toBe(true);

@@ -1,4 +1,3 @@
-import { videoDiagnosticsView } from './video-diagnostics-view.js';
 import {
   buildFrameFilename,
   buildMediaFilename,
@@ -282,7 +281,5 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       details.append(node('p', '', t('content.transparentFrameWebp')));
     wrapper.append(details);
   }
-  const diagnostics = videoDiagnosticsView(session);
-  if (diagnostics) wrapper.append(diagnostics);
   return wrapper;
 }

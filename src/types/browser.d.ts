@@ -32,6 +32,7 @@ interface BrowserRuntime {
 }
 
 interface BrowserDownloads {
+  cancel(downloadId: number): Promise<void>;
   download(options: { url: string; filename?: string; saveAs?: boolean }): Promise<number>;
   search(query: { id: number }): Promise<BrowserDownloadItem[]>;
   onChanged: {
@@ -72,4 +73,14 @@ declare const browser: {
     };
   };
   downloads: BrowserDownloads;
+  tabs: {
+    query(query: {
+      url?: string;
+      active?: boolean;
+      currentWindow?: boolean;
+    }): Promise<Array<{ id?: number; windowId?: number; url?: string }>>;
+    create(options: { url: string; active?: boolean }): Promise<{ id?: number; windowId?: number }>;
+    update(id: number, options: { active?: boolean; url?: string }): Promise<unknown>;
+  };
+  windows?: { update(id: number, options: { focused: boolean }): Promise<unknown> };
 };

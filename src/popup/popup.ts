@@ -1,7 +1,9 @@
 import { loadSettings, saveLanguage, watchLanguage } from '../shared/settings.js';
+import { openExportJobs } from '../core/job-client.js';
 import { isLanguagePreference, localizeDocument, t } from '../shared/i18n.js';
 
 const openSettings = document.querySelector<HTMLButtonElement>('[data-open-settings]');
+const openTasks = document.querySelector<HTMLButtonElement>('[data-open-tasks]');
 const error = document.querySelector<HTMLElement>('[data-error]');
 const language = document.querySelector<HTMLSelectElement>('[data-language]');
 let savingLanguage = false;
@@ -51,6 +53,13 @@ openSettings?.addEventListener('click', () => {
   void browser.runtime.openOptionsPage().catch((reason: unknown) => {
     showError(
       t('popup.openError', { error: reason instanceof Error ? reason.message : String(reason) }),
+    );
+  });
+});
+openTasks?.addEventListener('click', () => {
+  void openExportJobs().catch((reason: unknown) => {
+    showError(
+      t('jobs.openError', { error: reason instanceof Error ? reason.message : String(reason) }),
     );
   });
 });

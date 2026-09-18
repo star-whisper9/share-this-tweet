@@ -1,3 +1,4 @@
+import { handleExportJobMessage, initializeExportJobs } from './export-jobs.js';
 import { handleVideoPort } from './video-render.js';
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
 import type { PrepareSourcedMediaResponse } from '../shared/protocol.js';
@@ -17,8 +18,13 @@ import {
 } from '../core/storage.js';
 
 browser.runtime.onConnect?.addListener(handleVideoPort);
+void initializeExportJobs().catch((error) =>
+  console.error('Export queue initialization failed', error),
+);
 
 browser.runtime.onMessage.addListener((message: unknown) => {
+  const jobResponse = handleExportJobMessage(message);
+  if (jobResponse !== undefined) return jobResponse;
   if (!isExtensionMessage(message)) return;
   const locale = message.locale ?? getLocale();
   setLocale(locale);
@@ -239,7 +245,7 @@ const pendingDownloads = new Map<
   { resolve: () => void; reject: (error: Error) => void; locale: Locale }
 >();
 
-browser.downloads.onChanged.addListener((delta) => {
+browser.downloads?.onChanged.addListener((delta) => {
   const state = delta.state?.current;
   if (state !== 'complete' && state !== 'interrupted') return;
   settlePendingDownload(delta.id, state, delta.error?.current);

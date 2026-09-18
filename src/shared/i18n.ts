@@ -1,3 +1,4 @@
+import { zhCN as jobsZh, en as jobsEn } from './locales/jobs.js';
 import { zhCN as experimentalZh, en as experimentalEn } from './locales/experimental.js';
 import { zhCN as videoZh, en as videoEn } from './locales/video.js';
 import { zhCN as commonZh, en as commonEn } from './locales/common.js';
@@ -8,9 +9,18 @@ import { zhCN as optionsZh, en as optionsEn } from './locales/options.js';
 export const SUPPORTED_LANGUAGES = ['auto', 'zh-CN', 'en'] as const;
 export type LanguagePreference = (typeof SUPPORTED_LANGUAGES)[number];
 export type Locale = Exclude<LanguagePreference, 'auto'>;
-const zhCN = { ...experimentalZh, ...videoZh, ...commonZh, ...contentZh, ...coreZh, ...optionsZh };
+const zhCN = {
+  ...jobsZh,
+  ...experimentalZh,
+  ...videoZh,
+  ...commonZh,
+  ...contentZh,
+  ...coreZh,
+  ...optionsZh,
+};
 export type MessageKey = keyof typeof zhCN;
 const en: Record<MessageKey, string> = {
+  ...jobsEn,
   ...experimentalEn,
   ...videoEn,
   ...commonEn,

@@ -1,0 +1,314 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  --bg: #f7f9fd;
+  --surface: #ffffff;
+  --surface-soft: #f1f5fb;
+  --text: #162130;
+  --muted: #65768b;
+  --border: #d6e0ed;
+  --accent: #1877f2;
+  --danger: #b42318;
+  --success: #12815a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+}
+
+button {
+  font: inherit;
+}
+
+.tasks-page {
+  width: min(100%, 58rem);
+  margin: 0 auto;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tasks-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+.tasks-brand img {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
+}
+.tasks-brand p,
+.tasks-brand h1 {
+  margin: 0;
+}
+.tasks-brand p {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tasks-brand h1 {
+  margin-top: 0.12rem;
+  font-size: 1.35rem;
+}
+
+.tasks-subtitle {
+  margin: 1rem 0 0.65rem;
+  color: var(--muted);
+}
+.android-note,
+.tasks-error {
+  margin: 0.65rem 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+}
+.android-note {
+  border: 1px solid #9bbfe9;
+  color: #1f5eaa;
+  background: #eaf3ff;
+}
+.tasks-error {
+  border: 1px solid #f1b6af;
+  color: var(--danger);
+  background: #fff1f0;
+}
+
+.tasks-list {
+  display: grid;
+  gap: 0.75rem;
+}
+.empty-state {
+  margin: 2.5rem 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.task-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(29 57 90 / 5%);
+}
+.task-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+.task-title {
+  min-width: 0;
+}
+.task-title h2,
+.task-title p {
+  margin: 0;
+}
+.task-title h2 {
+  font-size: 1rem;
+}
+.task-author {
+  overflow: hidden;
+  margin-top: 0.25rem !important;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  color: #155a9a;
+  background: #e8f2ff;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+.status-ready,
+.status-completed {
+  color: var(--success);
+  background: #e7f7ef;
+}
+.status-failed,
+.status-cancelled,
+.status-interrupted {
+  color: var(--danger);
+  background: #fff0ef;
+}
+
+.task-meta,
+.task-message {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.task-message.error {
+  color: var(--danger);
+}
+.task-message.warning {
+  color: #986400;
+}
+
+.file-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.55rem;
+  background: var(--surface-soft);
+}
+.file-row > div:last-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.file-name {
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+}
+.file-size {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.button {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.58rem;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+  font-weight: 650;
+}
+.button:hover {
+  filter: brightness(0.94);
+}
+.button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  outline-offset: 2px;
+}
+.button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.button-secondary {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface);
+}
+.button-danger {
+  border-color: #f2c0bb;
+  color: var(--danger);
+  background: #fff7f6;
+}
+.button-small {
+  min-height: 2rem;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 34rem) {
+  .tasks-page {
+    padding: 1rem;
+  }
+  .tasks-header {
+    align-items: flex-start;
+  }
+  .task-head,
+  .file-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .status {
+    align-self: flex-start;
+  }
+  .file-row .button {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111923;
+    --surface: #182331;
+    --surface-soft: #202d3d;
+    --text: #edf4fc;
+    --muted: #afbdd0;
+    --border: #34475e;
+    --accent: #69a5ff;
+    --danger: #ffaba3;
+    --success: #80d8b5;
+  }
+  .android-note {
+    border-color: #416c9b;
+    color: #b4d3ff;
+    background: #182c43;
+  }
+  .tasks-error {
+    border-color: #823b38;
+    background: #3b2022;
+  }
+  .status {
+    color: #b4d3ff;
+    background: #1b3858;
+  }
+  .status-ready,
+  .status-completed {
+    color: #9ae1c2;
+    background: #18382c;
+  }
+  .status-failed,
+  .status-cancelled,
+  .status-interrupted {
+    color: #ffc0b9;
+    background: #422325;
+  }
+  .task-message.warning {
+    color: #f4cc77;
+  }
+  .button-secondary {
+    background: var(--surface-soft);
+  }
+  .button-danger {
+    border-color: #753d3b;
+    color: #ffc0b9;
+    background: #3c2225;
+  }
+}

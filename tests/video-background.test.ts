@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { handleVideoPort } from '../src/background/video-render.js';
+import { handleVideoPort, renderVideoInBackground } from '../src/background/video-render.js';
 import { renderFrameStrip } from '../src/core/frame.js';
 import type { VideoRenderRequest } from '../src/core/video-client.js';
 import { loadSettings } from '../src/shared/settings.js';
@@ -131,7 +131,9 @@ it('renders a frame after the real layout handshake and cleans up after output',
   );
   const blob = new Blob(['mp4'], { type: 'video/mp4' });
   worker.emit({ type: 'done', id: 'one', blob, width: 64, height: 64, duration: 1 });
-  expect(port.postMessage).toHaveBeenLastCalledWith({ type: 'done', id: 'one', blob });
+  await vi.waitFor(() =>
+    expect(port.postMessage).toHaveBeenLastCalledWith({ type: 'done', id: 'one', blob }),
+  );
   expect(worker.terminate).toHaveBeenCalledOnce();
 });
 it('rejects concurrent jobs and terminates the active worker on disconnect', async () => {
@@ -146,6 +148,37 @@ it('rejects concurrent jobs and terminates the active worker on disconnect', asy
   expect(FakeWorker.instances).toHaveLength(1);
   first.disconnect();
   expect(FakeWorker.instances[0].terminate).toHaveBeenCalledOnce();
+});
+it('returns a static-fallback result when a multi-media input crosses a limit', async () => {
+  vi.mocked(loadSettings).mockResolvedValueOnce({
+    experimentalVideo: true,
+    videoLimits: {
+      maxInputMiB: 0.000001,
+      maxDurationSeconds: 0,
+      maxOutputPixels: 0,
+      maxFrameRate: 0,
+    },
+  } as Awaited<ReturnType<typeof loadSettings>>);
+  const result = await renderVideoInBackground(
+    {
+      ...request,
+      indexes: [1, 2],
+      record: {
+        ...request.record,
+        media: [
+          request.record.media[0]!,
+          {
+            index: 2,
+            type: 'animated_gif',
+            variants: [{ mime: 'video/mp4', url: 'https://video.twimg.com/b.mp4' }],
+          },
+        ],
+      },
+    },
+    { signal: new AbortController().signal },
+  );
+  expect(result.type).toBe('fallback');
+  expect(FakeWorker.instances).toHaveLength(0);
 });
 it('rejects dynamic jobs while the experimental switch is off', async () => {
   vi.mocked(loadSettings).mockResolvedValueOnce({

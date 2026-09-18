@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="jobs.title">导出任务</title>
+    <link rel="stylesheet" href="./tasks.css" />
+  </head>
+  <body>
+    <main class="tasks-page">
+      <header class="tasks-header">
+        <div class="tasks-brand">
+          <img src="../icons/icon-48.png" alt="" />
+          <div>
+            <p data-i18n="common.brand">分享有据 · Share This Tweet</p>
+            <h1 data-i18n="jobs.title">导出任务</h1>
+          </div>
+        </div>
+        <button class="button button-secondary" type="button" data-refresh>
+          <span data-i18n="jobs.refresh">刷新</span>
+        </button>
+      </header>
+
+      <p class="tasks-subtitle" data-i18n="jobs.subtitle">
+        任务会在后台继续处理。可以关闭原推文页面。
+      </p>
+      <p class="android-note" data-android-note hidden data-i18n="jobs.androidNote">
+        请保持此任务页打开；原推文页面可以关闭。完成后点击文件开始保存。
+      </p>
+      <p class="tasks-error" data-error hidden role="alert"></p>
+      <section class="tasks-list" data-list aria-live="polite" aria-busy="true"></section>
+    </main>
+    <script src="./tasks.js"></script>
+  </body>
+</html>

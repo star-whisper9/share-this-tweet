@@ -97,7 +97,7 @@ export function actionLabel(
   state: Readonly<ActionState>,
   labels: Record<ActionStatus, string>,
 ): string {
-  return labels[state.status];
+  return state.queued ? t('jobs.queuedAction') : labels[state.status];
 }
 export interface ActionButtonOptions {
   key: string;

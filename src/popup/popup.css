@@ -109,7 +109,8 @@ body {
   white-space: nowrap;
 }
 
-.settings-button {
+.settings-button,
+.tasks-button {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -125,8 +126,21 @@ body {
 }
 
 .settings-button:hover,
-.settings-button:focus-visible {
+.settings-button:focus-visible,
+.tasks-button:focus-visible {
   background: #0d67dc;
+}
+
+.tasks-button {
+  margin-bottom: 0.55rem;
+  border: 1px solid var(--popup-border);
+  color: var(--popup-text);
+  background: var(--popup-surface);
+}
+
+.tasks-button:hover,
+.tasks-button:focus-visible {
+  background: var(--popup-accent-soft);
 }
 
 .settings-button:focus-visible {

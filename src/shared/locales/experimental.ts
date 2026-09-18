@@ -3,7 +3,7 @@ export const zhCN = {
   'experiment.title': '动态拼图与视频画框（实验性）',
   'experiment.description': '在浏览器中处理 GIF、视频与来源画框。启用后，分享面板会显示相应操作。',
   'experiment.enable': '启用动态拼图与视频画框',
-  'experiment.enableDescription': '它会使用本机 CPU，处理期间保持页面打开。',
+  'experiment.enableDescription': '它会使用本机 CPU，进度可在导出任务页查看。',
   'experiment.disabled': '动态拼图实验功能尚未启用。',
   'experiment.invalidLimits': '请填写有效的非负整数限制值。',
   'experiment.limitInput': '输入媒体总大小超过 {limit} MiB 的限制。',
@@ -12,8 +12,8 @@ export const zhCN = {
   'experiment.limitFrameRate': '帧率超过 {limit} fps 的限制。',
   'experiment.invalidEstimate': '请填写有效的画面尺寸、时长、帧率和码率。',
   'experiment.outputWarnings': '已保存媒体，请注意：{warnings}',
-  'experiment.fallbackFrame': '超过处理限制（{reason}），已保存原始媒体。',
-  'experiment.fallbackStitch': '超过处理限制（{reason}），已保存静态拼图。',
+  'experiment.fallbackFrame': '超过处理限制（{reason}），改为原媒体输出。',
+  'experiment.fallbackStitch': '超过处理限制（{reason}），改为静态拼图。',
   'experiment.limits.title': '处理限制',
   'experiment.limits.description': '超出限制时，单项动态媒体会保存原文件；拼图会保存静态图片版本。',
   'experiment.limits.presets': '限制预设',
@@ -66,7 +66,8 @@ export const en: Record<keyof typeof zhCN, string> = {
   'experiment.description':
     'Process GIFs, videos, and source frames in the browser. Enabling this adds the related actions to the share panel.',
   'experiment.enable': 'Enable animated collages and video frames',
-  'experiment.enableDescription': 'It uses your local CPU. Keep the page open while processing.',
+  'experiment.enableDescription':
+    'It uses your local CPU. Track progress on the export tasks page.',
   'experiment.disabled': 'The animated-collage experiment is not enabled.',
   'experiment.invalidLimits': 'Enter valid non-negative integer limits.',
   'experiment.limitInput': 'Total input media exceeds the {limit} MiB limit.',
@@ -76,9 +77,9 @@ export const en: Record<keyof typeof zhCN, string> = {
   'experiment.invalidEstimate': 'Enter valid dimensions, duration, frame rate, and bitrate.',
   'experiment.outputWarnings': 'Media saved. Please note: {warnings}',
   'experiment.fallbackFrame':
-    'The processing limit was exceeded ({reason}); the original media was saved.',
+    'The processing limit was exceeded ({reason}); using the original media output.',
   'experiment.fallbackStitch':
-    'The processing limit was exceeded ({reason}); a still-image collage was saved.',
+    'The processing limit was exceeded ({reason}); using a static collage.',
   'experiment.limits.title': 'Processing limits',
   'experiment.limits.description':
     'When a limit is exceeded, a single animated item saves its original; a collage saves a still-image version.',

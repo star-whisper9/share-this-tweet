@@ -4,6 +4,11 @@ const embedMp4SourceInWorker = vi.fn(
   async (blob: Blob) => new Blob([blob, 'source'], { type: 'video/mp4' }),
 );
 
+vi.mock('../src/background/export-jobs.js', () => ({
+  handleExportJobMessage: () => undefined,
+  initializeExportJobs: async () => {},
+}));
+
 vi.mock('../src/core/media-source-client.js', () => ({ embedMp4SourceInWorker }));
 
 const source = {

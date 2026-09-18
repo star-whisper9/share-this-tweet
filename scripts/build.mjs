@@ -15,6 +15,7 @@ const entries = [
   ['src/page/interceptor.ts', 'page/interceptor.js'],
   ['src/options/options.ts', 'options/options.js'],
   ['src/popup/popup.ts', 'popup/popup.js'],
+  ['src/tasks/tasks.ts', 'tasks/tasks.js'],
   ['src/workers/media-source.worker.ts', 'workers/media-source.worker.js'],
   ['src/workers/video-render.worker.ts', 'workers/video-render.worker.js'],
 ];
@@ -62,3 +63,6 @@ for (const name of ['ffmpeg-core.js', 'ffmpeg-core.wasm']) {
 }
 
 await cp(resolve(root, 'src/vendor/ffmpeg'), resolve(dist, 'vendor/ffmpeg'), { recursive: true });
+
+await cp(resolve(root, 'src/tasks/tasks.html'), resolve(dist, 'tasks/tasks.html'));
+await cp(resolve(root, 'src/tasks/tasks.css'), resolve(dist, 'tasks/tasks.css'));
