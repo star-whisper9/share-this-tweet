@@ -1,6 +1,7 @@
 import { downloadBlob } from '../core/download.js';
 import {
   cancelExportJob,
+  downloadExportJobFile,
   getExportJobDiagnostics,
   getExportJobFile,
   listExportJobs,
@@ -8,6 +9,13 @@ import {
   removeExportJob,
   retryExportJob,
 } from '../core/job-client.js';
+import {
+  fileCounts,
+  filterJobs,
+  isProcessing,
+  pendingFiles,
+  type StorageFilter,
+} from '../shared/job-list.js';
 import type { JobSummary } from '../shared/export-jobs.js';
 import { getLocale, localizeDocument, t } from '../shared/i18n.js';
 import { loadSettings, watchLanguage } from '../shared/settings.js';
@@ -15,7 +23,23 @@ import { loadSettings, watchLanguage } from '../shared/settings.js';
 const list = document.querySelector<HTMLElement>('[data-list]');
 const errorElement = document.querySelector<HTMLElement>('[data-error]');
 const refreshButton = document.querySelector<HTMLButtonElement>('[data-refresh]');
-const androidNote = document.querySelector<HTMLElement>('[data-android-note]');
+const storageFilter = document.querySelector<HTMLSelectElement>('[data-storage]')!;
+const dateFrom = document.querySelector<HTMLInputElement>('[data-from]')!;
+const dateTo = document.querySelector<HTMLInputElement>('[data-to]')!;
+const saveAll = document.querySelector<HTMLButtonElement>('[data-save-all]')!;
+const stopBatch = document.querySelector<HTMLButtonElement>('[data-stop]')!;
+const batchMessage = document.querySelector<HTMLElement>('[data-batch-message]')!;
+const expanded = new Set<string>();
+let batchRunning = false;
+let batchStopRequested = false;
+let batchStatus:
+  | {
+      key: 'jobs.batchProgress' | 'jobs.batchRequested' | 'jobs.batchSaved' | 'jobs.batchStopped';
+      count: number;
+      current: number;
+      total: number;
+    }
+  | undefined;
 const isAndroid = /\bAndroid\b/i.test(navigator.userAgent);
 const terminalStatuses = new Set<JobSummary['status']>([
   'ready',
@@ -77,7 +101,7 @@ function button(
   element.dataset.action = action;
   element.dataset.jobId = jobId;
   for (const [key, value] of Object.entries(extra)) element.dataset[key] = value;
-  if (busyJobs.has(jobId)) element.disabled = true;
+  if (action !== 'toggle' && (busyJobs.has(jobId) || batchRunning)) element.disabled = true;
   return element;
 }
 
@@ -90,32 +114,23 @@ function renderFile(job: JobSummary, file: JobSummary['files'][number]): HTMLLIE
   name.textContent = file.filename;
   const size = document.createElement('div');
   size.className = 'file-size';
-  size.textContent = `${formatBytes(file.size)} · ${file.cached ? t('jobs.cacheUntil', { time: formatCreatedAt(new Date(file.cacheExpiresAt).toISOString()) }) : t('jobs.cacheReleased')}`;
+  size.textContent = `${formatBytes(file.size)} · ${file.cached ? t('jobs.cacheUntil', { time: formatCreatedAt(new Date(file.cacheExpiresAt).toISOString()) }) : t('jobs.cacheGone')}`;
   details.append(name, size);
   row.append(details);
 
   const controls = document.createElement('div');
-  if (file.saved && !isAndroid) {
-    const state = document.createElement('span');
-    state.className = 'file-size';
-    state.textContent = t('jobs.autoSaved');
-    controls.append(state);
-  } else if (file.saved) {
-    const state = document.createElement('span');
-    state.className = 'file-size';
-    state.textContent = t('jobs.downloadInitiated');
-    controls.append(state);
-  }
-  if (file.cached)
+  const state = document.createElement('span');
+  const cached = file.cached && file.cacheExpiresAt > Date.now();
+  state.className = `file-state ${file.saved ? (isAndroid ? 'requested' : 'saved') : cached ? 'pending' : 'unavailable'}`;
+  state.textContent = file.saved
+    ? t(isAndroid ? 'jobs.downloadInitiated' : 'jobs.autoSaved')
+    : t(cached ? 'jobs.filePending' : 'jobs.fileUnavailable');
+  controls.append(state);
+  if (cached && !isProcessing(job))
     controls.append(
-      button(
-        file.saved && !isAndroid ? t('jobs.saveAgain') : t('jobs.download'),
-        'download',
-        job.id,
-        {
-          fileId: file.id,
-        },
-      ),
+      button(file.saved ? t('jobs.saveAgain') : t('jobs.download'), 'download', job.id, {
+        fileId: file.id,
+      }),
     );
   row.append(controls);
   return row;
@@ -126,47 +141,84 @@ function renderJob(job: JobSummary): HTMLElement {
   card.className = 'task-card';
   const head = document.createElement('div');
   head.className = 'task-head';
-  const title = document.createElement('div');
+  const toggle = button('', 'toggle', job.id);
+  toggle.className = 'task-toggle';
+  const isExpanded = expanded.has(job.id);
+  toggle.setAttribute('aria-expanded', String(isExpanded));
+  toggle.setAttribute('aria-controls', `details-${job.id}`);
+  const title = document.createElement('span');
   title.className = 'task-title';
-  const heading = document.createElement('h2');
-  heading.textContent = kindLabel(job.kind);
-  const author = document.createElement('p');
-  author.className = 'task-author';
-  author.textContent = job.author;
-  title.append(heading, author);
-  const status = document.createElement('span');
-  status.className = `status status-${job.status}`;
-  status.textContent = statusLabel(job.status);
-  head.append(title, status);
+  const heading = document.createElement('strong');
+  heading.textContent = `${kindLabel(job.kind)} · ${job.author}`;
+  const meta = document.createElement('span');
+  meta.className = 'task-meta';
+  meta.textContent = `${formatCreatedAt(job.createdAt)} · ${t('jobs.fileCount', { count: job.files.length })}`;
+  title.append(heading, meta);
+  const chevron = document.createElement('span');
+  chevron.className = 'task-chevron';
+  chevron.textContent = isExpanded ? '▾' : '▸';
+  chevron.setAttribute('aria-hidden', 'true');
+  toggle.append(chevron, title);
+  toggle.title = t(isExpanded ? 'jobs.collapse' : 'jobs.expand');
+  head.append(toggle);
   card.append(head);
 
-  const meta = document.createElement('p');
-  meta.className = 'task-meta';
-  meta.textContent = `${t('jobs.fileCount', { count: job.files.length })} · ${t('jobs.createdAt', { time: formatCreatedAt(job.createdAt) })}`;
-  card.append(meta);
+  const overview = document.createElement('div');
+  overview.className = 'task-overview';
+  const counts = fileCounts(job);
+  for (const [count, key, state] of [
+    [counts.pending, 'jobs.pendingCount', 'pending'],
+    [
+      counts.saved,
+      isAndroid ? 'jobs.requestedCount' : 'jobs.savedCount',
+      isAndroid ? 'requested' : 'saved',
+    ],
+    [counts.unavailable, 'jobs.unavailableCount', 'unavailable'],
+  ] as const) {
+    if (!count) continue;
+    const badge = document.createElement('span');
+    badge.className = `file-state ${state}`;
+    badge.textContent = t(key, { count });
+    overview.append(badge);
+  }
+  if (!['ready', 'completed'].includes(job.status)) {
+    const status = document.createElement('span');
+    status.className = `process-status status-${job.status}`;
+    status.textContent = statusLabel(job.status);
+    overview.append(status);
+  }
+  if (counts.pending && !isProcessing(job))
+    overview.append(button(t('jobs.saveTask', { count: counts.pending }), 'save-task', job.id));
+  card.append(overview);
+
+  const details = document.createElement('div');
+  details.id = `details-${job.id}`;
+  details.hidden = !isExpanded;
+  details.className = 'task-details';
+  card.append(details);
   if (job.progress) {
     const progress = document.createElement('p');
     progress.className = 'task-message';
     progress.textContent = t('jobs.progress', { progress: job.progress });
-    card.append(progress);
+    card.insertBefore(progress, details);
   }
   if (job.error) {
     const message = document.createElement('p');
     message.className = 'task-message error';
     message.textContent = t('jobs.error', { error: job.error });
-    card.append(message);
+    details.append(message);
   }
   for (const warning of job.warnings) {
     const message = document.createElement('p');
     message.className = 'task-message warning';
     message.textContent = t('jobs.warning', { warning });
-    card.append(message);
+    details.append(message);
   }
   if (job.files.length > 0) {
     const files = document.createElement('ul');
     files.className = 'file-list';
     for (const file of job.files) files.append(renderFile(job, file));
-    card.append(files);
+    details.append(files);
   }
 
   const actions = document.createElement('div');
@@ -182,7 +234,7 @@ function renderJob(job: JobSummary): HTMLElement {
     remove.classList.add('button-danger');
     actions.append(remove);
   }
-  if (actions.childElementCount > 0) card.append(actions);
+  if (actions.childElementCount > 0) details.append(actions);
   return card;
 }
 
@@ -198,16 +250,36 @@ function render(): void {
         }
       : undefined;
   const scrollTop = window.scrollY;
+  const invalidDates = !!dateFrom.value && !!dateTo.value && dateFrom.value > dateTo.value;
+  const visibleJobs = invalidDates
+    ? []
+    : filterJobs(jobs, {
+        storage: storageFilter.value as StorageFilter,
+        from: dateFrom.value,
+        to: dateTo.value,
+      });
   list.replaceChildren();
   list.setAttribute('aria-busy', refreshing ? 'true' : 'false');
-  if (jobs.length === 0) {
+  if (visibleJobs.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty-state';
-    empty.textContent = t('jobs.empty');
+    empty.textContent = t(
+      invalidDates ? 'jobs.dateInvalid' : jobs.length ? 'jobs.noMatches' : 'jobs.empty',
+    );
     list.append(empty);
   } else {
-    for (const job of jobs) list.append(renderJob(job));
+    for (const job of visibleJobs) list.append(renderJob(job));
   }
+  const pending = pendingFiles(jobs).length;
+  saveAll.textContent = t('jobs.saveAll', { count: pending });
+  saveAll.disabled = !pending || batchRunning || busyJobs.size > 0;
+  stopBatch.hidden = !batchRunning;
+  stopBatch.disabled = batchStopRequested;
+  batchMessage.hidden = !batchStatus;
+  batchMessage.textContent = batchStatus ? t(batchStatus.key, batchStatus) : '';
+  document.querySelector<HTMLElement>('[data-count]')!.textContent = t('jobs.taskCount', {
+    count: visibleJobs.length,
+  });
   if (errorElement) {
     errorElement.hidden = !actionError;
     errorElement.textContent = actionError ?? '';
@@ -262,12 +334,12 @@ async function saveFile(jobId: string, fileId: string): Promise<void> {
   const job = jobs.find((item) => item.id === jobId);
   const file = job?.files.find((item) => item.id === fileId);
   if (!job || !file) throw new Error(t('jobs.notFound'));
-  const blob = await getExportJobFile(jobId, fileId);
-  downloadBlob(blob, file.filename);
-  // Desktop downloads have already been handed to browser.downloads by the queue.
-  // This manual control is only an additional download. Android cannot report an
-  // OS-level save result, so record that the user initiated it from this page.
-  if (isAndroid) await markExportJobFileSaved(jobId, fileId);
+  if (isAndroid) {
+    const blob = await getExportJobFile(jobId, fileId);
+    downloadBlob(blob, file.filename);
+    // Anchor activation is only a request; Android provides no download result.
+    await markExportJobFileSaved(jobId, fileId);
+  } else await downloadExportJobFile(jobId, fileId);
 }
 
 async function saveDiagnostics(jobId: string): Promise<void> {
@@ -278,7 +350,7 @@ async function saveDiagnostics(jobId: string): Promise<void> {
 }
 
 async function performAction(action: string, jobId: string, fileId?: string): Promise<void> {
-  if (busyJobs.has(jobId)) return;
+  if (busyJobs.has(jobId) || batchRunning) return;
   busyJobs.add(jobId);
   actionError = undefined;
   render();
@@ -298,15 +370,80 @@ async function performAction(action: string, jobId: string, fileId?: string): Pr
   }
 }
 
+async function saveBatch(targetJobs: JobSummary[]): Promise<void> {
+  if (batchRunning || busyJobs.size) return;
+  const targets = pendingFiles(targetJobs);
+  if (!targets.length) return;
+  batchRunning = true;
+  batchStopRequested = false;
+  actionError = undefined;
+  let completed = 0;
+  try {
+    for (const target of targets) {
+      if (batchStopRequested) break;
+      batchStatus = {
+        key: 'jobs.batchProgress',
+        count: completed,
+        current: completed + 1,
+        total: targets.length,
+      };
+      render();
+      await saveFile(target.jobId, target.fileId);
+      completed++;
+      // Space out Android requests; the browser may still ask for each file.
+      if (isAndroid && completed < targets.length)
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    }
+    batchStatus = {
+      key: batchStopRequested
+        ? 'jobs.batchStopped'
+        : isAndroid
+          ? 'jobs.batchRequested'
+          : 'jobs.batchSaved',
+      count: completed,
+      current: completed,
+      total: targets.length,
+    };
+  } catch (reason) {
+    batchStatus = undefined;
+    actionError = t('jobs.batchFailed', { current: completed + 1, error: failureMessage(reason) });
+  } finally {
+    batchRunning = false;
+    batchStopRequested = false;
+    await refresh();
+    render();
+  }
+}
+
 list?.addEventListener('click', (event) => {
   const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
   const action = target?.dataset.action;
   const jobId = target?.dataset.jobId;
   if (!action || !jobId) return;
-  void performAction(action, jobId, target.dataset.fileId);
+  if (action === 'toggle') {
+    if (expanded.has(jobId)) expanded.delete(jobId);
+    else expanded.add(jobId);
+    render();
+  } else if (action === 'save-task') {
+    void saveBatch(jobs.filter((job) => job.id === jobId));
+  } else void performAction(action, jobId, target.dataset.fileId);
 });
 refreshButton?.addEventListener('click', () => void refresh(true));
-if (androidNote) androidNote.hidden = !isAndroid;
+for (const control of [storageFilter, dateFrom, dateTo]) control.addEventListener('change', render);
+document.querySelector('[data-clear]')?.addEventListener('click', () => {
+  storageFilter.value = 'all';
+  dateFrom.value = dateTo.value = '';
+  render();
+});
+saveAll.addEventListener('click', () => void saveBatch(jobs));
+stopBatch.addEventListener('click', () => {
+  batchStopRequested = true;
+  render();
+});
+for (const note of Array.from(document.querySelectorAll<HTMLElement>('[data-android-note]')))
+  note.hidden = !isAndroid;
+if (isAndroid)
+  document.querySelector<HTMLElement>('[data-saved-filter]')!.dataset.i18n = 'jobs.filterRequested';
 
 const stopWatchingLanguage = watchLanguage(() => {
   localizeDocument();

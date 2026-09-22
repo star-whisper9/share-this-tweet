@@ -21,13 +21,45 @@
         </button>
       </header>
 
-      <p class="tasks-subtitle" data-i18n="jobs.subtitle">
-        任务会在后台继续处理。可以关闭原推文页面。
-      </p>
-      <p class="android-note" data-android-note hidden data-i18n="jobs.androidNote">
-        请保持此任务页打开；原推文页面可以关闭。完成后点击文件开始保存。
-      </p>
-      <p class="tasks-subtitle" data-i18n="jobs.retention"></p>
+      <p class="android-brief" data-android-note hidden data-i18n="jobs.androidBrief"></p>
+      <details class="tasks-help">
+        <summary data-i18n="jobs.help"></summary>
+        <p data-i18n="jobs.subtitle"></p>
+        <p data-android-note hidden data-i18n="jobs.androidBatch"></p>
+        <p data-i18n="jobs.retention"></p>
+      </details>
+      <div class="filters">
+        <label class="storage-filter"
+          ><span data-i18n="jobs.filterStorage"></span>
+          <select data-storage>
+            <option value="all" data-i18n="jobs.filterAll"></option>
+            <option value="pending" data-i18n="jobs.filterPending"></option>
+            <option value="saved" data-saved-filter data-i18n="jobs.filterSaved"></option>
+            <option value="unavailable" data-i18n="jobs.filterUnavailable"></option>
+            <option value="processing" data-i18n="jobs.filterProcessing"></option>
+          </select>
+        </label>
+        <label><span data-i18n="jobs.filterFrom"></span><input type="date" data-from /></label>
+        <label><span data-i18n="jobs.filterTo"></span><input type="date" data-to /></label>
+        <button
+          type="button"
+          class="button button-secondary"
+          data-clear
+          data-i18n="jobs.clearFilters"
+        ></button>
+      </div>
+      <div class="batch-toolbar">
+        <button type="button" class="button" data-save-all disabled></button>
+        <button
+          type="button"
+          class="button button-secondary"
+          data-stop
+          hidden
+          data-i18n="jobs.stopBatch"
+        ></button>
+        <span class="task-count" data-count></span>
+      </div>
+      <p class="batch-message" data-batch-message role="status" hidden></p>
       <p class="tasks-error" data-error hidden role="alert"></p>
       <section class="tasks-list" data-list aria-live="polite" aria-busy="true"></section>
     </main>

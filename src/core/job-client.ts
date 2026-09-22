@@ -60,3 +60,7 @@ export async function getExportJobDiagnostics(
     throw new Error(t('jobs.invalidResponse'));
   return result.diagnostics as VideoDiagnosticsReport;
 }
+
+export async function downloadExportJobFile(id: string, fileId: string): Promise<void> {
+  await request({ type: 'export-job-download', id, fileId });
+}

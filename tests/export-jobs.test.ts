@@ -153,6 +153,72 @@ afterEach(() => {
 });
 
 describe('durable export queue', () => {
+  it('reuses an existing Android task tab without focusing, but explicitly opening focuses it', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Android' });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 17, windowId: 3 }]);
+    const queue = await import('../src/background/export-jobs.js');
+    await queue.handleExportJobMessage({ type: 'export-job-enqueue', request: request('one') });
+    await vi.waitFor(() => expect(mocks.jobs.get('one')?.summary.status).toBe('ready'));
+    expect(browser.tabs.create).not.toHaveBeenCalled();
+    expect(browser.tabs.update).not.toHaveBeenCalled();
+    await queue.handleExportJobMessage({ type: 'export-job-open' });
+    expect(browser.tabs.update).toHaveBeenCalledWith(17, { active: true });
+  });
+
+  it('lists newly enqueued tasks ahead of loaded history', async () => {
+    const old = request('old');
+    mocks.jobs.set('old', {
+      id: 'old',
+      request: old,
+      files: [],
+      summary: {
+        id: 'old',
+        kind: 'media',
+        tweetId: '42',
+        author: 'Alice',
+        createdAt: new Date(Date.now() - 1000).toISOString(),
+        status: 'completed',
+        warnings: [],
+        files: [],
+        hasDiagnostics: false,
+      },
+    });
+    const queue = await import('../src/background/export-jobs.js');
+    await queue.handleExportJobMessage({ type: 'export-job-enqueue', request: request('new') });
+    await vi.waitFor(() => expect(mocks.jobs.get('new')?.summary.status).toBe('completed'));
+    expect((await summaries()).jobs.map((job) => job.id)).toEqual(['new', 'old']);
+  });
+
+  it('manually retries a cached desktop file and releases it only on download completion', async () => {
+    search.mockResolvedValueOnce([{ id: 9, state: 'interrupted' }]);
+    const queue = await import('../src/background/export-jobs.js');
+    await queue.handleExportJobMessage({ type: 'export-job-enqueue', request: request('one') });
+    await vi.waitFor(() => expect(mocks.jobs.get('one')?.summary.status).toBe('failed'));
+    expect(mocks.jobs.get('one')?.files[0]).toMatchObject({ saved: false, cached: true });
+    search.mockResolvedValue([{ id: 9, state: 'in_progress' }]);
+    const saving = queue.handleExportJobMessage({
+      type: 'export-job-download',
+      id: 'one',
+      fileId: 'one:media:1',
+    });
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(2));
+    expect(mocks.jobs.get('one')?.files[0].saved).toBe(false);
+    await expect(
+      queue.handleExportJobMessage({ type: 'export-job-remove', id: 'one' }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(
+      queue.handleExportJobMessage({
+        type: 'export-job-download',
+        id: 'one',
+        fileId: 'one:media:1',
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    downloadsChanged({ id: 9, state: { current: 'complete' } });
+    await expect(saving).resolves.toEqual({ ok: true });
+    expect(mocks.jobs.get('one')?.files[0]).toMatchObject({ saved: true, cached: false });
+    expect(mocks.blobs.has('one:media:1')).toBe(false);
+  });
+
   it('acknowledges a persisted enqueue without waiting for rendering', async () => {
     let release!: () => void;
     const rendering = new Promise<void>((resolve) => (release = resolve));

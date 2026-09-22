@@ -1,3 +1,4 @@
+import { newestJobsFirst } from '../shared/job-list.js';
 import { fileCacheDeadline, JOB_RETENTION } from '../shared/job-retention.js';
 import { renderExportJob } from '../core/job-renderer.js';
 import {
@@ -29,6 +30,7 @@ type ExportJobMessage =
   | { type: 'export-job-remove'; id: unknown }
   | { type: 'export-job-file'; id: unknown; fileId: unknown }
   | { type: 'export-job-diagnostics'; id: unknown }
+  | { type: 'export-job-download'; id: unknown; fileId: unknown }
   | { type: 'export-job-file-saved'; id: unknown; fileId: unknown }
   | { type: 'export-job-open' };
 
@@ -93,9 +95,9 @@ function parseMessage(value: unknown): ExportJobMessage | undefined {
       id: value.id,
     } as ExportJobMessage;
   }
-  if (['export-job-file', 'export-job-file-saved'].includes(value.type)) {
+  if (['export-job-file', 'export-job-file-saved', 'export-job-download'].includes(value.type)) {
     return {
-      type: value.type as 'export-job-file' | 'export-job-file-saved',
+      type: value.type as 'export-job-file' | 'export-job-file-saved' | 'export-job-download',
       id: value.id,
       fileId: value.fileId,
     };
@@ -578,7 +580,7 @@ async function enqueue(request: ExportJobRequest): Promise<JobResponse> {
   jobs.set(job.id, job);
   if (isAndroid()) {
     try {
-      await open();
+      await open(false);
     } catch (error) {
       jobs.delete(job.id);
       await deleteExportJob(job.id);
@@ -715,16 +717,48 @@ async function fileSaved(id: string, fileId: string): Promise<JobResponse> {
   }
 }
 
-async function open(): Promise<JobResponse> {
-  const url = browser.runtime.getURL('tasks/tasks.html');
-  const tabs = await browser.tabs.query({ url });
-  const existing = tabs[0];
-  if (existing?.id !== undefined) {
-    await browser.tabs.update(existing.id, { active: true });
-    if (existing.windowId !== undefined)
-      await browser.windows?.update(existing.windowId, { focused: true });
-  } else await browser.tabs.create({ url, active: true });
-  return { ok: true };
+/** Reuse the queue's confirmed-download path for cached desktop outputs. */
+async function saveDesktopFile(id: string, fileId: string): Promise<JobResponse> {
+  await initializeExportJobs();
+  const job = jobs.get(id);
+  if (!job) return { ok: false, error: t('jobs.notFound') };
+  if (isAndroid()) return { ok: false, error: t('jobs.invalidRequest') };
+  if (controllers.has(id) || ['queued', 'running'].includes(job.summary.status))
+    return { ok: false, error: t('jobs.busy') };
+  const controller = new AbortController();
+  controllers.set(id, controller);
+  try {
+    const output = job.files.find((item) => item.id === fileId);
+    if (!output) throw new Error(t('jobs.fileNotFound'));
+    if (!output.cached || output.cacheExpiresAt <= Date.now())
+      throw new Error(t('jobs.cacheReleased'));
+    const blob = await getExportJobBlob(fileId);
+    if (!blob) throw new Error(t('jobs.fileNotFound'));
+    await downloadDesktopFile(id, { ...output, blob }, controller.signal, job.request.locale);
+    await markFileSaved(id, fileId);
+    return { ok: true };
+  } finally {
+    controllers.delete(id);
+  }
+}
+
+// Serialize tab creation so simultaneous submissions cannot open duplicate pages.
+let opening = Promise.resolve();
+function open(focus = true): Promise<JobResponse> {
+  const operation = opening.then(async () => {
+    const url = browser.runtime.getURL('tasks/tasks.html');
+    const tabs = await browser.tabs.query({ url });
+    const existing = tabs[0];
+    if (existing?.id !== undefined) {
+      if (focus) {
+        await browser.tabs.update(existing.id, { active: true });
+        if (existing.windowId !== undefined)
+          await browser.windows?.update(existing.windowId, { focused: true });
+      }
+    } else await browser.tabs.create({ url, active: true });
+  });
+  opening = operation.catch(() => undefined);
+  return operation.then(() => ({ ok: true }));
 }
 
 /** Handle only job protocol messages; background.ts keeps all existing messages unchanged. */
@@ -738,7 +772,10 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
   }
   if (parsed.type === 'export-job-list')
     return cleanupExportJobs()
-      .then(() => ({ ok: true, jobs: Array.from(jobs.values()).map(toSummary) }))
+      .then(() => ({
+        ok: true,
+        jobs: Array.from(jobs.values()).map(toSummary).sort(newestJobsFirst),
+      }))
       .catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-open')
     return open().catch((error) => ({ ok: false, error: messageError(error) }));
@@ -754,6 +791,11 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
   if (!isId(parsed.fileId)) return Promise.resolve({ ok: false, error: t('jobs.invalidFileId') });
   if (parsed.type === 'export-job-file')
     return file(parsed.id, parsed.fileId).catch((error) => ({
+      ok: false,
+      error: messageError(error),
+    }));
+  if (parsed.type === 'export-job-download')
+    return saveDesktopFile(parsed.id, parsed.fileId).catch((error) => ({
       ok: false,
       error: messageError(error),
     }));
