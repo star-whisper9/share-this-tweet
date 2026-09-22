@@ -205,7 +205,6 @@ button {
   .tasks-header {
     align-items: flex-start;
   }
-  .task-head,
   .file-row {
     align-items: stretch;
     flex-direction: column;
@@ -308,10 +307,13 @@ button {
   margin-left: auto;
 }
 .task-card {
+  cursor: pointer;
   padding: 0.8rem;
 }
 .task-toggle {
-  width: 100%;
+  flex: 0 0 2.75rem;
+  min-height: 2.75rem;
+  justify-content: center;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -326,9 +328,16 @@ button {
   display: grid;
   gap: 0.25rem;
 }
-.task-title strong {
+.task-source {
   overflow-wrap: anywhere;
+  color: var(--accent);
   font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.task-source:hover {
+  text-decoration-thickness: 2px;
 }
 .task-meta {
   margin: 0;
@@ -388,6 +397,7 @@ button {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.task-source:focus-visible,
 .task-toggle:focus-visible,
 summary:focus-visible,
 select:focus-visible,

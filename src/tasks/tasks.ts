@@ -139,6 +139,7 @@ function renderFile(job: JobSummary, file: JobSummary['files'][number]): HTMLLIE
 function renderJob(job: JobSummary): HTMLElement {
   const card = document.createElement('article');
   card.className = 'task-card';
+  card.dataset.jobId = job.id;
   const head = document.createElement('div');
   head.className = 'task-head';
   const toggle = button('', 'toggle', job.id);
@@ -148,7 +149,13 @@ function renderJob(job: JobSummary): HTMLElement {
   toggle.setAttribute('aria-controls', `details-${job.id}`);
   const title = document.createElement('span');
   title.className = 'task-title';
-  const heading = document.createElement('strong');
+  const heading = document.createElement('a');
+  heading.className = 'task-source';
+  heading.href = `https://x.com/i/status/${encodeURIComponent(job.tweetId)}`;
+  heading.target = '_blank';
+  heading.rel = 'noopener noreferrer';
+  heading.dataset.action = 'source';
+  heading.dataset.jobId = job.id;
   heading.textContent = `${kindLabel(job.kind)} · ${job.author}`;
   const meta = document.createElement('span');
   meta.className = 'task-meta';
@@ -158,9 +165,10 @@ function renderJob(job: JobSummary): HTMLElement {
   chevron.className = 'task-chevron';
   chevron.textContent = isExpanded ? '▾' : '▸';
   chevron.setAttribute('aria-hidden', 'true');
-  toggle.append(chevron, title);
+  toggle.append(chevron);
   toggle.title = t(isExpanded ? 'jobs.collapse' : 'jobs.expand');
-  head.append(toggle);
+  toggle.setAttribute('aria-label', toggle.title);
+  head.append(title, toggle);
   card.append(head);
 
   const overview = document.createElement('div');
@@ -242,7 +250,7 @@ function render(): void {
   if (!list) return;
   const focused = document.activeElement;
   const focusedButton =
-    focused instanceof HTMLButtonElement && list.contains(focused)
+    focused instanceof HTMLElement && !!focused.dataset.action && list.contains(focused)
       ? {
           action: focused.dataset.action,
           jobId: focused.dataset.jobId,
@@ -287,7 +295,7 @@ function render(): void {
   if (refreshButton) refreshButton.disabled = refreshing;
   if (focusedButton?.action && focusedButton.jobId) {
     const replacement = Array.from(
-      list.querySelectorAll<HTMLButtonElement>('button[data-action][data-job-id]'),
+      list.querySelectorAll<HTMLElement>('[data-action][data-job-id]'),
     ).find(
       (button) =>
         button.dataset.action === focusedButton.action &&
@@ -415,18 +423,29 @@ async function saveBatch(targetJobs: JobSummary[]): Promise<void> {
   }
 }
 
+function toggleJob(jobId: string): void {
+  if (expanded.has(jobId)) expanded.delete(jobId);
+  else expanded.add(jobId);
+  render();
+}
+
 list?.addEventListener('click', (event) => {
-  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
-  const action = target?.dataset.action;
-  const jobId = target?.dataset.jobId;
-  if (!action || !jobId) return;
-  if (action === 'toggle') {
-    if (expanded.has(jobId)) expanded.delete(jobId);
-    else expanded.add(jobId);
-    render();
-  } else if (action === 'save-task') {
-    void saveBatch(jobs.filter((job) => job.id === jobId));
-  } else void performAction(action, jobId, target.dataset.fileId);
+  if (!(event.target instanceof Element)) return;
+  // Native links retain new-tab, context-menu and keyboard behavior.
+  if (event.target.closest('a, input, select, textarea')) return;
+  const target = event.target.closest<HTMLButtonElement>('button');
+  if (target) {
+    const { action, jobId, fileId } = target.dataset;
+    if (target.disabled || !action || !jobId) return;
+    if (action === 'toggle') toggleJob(jobId);
+    else if (action === 'save-task') void saveBatch(jobs.filter((job) => job.id === jobId));
+    else void performAction(action, jobId, fileId);
+    return;
+  }
+  // Selecting filenames or diagnostic text should not collapse the card.
+  if (window.getSelection()?.toString()) return;
+  const card = event.target.closest<HTMLElement>('.task-card');
+  if (card?.dataset.jobId) toggleJob(card.dataset.jobId);
 });
 refreshButton?.addEventListener('click', () => void refresh(true));
 for (const control of [storageFilter, dateFrom, dateTo]) control.addEventListener('change', render);
