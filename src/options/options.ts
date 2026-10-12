@@ -1,8 +1,8 @@
-import { isGifLimits, type GifLimits } from '../shared/gif-experiment.js';
+import { mountExperimentControls } from './experiments.js';
+import { mountRecordBrowser } from './records.js';
+import { mountSourceReader } from './source-reader.js';
 import { IMAGE_PALETTES, detectImageTheme } from '../core/image-theme.js';
-import { readMediaSourceInWorker } from '../core/media-source-client.js';
 import { mountTemplateGuide } from './template-guide.js';
-import { recordPreviewText } from './record-preview.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
 import {
@@ -10,17 +10,8 @@ import {
   getDefaultTextTemplate,
   isDefaultTextTemplate,
 } from '../core/text-export.js';
-import {
-  clearStoredRecords,
-  deleteStoredTweetRecord,
-  exportStorageRecords,
-  importStorageRecords,
-  listStorageRecords,
-} from '../core/storage-client.js';
 import type { FrameOrientation } from '../core/frame.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
-import type { OutputRecord, StorageArchive, StoredTweetRecord } from '../shared/storage-model.js';
-import type { MediaSourceMetadata } from '../shared/media-source.js';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -30,11 +21,6 @@ import {
   type ExtensionSettings,
 } from '../shared/settings.js';
 import { getLocale, localizeDocument, t, type LanguagePreference } from '../shared/i18n.js';
-import {
-  estimateVideoProcessing,
-  VIDEO_LIMIT_PRESETS,
-  type VideoLimits,
-} from '../shared/video-experiment.js';
 
 type SettingKey = 'filenameTemplate' | 'frameTemplate' | 'textTemplate';
 type Tab = 'frame' | 'filename' | 'text' | 'records' | 'experiment';
@@ -51,19 +37,6 @@ const fieldTabs: Record<SettingKey, SettingsTab> = {
   textTemplate: 'text',
 };
 const frameOrientations: FrameOrientation[] = ['top', 'bottom'];
-const videoLimitKeys = [
-  'maxInputMiB',
-  'maxDurationSeconds',
-  'maxOutputPixels',
-  'maxFrameRate',
-] as const satisfies ReadonlyArray<keyof VideoLimits>;
-const gifLimitKeys = ['maxInputMiB', 'maxDurationSeconds', 'maxSourcePixels'] as const;
-const calculatorPresets = {
-  '480p': { width: 854, height: 480, durationSeconds: 140, frameRate: 30, bitrateMbps: 1.25 },
-  '720p': { width: 1280, height: 720, durationSeconds: 140, frameRate: 30, bitrateMbps: 2.5 },
-  '1080p': { width: 1920, height: 1080, durationSeconds: 140, frameRate: 30, bitrateMbps: 5 },
-  long1080p: { width: 1920, height: 1080, durationSeconds: 600, frameRate: 30, bitrateMbps: 5 },
-} as const;
 const form = document.querySelector<HTMLFormElement>('[data-settings-form]');
 const status = document.querySelector<HTMLOutputElement>('[data-status]');
 const editable = document.querySelector<HTMLFieldSetElement>('[data-editable]');
@@ -75,65 +48,12 @@ const inputs = {
   frameTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="frameTemplate"]'),
   textTemplate: document.querySelector<HTMLTextAreaElement>('[data-setting="textTemplate"]'),
 };
-const experimentalVideoInput = document.querySelector<HTMLInputElement>(
-  '[data-experimental-video]',
-);
-const experimentalGifInput = document.querySelector<HTMLInputElement>('[data-experimental-gif]');
-const gifSettings = document.querySelector<HTMLElement>('[data-gif-settings]');
-const gifLimitsError = document.querySelector<HTMLElement>('[data-gif-limits-error]');
-const gifLimitInputs: Record<keyof GifLimits, HTMLInputElement | null> = {
-  maxInputMiB: document.querySelector<HTMLInputElement>('[data-gif-limit="maxInputMiB"]'),
-  maxDurationSeconds: document.querySelector<HTMLInputElement>(
-    '[data-gif-limit="maxDurationSeconds"]',
-  ),
-  maxSourcePixels: document.querySelector<HTMLInputElement>('[data-gif-limit="maxSourcePixels"]'),
-};
-const experimentSettings = document.querySelector<HTMLElement>('[data-experiment-settings]');
-const experimentLimitsError = document.querySelector<HTMLElement>('[data-experiment-limits-error]');
-const videoLimitInputs: Record<keyof VideoLimits, HTMLInputElement | null> = {
-  maxInputMiB: document.querySelector<HTMLInputElement>('[data-video-limit="maxInputMiB"]'),
-  maxDurationSeconds: document.querySelector<HTMLInputElement>(
-    '[data-video-limit="maxDurationSeconds"]',
-  ),
-  maxOutputPixels: document.querySelector<HTMLInputElement>('[data-video-limit="maxOutputPixels"]'),
-  maxFrameRate: document.querySelector<HTMLInputElement>('[data-video-limit="maxFrameRate"]'),
-};
-const calculatorInputs = {
-  width: document.querySelector<HTMLInputElement>('[data-calculator="width"]'),
-  height: document.querySelector<HTMLInputElement>('[data-calculator="height"]'),
-  durationSeconds: document.querySelector<HTMLInputElement>('[data-calculator="durationSeconds"]'),
-  frameRate: document.querySelector<HTMLInputElement>('[data-calculator="frameRate"]'),
-  bitrateMbps: document.querySelector<HTMLInputElement>('[data-calculator="bitrateMbps"]'),
-};
-const videoEstimate = document.querySelector<HTMLOutputElement>('[data-video-estimate]');
 const previews = {
   filename: document.querySelector<HTMLElement>('[data-preview="filename"]'),
   frame: document.querySelector<HTMLElement>('[data-preview="frame"]'),
   text: document.querySelector<HTMLElement>('[data-preview="text"]'),
 };
-const recordSearch = document.querySelector<HTMLInputElement>('[data-record-search]');
-const recordList = document.querySelector<HTMLElement>('[data-record-list]');
-const recordSummary = document.querySelector<HTMLElement>('[data-record-summary]');
-const recordEmpty = document.querySelector<HTMLElement>('[data-record-empty]');
-const recordStatus = document.querySelector<HTMLOutputElement>('[data-record-status]');
-const recordDetail = document.querySelector<HTMLElement>('[data-record-detail]');
-const recordDetailEmpty = document.querySelector<HTMLElement>('[data-record-detail-empty]');
-const recordImport = document.querySelector<HTMLInputElement>('[data-record-import]');
-const sourceMediaInput = document.querySelector<HTMLInputElement>('[data-source-media-input]');
-const sourceMediaDrop = document.querySelector<HTMLElement>('[data-source-media-drop]');
-const sourceMediaStatus = document.querySelector<HTMLOutputElement>('[data-source-media-status]');
-const sourceMediaResult = document.querySelector<HTMLElement>('[data-source-media-result]');
 const languageSelect = document.querySelector<HTMLSelectElement>('[data-language]');
-let storedTweetRecords: StoredTweetRecord[] = [];
-let storedOutputRecords: OutputRecord[] = [];
-let selectedRecordId = '';
-let recordsLoading = false;
-let recordsLoaded = false;
-let sourceReadController: AbortController | undefined;
-let displayedSource: { source: MediaSourceMetadata; filename: string } | undefined;
-// The reader only inspects bounded metadata in its Worker, so it can accept
-// larger local files than the background network-download path buffers.
-const MAX_LOCAL_SOURCE_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 function sampleRecordForLocale(): TweetRecord {
   return {
     tweetId: '1234567890',
@@ -230,72 +150,17 @@ let saving = false;
 let languageSaving = false;
 let dirty = false;
 let invalidFields: SettingKey[] = [];
+const recordBrowser = mountRecordBrowser();
+const sourceReader = mountSourceReader();
+const experiments = mountExperimentControls({
+  editable: () => ready && !saving,
+  changed: updateDraft,
+  baseline: () => baseline,
+});
 
 function setStatus(state: string, message: string): void {
   if (form) form.dataset.state = state;
   if (status) status.textContent = message;
-}
-function readVideoLimits(): VideoLimits {
-  const read = (input: HTMLInputElement | null): number =>
-    input?.value.trim() === '' ? Number.NaN : Number(input?.value);
-  return {
-    maxInputMiB: read(videoLimitInputs.maxInputMiB),
-    maxDurationSeconds: read(videoLimitInputs.maxDurationSeconds),
-    maxOutputPixels: read(videoLimitInputs.maxOutputPixels),
-    maxFrameRate: read(videoLimitInputs.maxFrameRate),
-  };
-}
-function sameVideoLimits(left: VideoLimits, right: VideoLimits): boolean {
-  return videoLimitKeys.every((key) => left[key] === right[key]);
-}
-function validVideoLimits(limits: VideoLimits): boolean {
-  return videoLimitKeys.every((key) => Number.isSafeInteger(limits[key]) && limits[key] >= 0);
-}
-function readGifLimits(): GifLimits {
-  const read = (input: HTMLInputElement | null): number =>
-    input?.value.trim() === '' ? Number.NaN : Number(input?.value);
-  return {
-    maxInputMiB: read(gifLimitInputs.maxInputMiB),
-    maxDurationSeconds: read(gifLimitInputs.maxDurationSeconds),
-    maxSourcePixels: read(gifLimitInputs.maxSourcePixels),
-  };
-}
-function writeGifLimits(limits: GifLimits): void {
-  for (const key of gifLimitKeys) {
-    const input = gifLimitInputs[key];
-    if (input) input.value = String(limits[key]);
-  }
-}
-function setGifEnabled(enabled: boolean): void {
-  if (experimentalGifInput) experimentalGifInput.checked = enabled;
-  if (gifSettings) gifSettings.hidden = !enabled;
-}
-function validateExperimentSettings(settings: ExtensionSettings): boolean {
-  const gifValid = isGifLimits(settings.gifLimits);
-  if (gifLimitsError) gifLimitsError.textContent = gifValid ? '' : t('gif.invalidLimits');
-  for (const key of gifLimitKeys)
-    gifLimitInputs[key]?.setAttribute('aria-invalid', String(!gifValid));
-  if (!settings.experimentalVideo) {
-    if (experimentLimitsError) experimentLimitsError.textContent = '';
-    for (const key of videoLimitKeys) videoLimitInputs[key]?.setAttribute('aria-invalid', 'false');
-    return gifValid;
-  }
-  const valid = validVideoLimits(settings.videoLimits);
-  if (experimentLimitsError)
-    experimentLimitsError.textContent = valid ? '' : t('experiment.invalidLimits');
-  for (const key of videoLimitKeys)
-    videoLimitInputs[key]?.setAttribute('aria-invalid', String(!valid));
-  return valid && gifValid;
-}
-function setExperimentEnabled(enabled: boolean): void {
-  if (experimentalVideoInput) experimentalVideoInput.checked = enabled;
-  if (experimentSettings) experimentSettings.hidden = !enabled;
-}
-function writeVideoLimits(limits: VideoLimits): void {
-  for (const key of videoLimitKeys) {
-    const input = videoLimitInputs[key];
-    if (input) input.value = String(limits[key]);
-  }
 }
 function readSettings(): ExtensionSettings {
   const selectedOrientation = document.querySelector<HTMLButtonElement>(
@@ -303,10 +168,7 @@ function readSettings(): ExtensionSettings {
   )?.dataset.frameOrientation;
   return {
     language: (languageSelect?.value as LanguagePreference) ?? baseline.language,
-    experimentalGif: experimentalGifInput?.checked ?? DEFAULT_SETTINGS.experimentalGif,
-    gifLimits: readGifLimits(),
-    experimentalVideo: experimentalVideoInput?.checked ?? DEFAULT_SETTINGS.experimentalVideo,
-    videoLimits: readVideoLimits(),
+    ...experiments.read(),
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
     frameTemplate: inputs.frameTemplate?.value ?? DEFAULT_SETTINGS.frameTemplate,
     frameOrientation: frameOrientations.includes(selectedOrientation as FrameOrientation)
@@ -329,7 +191,7 @@ function setFrameOrientation(orientation: FrameOrientation): void {
 }
 function activateTab(tab: Tab, focus = false): void {
   if (form) form.dataset.activeTab = tab;
-  if (tab === 'records' && !recordsLoaded) void loadRecords();
+  if (tab === 'records') recordBrowser.ensureLoaded();
   for (const button of Array.from(
     document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'),
   )) {
@@ -398,101 +260,17 @@ function updatePresetSelection(settings: ExtensionSettings): void {
     });
   }
 }
-function videoPresetLabel(id: (typeof VIDEO_LIMIT_PRESETS)[number]['id']): string {
-  switch (id) {
-    case 'cautious':
-      return t('experiment.preset.cautious');
-    case 'standard':
-      return t('experiment.preset.standard');
-    case 'hd':
-      return t('experiment.preset.hd');
-    case 'unlimited':
-      return t('experiment.preset.unlimited');
-  }
-}
-function updateVideoPresetSelection(limits: VideoLimits): void {
-  document.querySelectorAll<HTMLButtonElement>('[data-video-preset]').forEach((button) => {
-    const preset = VIDEO_LIMIT_PRESETS.find((item) => item.id === button.dataset.videoPreset);
-    button.setAttribute(
-      'aria-pressed',
-      String(Boolean(preset && sameVideoLimits(limits, preset.limits))),
-    );
-  });
-}
-function buildVideoControls(): void {
-  const container = document.querySelector<HTMLElement>('[data-video-presets]');
-  if (!container) return;
-  container.replaceChildren();
-  for (const preset of VIDEO_LIMIT_PRESETS) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.videoPreset = preset.id;
-    button.setAttribute('aria-pressed', 'false');
-    button.textContent = videoPresetLabel(preset.id);
-    button.addEventListener('click', () => {
-      if (!ready || saving) return;
-      writeVideoLimits(preset.limits);
-      updateDraft();
-    });
-    container.append(button);
-  }
-  updateVideoPresetSelection(readVideoLimits());
-}
-function formatEstimateNumber(value: number): string {
-  return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(value);
-}
-function updateCalculatorPresetSelection(id?: keyof typeof calculatorPresets): void {
-  document
-    .querySelectorAll<HTMLButtonElement>('[data-calculator-preset]')
-    .forEach((button) =>
-      button.setAttribute('aria-pressed', String(button.dataset.calculatorPreset === id)),
-    );
-}
-function updateVideoEstimate(): void {
-  const input = {
-    width: Number(calculatorInputs.width?.value),
-    height: Number(calculatorInputs.height?.value),
-    durationSeconds: Number(calculatorInputs.durationSeconds?.value),
-    frameRate: Number(calculatorInputs.frameRate?.value),
-    bitrateMbps: Number(calculatorInputs.bitrateMbps?.value),
-  };
-  try {
-    const estimate = estimateVideoProcessing(input);
-    if (videoEstimate)
-      videoEstimate.textContent = t('experiment.calculator.result', {
-        min: formatEstimateNumber(Math.ceil(estimate.minSeconds)),
-        max: formatEstimateNumber(Math.ceil(estimate.maxSeconds)),
-        input: formatEstimateNumber(estimate.inputMiB),
-      });
-  } catch (error) {
-    if (videoEstimate)
-      videoEstimate.textContent =
-        error instanceof Error ? error.message : t('experiment.invalidEstimate');
-  }
-}
-function applyCalculatorPreset(id: keyof typeof calculatorPresets): void {
-  const preset = calculatorPresets[id];
-  for (const [key, value] of Object.entries(preset)) {
-    const input = calculatorInputs[key as keyof typeof calculatorInputs];
-    if (input) input.value = String(value);
-  }
-  updateCalculatorPresetSelection(id);
-  updateVideoEstimate();
-}
 function updateDraft(announce = true): void {
   for (const key of keys) inputs[key]?.dispatchEvent(new Event('templatechange'));
   const settings = readSettings();
-  const valid = validateAndPreview(settings) && validateExperimentSettings(settings);
+  const valid = validateAndPreview(settings) && experiments.validate(settings);
   dirty =
     keys.some((key) => settings[key] !== baseline[key]) ||
     settings.frameOrientation !== baseline.frameOrientation ||
     settings.stitchStyle !== baseline.stitchStyle ||
-    settings.experimentalGif !== baseline.experimentalGif ||
-    gifLimitKeys.some((key) => settings.gifLimits[key] !== baseline.gifLimits[key]) ||
-    settings.experimentalVideo !== baseline.experimentalVideo ||
-    !sameVideoLimits(settings.videoLimits, baseline.videoLimits);
+    experiments.differs(settings, baseline);
   updatePresetSelection(settings);
-  updateVideoPresetSelection(settings.videoLimits);
+  experiments.updateSelection(settings);
   // Keep Save enabled for invalid drafts: submitting reveals and focuses the
   // first invalid field even if it is currently in another tab.
   if (submit) submit.disabled = !ready || saving || languageSaving || !dirty;
@@ -505,10 +283,7 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
-  setGifEnabled(settings.experimentalGif);
-  writeGifLimits(settings.gifLimits);
-  setExperimentEnabled(settings.experimentalVideo);
-  writeVideoLimits(settings.videoLimits);
+  experiments.write(settings);
   if (languageSelect) languageSelect.value = settings.language;
   for (const [attribute, value] of [['data-stitch-style', settings.stitchStyle]]) {
     for (const button of Array.from(document.querySelectorAll(`[${attribute}]`)))
@@ -521,313 +296,6 @@ function openEditor(name: SettingKey, focus = true): void {
   const editor = document.querySelector<HTMLDetailsElement>(`[data-editor="${name}"]`);
   if (editor) editor.open = true;
   if (focus) inputs[name]?.focus();
-}
-
-function setRecordStatus(message: string): void {
-  if (recordStatus) recordStatus.textContent = message;
-}
-
-function setSourceMediaStatus(message: string): void {
-  if (sourceMediaStatus) sourceMediaStatus.textContent = message;
-}
-
-function verifiedSourceUrl(source: MediaSourceMetadata): string {
-  const url = new URL(source.tweetUrl);
-  if (
-    url.protocol !== 'https:' ||
-    url.hostname !== 'x.com' ||
-    url.port ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !new RegExp(`^/(?:[A-Za-z0-9_]{1,15}|i)/status/${source.tweetId}$`).test(url.pathname)
-  )
-    throw new Error(t('options.records.invalidUrl'));
-  return url.href;
-}
-
-function renderSourceMedia(source: MediaSourceMetadata, filename: string): void {
-  displayedSource = { source, filename };
-  const update = (selector: string, value: string): void => {
-    const element = sourceMediaResult?.querySelector<HTMLElement>(selector);
-    if (element) element.textContent = value;
-  };
-  update('[data-source-file]', filename);
-  update('[data-source-publisher]', `${source.publisher.name} · ${source.publisher.handle}`);
-  update('[data-source-tweet-id]', source.tweetId);
-  update(
-    '[data-source-media-kind]',
-    t(
-      source.media.type === 'animated_gif' ? 'gif.reader.kind' : 'options.records.source.kindVideo',
-      { index: source.media.index },
-    ),
-  );
-  update(
-    '[data-source-published-at]',
-    source.publishedAt ? formatRecordDate(source.publishedAt) : t('options.records.unknown'),
-  );
-  update('[data-source-tool]', `${source.tool.name} ${source.tool.version}`);
-  const link = sourceMediaResult?.querySelector<HTMLAnchorElement>('[data-source-link]');
-  if (link) link.href = verifiedSourceUrl(source);
-  if (sourceMediaResult) sourceMediaResult.hidden = false;
-}
-
-async function readSourceMedia(file: File): Promise<void> {
-  displayedSource = undefined;
-  sourceReadController?.abort(new Error(t('options.source.cancelled')));
-  const controller = new AbortController();
-  sourceReadController = controller;
-  if (sourceMediaResult) sourceMediaResult.hidden = true;
-  if (file.size > MAX_LOCAL_SOURCE_FILE_SIZE) {
-    setSourceMediaStatus(t('options.records.source.failedLarge'));
-    if (sourceReadController === controller) sourceReadController = undefined;
-    return;
-  }
-  setSourceMediaStatus(t('options.records.source.reading', { filename: file.name }));
-  try {
-    const source = await readMediaSourceInWorker(file, { signal: controller.signal });
-    if (sourceReadController !== controller) return;
-    if (!source) {
-      setSourceMediaStatus(t('gif.reader.none'));
-      return;
-    }
-    renderSourceMedia(source, file.name);
-    setSourceMediaStatus(t('options.records.source.done'));
-  } catch (error) {
-    if (sourceReadController !== controller) return;
-    setSourceMediaStatus(
-      t('options.records.source.failed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  } finally {
-    if (sourceReadController === controller) sourceReadController = undefined;
-  }
-}
-
-function formatRecordDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(getLocale());
-}
-
-function getRecordOutputs(tweetId: string): OutputRecord[] {
-  return storedOutputRecords.filter((output) => output.tweetId === tweetId);
-}
-
-function recordMatches(record: StoredTweetRecord, query: string): boolean {
-  if (!query) return true;
-  const outputs = getRecordOutputs(record.tweetId);
-  const haystack = [
-    record.tweetId,
-    record.url,
-    record.text,
-    record.author.handle,
-    record.author.name,
-    ...outputs.map((output) => output.filename ?? ''),
-  ]
-    .join('\n')
-    .toLocaleLowerCase();
-  return haystack.includes(query.toLocaleLowerCase());
-}
-
-function renderRecordDetail(): void {
-  const record = storedTweetRecords.find((item) => item.tweetId === selectedRecordId);
-  if (!record) {
-    if (recordDetail) recordDetail.hidden = true;
-    if (recordDetailEmpty) recordDetailEmpty.hidden = false;
-    return;
-  }
-  if (recordDetail) recordDetail.hidden = false;
-  if (recordDetailEmpty) recordDetailEmpty.hidden = true;
-  const update = (selector: string, value: string): void => {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (element) element.textContent = value;
-  };
-  update(
-    '[data-record-author]',
-    record.author.name || record.author.handle || t('options.records.unknownAuthor'),
-  );
-  update(
-    '[data-record-handle]',
-    record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : '',
-  );
-  update('[data-record-tweet-id]', record.tweetId);
-  update('[data-record-saved-at]', formatRecordDate(record.savedAt));
-  const link = document.querySelector<HTMLAnchorElement>('[data-record-link]');
-  if (link) link.href = record.url;
-  update('[data-record-text]', recordPreviewText(record));
-  const outputs = getRecordOutputs(record.tweetId);
-  const outputLabels: Record<string, string> = {
-    'original-media': t('options.records.output.originalMedia'),
-    'sourced-media': t('options.records.output.sourcedMedia'),
-    'framed-image': t('options.records.output.framedImage'),
-    'tweet-card': t('options.records.output.tweetCard'),
-    'row-tweet-card': t('options.records.output.rowTweetCard'),
-    'stitched-video': t('dynamic.stitchedVideo'),
-    'framed-video': t('dynamic.framedVideo'),
-    'stitched-image': t('options.records.output.stitchedImage'),
-    'shared-text': t('options.records.output.sharedText'),
-    'shared-image': t('options.records.output.sharedImage'),
-    'copied-text': t('options.records.output.copiedText'),
-  };
-  update(
-    '[data-record-output-summary]',
-    outputs.length === 0
-      ? t('options.records.noOutputs')
-      : t('options.records.outputSummary', {
-          count: outputs.length,
-          outputs: outputs
-            .map((output) => outputLabels[output.outputType] ?? output.outputType)
-            .join(getLocale() === 'en' ? ', ' : '、'),
-        }),
-  );
-  const outputList = document.querySelector<HTMLElement>('[data-record-output-list]');
-  outputList?.replaceChildren();
-  for (const output of outputs) {
-    const item = document.createElement('div');
-    item.className = 'record-output-item';
-    const label = document.createElement('strong');
-    label.textContent = outputLabels[output.outputType] ?? output.outputType;
-    const detail = document.createElement('span');
-    detail.textContent = [output.filename, formatRecordDate(output.createdAt)]
-      .filter(Boolean)
-      .join(' · ');
-    item.append(label, detail);
-    outputList?.append(item);
-  }
-}
-
-function renderRecords(): void {
-  const query = recordSearch?.value.trim() ?? '';
-  const filtered = storedTweetRecords.filter((record) => recordMatches(record, query));
-  if (recordSummary) {
-    recordSummary.textContent = recordsLoading
-      ? t('options.records.loading')
-      : t('options.records.summary', { total: storedTweetRecords.length, shown: filtered.length });
-  }
-  if (recordList) recordList.replaceChildren();
-  if (filtered.length === 0) {
-    if (recordEmpty) recordEmpty.hidden = false;
-  } else {
-    if (recordEmpty) recordEmpty.hidden = true;
-    if (!filtered.some((record) => record.tweetId === selectedRecordId)) {
-      selectedRecordId = filtered[0]!.tweetId;
-    }
-    for (const record of filtered) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'record-item';
-      button.setAttribute('role', 'listitem');
-      button.setAttribute('aria-pressed', String(record.tweetId === selectedRecordId));
-      const title = document.createElement('strong');
-      title.textContent = `${record.author.name || t('options.records.unknownAuthor')} · ${record.author.handle ? `@${record.author.handle.replace(/^@+/, '')}` : t('options.records.unknownHandle')}`;
-      const meta = document.createElement('span');
-      meta.textContent = `${record.tweetId} · ${formatRecordDate(record.savedAt)} · ${t('options.records.outputs', { count: getRecordOutputs(record.tweetId).length })}`;
-      button.append(title, meta);
-      button.addEventListener('click', () => {
-        selectedRecordId = record.tweetId;
-        renderRecords();
-      });
-      recordList?.append(button);
-    }
-  }
-  renderRecordDetail();
-}
-
-async function loadRecords(): Promise<void> {
-  if (recordsLoading) return;
-  recordsLoading = true;
-  renderRecords();
-  try {
-    const records = await listStorageRecords();
-    storedTweetRecords = records.tweetRecords;
-    storedOutputRecords = records.outputRecords;
-    recordsLoaded = true;
-    setRecordStatus('');
-  } catch (error) {
-    storedTweetRecords = [];
-    storedOutputRecords = [];
-    setRecordStatus(
-      t('options.records.source.failed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  } finally {
-    recordsLoading = false;
-    renderRecords();
-  }
-}
-
-function downloadJsonArchive(archive: StorageArchive): void {
-  const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `share-this-tweet-records-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-async function exportRecords(): Promise<void> {
-  try {
-    downloadJsonArchive(await exportStorageRecords());
-    setRecordStatus(t('options.records.exported'));
-  } catch (error) {
-    setRecordStatus(
-      t('options.records.exportFailed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  }
-}
-
-async function importRecords(file: File): Promise<void> {
-  try {
-    const archive = JSON.parse(await file.text()) as StorageArchive;
-    await importStorageRecords(archive);
-    selectedRecordId = '';
-    setRecordStatus(t('options.records.imported'));
-    await loadRecords();
-  } catch (error) {
-    setRecordStatus(
-      t('options.records.importFailed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  }
-}
-
-async function deleteSelectedRecord(): Promise<void> {
-  if (!selectedRecordId || !window.confirm(t('options.records.deleteConfirm'))) return;
-  try {
-    await deleteStoredTweetRecord(selectedRecordId);
-    selectedRecordId = '';
-    setRecordStatus(t('options.records.deleted'));
-    await loadRecords();
-  } catch (error) {
-    setRecordStatus(
-      t('options.records.deleteFailed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  }
-}
-
-async function clearRecords(): Promise<void> {
-  if (!window.confirm(t('options.records.clearConfirm'))) return;
-  try {
-    await clearStoredRecords();
-    selectedRecordId = '';
-    setRecordStatus(t('options.records.cleared'));
-    await loadRecords();
-  } catch (error) {
-    setRecordStatus(
-      t('options.records.clearFailed', {
-        message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-  }
 }
 
 const disposeTemplateGuides: Array<() => void> = [];
@@ -878,7 +346,7 @@ function buildControls(): void {
         mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft),
       );
   }
-  buildVideoControls();
+  experiments.relocalize();
 }
 
 function refreshLocalizedUi(): void {
@@ -897,13 +365,11 @@ function refreshLocalizedUi(): void {
   buildControls();
   const settings = readSettings();
   validateAndPreview(settings);
-  validateExperimentSettings(settings);
+  experiments.validate(settings);
   updatePresetSelection(settings);
-  updateVideoPresetSelection(settings.videoLimits);
-  updateVideoEstimate();
-  renderRecords();
-  if (displayedSource && !sourceMediaResult?.hidden)
-    renderSourceMedia(displayedSource.source, displayedSource.filename);
+  experiments.updateSelection(settings);
+  recordBrowser.render();
+  sourceReader.relocalize();
   if (ready && !saving && form?.dataset.state !== 'error') updateDraft();
 }
 for (const tab of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'))) {
@@ -928,38 +394,6 @@ for (const button of Array.from(
     if (!ready || saving || !frameOrientations.includes(orientation as FrameOrientation)) return;
     setFrameOrientation(orientation as FrameOrientation);
     updateDraft();
-  });
-}
-experimentalVideoInput?.addEventListener('change', () => {
-  if (!ready || saving) return;
-  if (!experimentalVideoInput.checked && !validVideoLimits(readVideoLimits()))
-    writeVideoLimits(baseline.videoLimits);
-  setExperimentEnabled(experimentalVideoInput.checked);
-  updateDraft();
-});
-experimentalGifInput?.addEventListener('change', () => {
-  if (!ready || saving) return;
-  if (!experimentalGifInput.checked && !isGifLimits(readGifLimits()))
-    writeGifLimits(baseline.gifLimits);
-  setGifEnabled(experimentalGifInput.checked);
-  updateDraft();
-});
-for (const input of Object.values(gifLimitInputs))
-  input?.addEventListener('input', () => updateDraft());
-for (const input of Object.values(videoLimitInputs))
-  input?.addEventListener('input', () => updateDraft());
-for (const input of Object.values(calculatorInputs)) {
-  input?.addEventListener('input', () => {
-    updateCalculatorPresetSelection();
-    updateVideoEstimate();
-  });
-}
-for (const button of Array.from(
-  document.querySelectorAll<HTMLButtonElement>('[data-calculator-preset]'),
-)) {
-  button.addEventListener('click', () => {
-    const id = button.dataset.calculatorPreset as keyof typeof calculatorPresets | undefined;
-    if (id && id in calculatorPresets) applyCalculatorPreset(id);
   });
 }
 for (const attribute of ['data-stitch-style']) {
@@ -1001,52 +435,6 @@ languageSelect?.addEventListener('change', () => {
       updateDraft(false);
     });
 });
-recordSearch?.addEventListener('input', () => renderRecords());
-document.querySelector('[data-record-refresh]')?.addEventListener('click', () => {
-  void loadRecords();
-});
-document.querySelector('[data-record-export]')?.addEventListener('click', () => {
-  void exportRecords();
-});
-document.querySelector('[data-record-import-button]')?.addEventListener('click', () => {
-  recordImport?.click();
-});
-recordImport?.addEventListener('change', () => {
-  const file = recordImport.files?.[0];
-  recordImport.value = '';
-  if (file) void importRecords(file);
-});
-sourceMediaInput?.addEventListener('change', () => {
-  const file = sourceMediaInput.files?.[0];
-  sourceMediaInput.value = '';
-  if (file) void readSourceMedia(file);
-});
-sourceMediaDrop?.addEventListener('click', () => sourceMediaInput?.click());
-sourceMediaDrop?.addEventListener('keydown', (event: KeyboardEvent) => {
-  if (event.key !== 'Enter' && event.key !== ' ') return;
-  event.preventDefault();
-  sourceMediaInput?.click();
-});
-for (const type of ['dragenter', 'dragover'] as const)
-  sourceMediaDrop?.addEventListener(type, (event: DragEvent) => {
-    event.preventDefault();
-    if (sourceMediaDrop) sourceMediaDrop.dataset.dragging = 'true';
-  });
-for (const type of ['dragleave', 'drop'] as const)
-  sourceMediaDrop?.addEventListener(type, (event: DragEvent) => {
-    event.preventDefault();
-    if (sourceMediaDrop) delete sourceMediaDrop.dataset.dragging;
-    if (type === 'drop') {
-      const file = event.dataTransfer?.files[0];
-      if (file) void readSourceMedia(file);
-    }
-  });
-document.querySelector('[data-record-delete]')?.addEventListener('click', () => {
-  void deleteSelectedRecord();
-});
-document.querySelector('[data-record-clear]')?.addEventListener('click', () => {
-  void clearRecords();
-});
 resetButton?.addEventListener('click', () => {
   if (!ready || saving || !confirmation) return;
   confirmation.hidden = false;
@@ -1076,16 +464,13 @@ form?.addEventListener('submit', async (event) => {
   if (!ready || saving || languageSaving || !dirty) return;
   const settings = readSettings();
   const templatesValid = validateAndPreview(settings);
-  const experimentValid = validateExperimentSettings(settings);
+  const experimentValid = experiments.validate(settings);
   if (!templatesValid || !experimentValid) {
     setStatus('error', t('options.status.fixFirst'));
     if (invalidFields[0]) openEditor(invalidFields[0]);
     else {
       activateTab('experiment');
-      (isGifLimits(settings.gifLimits)
-        ? videoLimitInputs.maxInputMiB
-        : gifLimitInputs.maxInputMiB
-      )?.focus();
+      experiments.focusInvalid(settings);
     }
     return;
   }
@@ -1161,7 +546,7 @@ async function initialize(): Promise<void> {
 localizeDocument();
 buildControls();
 writeSettings({ ...DEFAULT_SETTINGS });
-renderRecords();
+recordBrowser.render();
 document.querySelector('[data-retry-load]')?.addEventListener('click', () => {
   void initialize();
 });
@@ -1173,7 +558,12 @@ const unwatchLanguage = watchLanguage((language) => {
   if (ready) updateDraft(false);
 });
 
-window.addEventListener('pagehide', unwatchLanguage, { once: true });
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) return;
+  unwatchLanguage();
+  sourceReader.dispose();
+  for (const dispose of disposeTemplateGuides.splice(0)) dispose();
+});
 
 function updateFramePreviewTheme(): void {
   const preview = document.querySelector<HTMLElement>('.print-caption');
