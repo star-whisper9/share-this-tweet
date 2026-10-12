@@ -112,10 +112,6 @@ svg {
   background: var(--accent);
   box-shadow: 0 4px 10px #2466d81a;
 }
-.brand-mark svg {
-  width: 23px;
-  height: 23px;
-}
 .brand-mark img {
   width: 29px;
   height: 29px;
@@ -1265,10 +1261,6 @@ form[data-state='loading'] .state-dot {
     height: 32px;
     border-radius: 9px;
   }
-  .brand-mark svg {
-    width: 21px;
-    height: 21px;
-  }
   .brand-mark img {
     width: 25px;
     height: 25px;
@@ -1292,7 +1284,6 @@ form[data-state='loading'] .state-dot {
   }
   .settings-tabs button {
     flex: 1;
-    padding: 10px 6px;
     gap: 6px;
     font-size: 12px;
   }
@@ -1304,11 +1295,8 @@ form[data-state='loading'] .state-dot {
     grid-template-columns: 1fr;
     border-radius: 18px;
   }
-  .settings-editor {
-    padding: 23px 21px 20px;
-  }
   .section-heading {
-    margin-bottom: 21px;
+    margin-bottom: 14px;
     gap: 11px;
   }
   h2 {
@@ -1318,7 +1306,7 @@ form[data-state='loading'] .state-dot {
     font-size: 12px;
   }
   .preset {
-    min-height: 97px;
+    min-height: 76px;
     padding: 12px 9px 10px;
   }
   .experiment-presets,
@@ -1327,13 +1315,6 @@ form[data-state='loading'] .state-dot {
   }
   .experiment-calculator-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .settings-preview {
-    order: -1;
-    padding: 18px 24px;
-    border-left: 0;
-    border-top: 0;
-    border-bottom: 1px solid var(--border);
   }
   .preview-heading {
     margin-bottom: 14px;
@@ -1391,9 +1372,6 @@ form[data-state='loading'] .state-dot {
 @media (max-width: 360px) {
   h1 {
     font-size: 24px;
-  }
-  .settings-editor {
-    padding: 20px 16px;
   }
   .experiment-limits-grid,
   .experiment-calculator-grid {
@@ -1495,16 +1473,11 @@ textarea {
     padding: 16px;
   }
   .settings-preview {
+    border-left: 0;
     order: 0;
     padding: 16px;
     border-bottom: 0;
     border-top: 1px solid var(--border);
-  }
-  .section-heading {
-    margin-bottom: 14px;
-  }
-  .preset {
-    min-height: 76px;
   }
   .brand {
     min-width: 0;

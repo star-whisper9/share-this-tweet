@@ -170,10 +170,6 @@
   color: var(--stt-accent);
   flex: 0 0 auto;
 }
-.stt-brand-mark svg {
-  width: 25px;
-  height: 25px;
-}
 .stt-brand-icon {
   width: 25px;
   height: 25px;
@@ -613,7 +609,6 @@
 .stt-save-symbol[data-format='bottom']::after {
   bottom: 1px;
 }
-.stt-sheet p.stt-save-hint,
 .stt-sheet p.stt-save-empty {
   margin: 0 0 12px;
   font-size: 11px;
@@ -686,12 +681,6 @@
 }
 .stt-sheet-root[data-data-state='loading'] .stt-sheet-status {
   color: var(--stt-accent);
-}
-.stt-sheet p.stt-sheet-note {
-  text-align: center;
-  font-size: 10px;
-  color: var(--stt-text-muted);
-  margin-top: 3px;
 }
 .stt-action-skeleton {
   margin-top: 20px;
@@ -836,11 +825,6 @@
   }
 }
 
-.stt-default-badge {
-  font-size: 10px;
-  font-weight: 500;
-  opacity: 0.85;
-}
 .stt-sheet p.stt-sheet-status {
   margin-bottom: 0;
 }
@@ -1056,7 +1040,6 @@
   .stt-save-symbol {
     display: none;
   }
-  .stt-sheet p.stt-save-hint,
   .stt-sheet p.stt-save-empty {
     margin: 6px 0;
     line-height: 1.5;

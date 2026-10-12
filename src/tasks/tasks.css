@@ -76,8 +76,6 @@ button {
   margin: 0.65rem 0;
   padding: 0.75rem 0.85rem;
   border-radius: 0.65rem;
-}
-.tasks-error {
   border: 1px solid #f1b6af;
   color: var(--danger);
   background: #fff1f0;
@@ -94,7 +92,8 @@ button {
 }
 
 .task-card {
-  padding: 1rem;
+  cursor: pointer;
+  padding: 0.8rem;
   border: 1px solid var(--border);
   border-radius: 0.9rem;
   background: var(--surface);
@@ -108,8 +107,9 @@ button {
 }
 .task-title {
   min-width: 0;
+  display: grid;
+  gap: 0.25rem;
 }
-.task-meta,
 .task-message {
   margin: 0.7rem 0 0;
   color: var(--muted);
@@ -152,7 +152,8 @@ button {
 .file-size {
   color: var(--muted);
   font-size: 0.78rem;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .task-actions {
@@ -199,9 +200,6 @@ button {
 }
 
 @media (max-width: 34rem) {
-  .tasks-page {
-    padding: 1rem;
-  }
   .tasks-header {
     align-items: flex-start;
   }
@@ -306,10 +304,6 @@ button {
 .task-count {
   margin-left: auto;
 }
-.task-card {
-  cursor: pointer;
-  padding: 0.8rem;
-}
 .task-toggle {
   flex: 0 0 2.75rem;
   min-height: 2.75rem;
@@ -324,10 +318,7 @@ button {
   text-align: start;
   cursor: pointer;
 }
-.task-title {
-  display: grid;
-  gap: 0.25rem;
-}
+
 .task-source {
   overflow-wrap: anywhere;
   color: var(--accent);
@@ -340,6 +331,7 @@ button {
   text-decoration-thickness: 2px;
 }
 .task-meta {
+  color: var(--muted);
   margin: 0;
   font-size: 0.75rem;
 }
@@ -393,10 +385,7 @@ button {
   margin-top: 0.75rem;
   border-top: 1px solid var(--border);
 }
-.file-size {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
+
 .task-source:focus-visible,
 .task-toggle:focus-visible,
 summary:focus-visible,
