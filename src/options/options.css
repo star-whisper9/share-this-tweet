@@ -340,9 +340,6 @@ h2 {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.text-presets {
-  grid-template-columns: 1fr 1fr;
-}
 .settings-panel.experiment-panel {
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;

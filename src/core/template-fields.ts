@@ -191,8 +191,23 @@ export const TEMPLATE_FIELDS: readonly TemplateField[] = [
     })),
 ];
 export const DATE_FORMATS = ['YYYY-MM-DD', 'YYYYMMDD', 'YYYY-MM-DD HH:mm:ss'] as const;
+const sourceFields = new Set([
+  'author.name',
+  'author.handle',
+  'author.id',
+  'tweet.id',
+  'tweet.publishedAt',
+  'media.index',
+  'media.type',
+]);
 export function fieldsForScope(scope: TemplateScope): readonly TemplateField[] {
-  return TEMPLATE_FIELDS.filter(
-    (item) => scope !== 'textTemplate' || (!item.media && item.name !== 'extension'),
-  );
+  // Limit editor suggestions, not the grammar: existing custom templates still resolve all fields.
+  return TEMPLATE_FIELDS.filter((item) => {
+    if (scope === 'textTemplate') return !item.media && item.name !== 'extension';
+    return (
+      sourceFields.has(item.name) ||
+      (scope === 'frameTemplate' && ['author.avatar', 'tweet.url'].includes(item.name)) ||
+      (scope === 'filenameTemplate' && item.name === 'extension')
+    );
+  });
 }

@@ -28,7 +28,7 @@ export const zhCN = {
   'core.translation.warning.malformed': 'X 返回的翻译数据格式异常，已回退为原文。',
   'core.translation.warning.stale': '译文与当前原文不匹配，已回退为原文。',
   'core.text.defaultTemplate':
-    '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · 原文：\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
+    '{?translation.text}译文 · 原文语言：{translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}原文：\n{/translation.text}{tweet.text}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
   'core.text.quoteUnavailable': '引用内容不可用',
   'core.text.quotePending': '尚未获取引用内容',
   'core.text.quoteHeading': '── 引用推文 ──',
@@ -279,7 +279,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'core.translation.warning.stale':
     'The translation does not match the current original text. The original text is used instead.',
   'core.text.defaultTemplate':
-    '{?translation.text}Grok · Translated from {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · Original:\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
+    '{?translation.text}Translation · Original language: {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}Original:\n{/translation.text}{tweet.text}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
   'core.text.quoteUnavailable': 'Quoted post unavailable',
   'core.text.quotePending': 'Quoted post has not been fetched yet',
   'core.text.quoteHeading': '── Quoted post ──',

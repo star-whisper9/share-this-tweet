@@ -5,7 +5,7 @@ import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
 import { wrapText } from './text-wrap.js';
 
-export const DEFAULT_FRAME_TEMPLATE = '{author.name}';
+export const DEFAULT_FRAME_TEMPLATE = '@{author.handle}';
 export type FrameOrientation = 'top' | 'bottom';
 export const DEFAULT_FRAME_ORIENTATION: FrameOrientation = 'bottom';
 export const FRAME_ORIENTATIONS: FrameOrientation[] = ['top', 'bottom'];

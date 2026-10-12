@@ -3,7 +3,8 @@ import { t } from '../shared/i18n.js';
 import { getMediaDownloadTarget } from './media.js';
 import { renderTemplate } from './template.js';
 
-export const DEFAULT_FILENAME_TEMPLATE = 'X_{author.handle}_{tweet.id}_{media.index}.{extension}';
+export const DEFAULT_FILENAME_TEMPLATE =
+  'X_{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}';
 
 const ILLEGAL_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g;
 const MAX_FILENAME_LENGTH = 180;

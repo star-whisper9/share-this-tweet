@@ -8,7 +8,12 @@ import {
   pollResultsVisible,
   pollWarning,
 } from '../src/shared/poll.js';
-import { buildTweetText, LEGACY_TEXT_TEMPLATE } from '../src/core/text-export.js';
+import {
+  buildTweetText,
+  LEGACY_TEXT_TEMPLATE,
+  LEGACY_POLL_TEXT_TEMPLATE,
+  ORIGINAL_TEXT_TEMPLATE,
+} from '../src/core/text-export.js';
 import { renderTemplate } from '../src/core/template.js';
 import { validateStorageArchive } from '../src/core/storage.js';
 import { isExportJobRequest } from '../src/shared/export-jobs.js';
@@ -201,7 +206,12 @@ it('exports translated and original options once in order and supports custom an
   const poll = available();
   const labels =
     fixture.grok_translated_post_with_availability.data.associated_data.poll_translations;
-  for (const template of [undefined, LEGACY_TEXT_TEMPLATE]) {
+  for (const template of [
+    undefined,
+    LEGACY_TEXT_TEMPLATE,
+    LEGACY_POLL_TEXT_TEMPLATE,
+    LEGACY_POLL_TEXT_TEMPLATE.replace('翻译自', 'Translated from').replace('原文：', 'Original:'),
+  ]) {
     const text = buildTweetText(tweet, template);
     expect(text.indexOf(labels[0])).toBeGreaterThan(
       text.indexOf(tweet.translation!.status === 'available' ? tweet.translation.text : ''),
@@ -211,6 +221,14 @@ it('exports translated and original options once in order and supports custom an
     expect(text.split(poll.options[1].label)).toHaveLength(2);
     expect(text.split(labels[1])).toHaveLength(2);
   }
+  const originalOnly = buildTweetText(tweet, ORIGINAL_TEXT_TEMPLATE);
+  expect(originalOnly).toContain(tweet.text);
+  expect(originalOnly).toContain(tweet.url);
+  expect(originalOnly).toContain(tweet.author.handle);
+  expect(originalOnly.split(poll.options[1].label)).toHaveLength(2);
+  expect(originalOnly).not.toContain(labels[1]);
+  if (tweet.translation?.status === 'available')
+    expect(originalOnly).not.toContain(tweet.translation.text);
   const custom = buildTweetText(tweet, '{tweet.text}\n{author.name}');
   expect(custom).toContain(poll.options[2].label);
   const explicit = buildTweetText(tweet, '{poll.originalText}');

@@ -6,8 +6,14 @@ import { renderTemplate } from './template.js';
 export const LEGACY_TEXT_TEMPLATE =
   '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\nX · 原文：\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
-export const DEFAULT_TEXT_TEMPLATE =
+export const LEGACY_POLL_TEXT_TEMPLATE =
   '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · 原文：\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
+
+export const DEFAULT_TEXT_TEMPLATE =
+  '{?translation.text}译文 · 原文语言：{translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}原文：\n{/translation.text}{tweet.text}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
+
+export const ORIGINAL_TEXT_TEMPLATE =
+  '{tweet.text}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
 export function getDefaultTextTemplate(locale: Locale = getLocale()): string {
   return t('core.text.defaultTemplate', {}, locale);
@@ -16,9 +22,11 @@ export function getDefaultTextTemplate(locale: Locale = getLocale()): string {
 export function isDefaultTextTemplate(value: string): boolean {
   return (
     value === DEFAULT_TEXT_TEMPLATE ||
-    value === LEGACY_TEXT_TEMPLATE ||
-    value ===
-      LEGACY_TEXT_TEMPLATE.replace('翻译自', 'Translated from').replace('原文：', 'Original:') ||
+    [LEGACY_TEXT_TEMPLATE, LEGACY_POLL_TEXT_TEMPLATE].some(
+      (legacy) =>
+        value === legacy ||
+        value === legacy.replace('翻译自', 'Translated from').replace('原文：', 'Original:'),
+    ) ||
     (Object.keys(catalogs) as Locale[]).some((locale) => value === getDefaultTextTemplate(locale))
   );
 }

@@ -148,6 +148,10 @@ export const zhCN = {
   'options.records.cleared': '来源记录已清空。',
   'options.records.clearFailed': '清空失败：{message}',
   'options.guide.title': '填写指南与全部变量',
+  'options.guide.sourceTitle': '填写指南与来源变量',
+  'options.guide.source': '这里提供画框和命名常用的精简变量。已有自定义模板中的其他变量仍可使用。',
+  'options.guide.sourceSyntax':
+    '默认值：{author.name|未知作者}。可选日期：{?tweet.publishedAt}{tweet.publishedAt:YYYY-MM-DD}{/tweet.publishedAt}。区块按有无值显示，不支持嵌套；字面花括号与默认值中的 | 不支持转义。',
   'options.guide.intro':
     '点击变量插入光标或替换选区。变量缺失时为空；0 和 false 是有效值。日期格式统一使用 UTC。',
   'options.guide.syntax':
@@ -176,10 +180,10 @@ export const zhCN = {
   'options.guide.group.media': '媒体',
   'options.guide.group.quote': '引用',
   'options.guide.group.output': '输出',
-  'options.preset.frame.classic.label': '经典署名',
-  'options.preset.frame.classic.description': '左侧显示作者名称',
+  'options.preset.frame.dated.label': '头像、署名与发布时间',
+  'options.preset.frame.dated.description': '头像与署名，第二行显示 UTC 年月日时分秒',
   'options.preset.frame.avatar.label': '头像与署名',
-  'options.preset.frame.avatar.description': '作者头像和名称',
+  'options.preset.frame.avatar.description': '作者头像、显示名称与账号',
   'options.preset.frame.handle.label': '仅账号',
   'options.preset.frame.handle.description': '左侧显示推主账号',
   'options.preset.filename.account.label': '账号与编号',
@@ -190,10 +194,8 @@ export const zhCN = {
   'options.preset.filename.id.description': '推文 ID + 序号',
   'options.preset.text.bilingual.label': '双语与来源',
   'options.preset.text.bilingual.description': '有译文时显示译文和原文，否则仅原文',
-  'options.preset.text.simple.label': '简洁转发',
-  'options.preset.text.simple.description': '可选译文、原文和链接',
-  'options.preset.text.source.label': '来源索引',
-  'options.preset.text.source.description': '作者、日期和链接',
+  'options.preset.text.original.label': '原文与来源',
+  'options.preset.text.original.description': '原文、投票、作者和原推链接',
   'options.preset.text.custom.label': '我的排版',
   'options.preset.text.custom.description': '自己安排文字与出处',
 } as const;
@@ -355,6 +357,11 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.records.cleared': 'Source records cleared.',
   'options.records.clearFailed': 'Clear failed: {message}',
   'options.guide.title': 'Guide and all variables',
+  'options.guide.sourceTitle': 'Guide and source variables',
+  'options.guide.source':
+    'A reduced set of variables for frames and filenames. Other variables in existing custom templates remain supported.',
+  'options.guide.sourceSyntax':
+    'Default value: {author.name|unknown author}. Optional date: {?tweet.publishedAt}{tweet.publishedAt:YYYY-MM-DD}{/tweet.publishedAt}. Blocks display only when their value exists and cannot nest. Literal braces and | in default values cannot be escaped.',
   'options.guide.intro':
     'Click a variable to insert it at the cursor or replace the selection. Missing values are empty; 0 and false are valid. Dates always use UTC.',
   'options.guide.syntax':
@@ -383,10 +390,11 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.guide.group.media': 'Media',
   'options.guide.group.quote': 'Quote',
   'options.guide.group.output': 'Output',
-  'options.preset.frame.classic.label': 'Classic credit',
-  'options.preset.frame.classic.description': 'Show the author name on the left',
+  'options.preset.frame.dated.label': 'Avatar, credit and date',
+  'options.preset.frame.dated.description':
+    'Avatar and credit, with the UTC date and time on a second line',
   'options.preset.frame.avatar.label': 'Avatar and credit',
-  'options.preset.frame.avatar.description': 'Show the author avatar and name',
+  'options.preset.frame.avatar.description': 'Author avatar, display name and account',
   'options.preset.frame.handle.label': 'Account only',
   'options.preset.frame.handle.description': 'Show only the author account',
   'options.preset.filename.account.label': 'Account and number',
@@ -398,10 +406,8 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.preset.text.bilingual.label': 'Translation and source',
   'options.preset.text.bilingual.description':
     'Show translation and original when available, otherwise the original',
-  'options.preset.text.simple.label': 'Simple repost',
-  'options.preset.text.simple.description': 'Optional translation, original, and link',
-  'options.preset.text.source.label': 'Source index',
-  'options.preset.text.source.description': 'Author, date, and link',
+  'options.preset.text.original.label': 'Original and source',
+  'options.preset.text.original.description': 'Original text, poll, author and post link',
   'options.preset.text.custom.label': 'My layout',
   'options.preset.text.custom.description': 'Arrange text and attribution yourself',
 };

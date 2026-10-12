@@ -55,9 +55,29 @@ describe('renderTemplate', () => {
     expect(() => renderTemplate('{tweet.url', context)).toThrow(TemplateError);
     expect(() => renderTemplate('value}', context)).toThrow(TemplateError);
   });
+
+  it('renders avatar credits with an account and a second-line UTC timestamp', () => {
+    expect(
+      renderTemplate(
+        '{author.avatar} {author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD HH:mm:ss}',
+        {
+          tweet: { ...record, publishedAt: '2026-09-07T18:00:01+08:00' },
+          avatarMarker: 'AVATAR',
+        },
+      ),
+    ).toBe('AVATAR Alice (@alice)\n2026-09-07 10:00:01');
+  });
 });
 
 describe('buildMediaFilename', () => {
+  it('formats archive dates and uses a fallback when the publishing date is unavailable', () => {
+    const template =
+      'X_{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}';
+    expect(buildMediaFilename(record, photo, template)).toBe('X_20260907_alice_42_1.jpg');
+    expect(buildMediaFilename({ ...record, publishedAt: undefined }, photo, template)).toBe(
+      'X_undated_alice_42_1.jpg',
+    );
+  });
   it('sanitizes filename characters and forces the actual media extension', () => {
     expect(buildMediaFilename(record, photo, 'a:/bad name.gif')).toBe('a__bad name.jpg');
     expect(sanitizeFilename('  hello\nworld  ')).toBe('hello_world');

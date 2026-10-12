@@ -9,6 +9,7 @@ import {
   buildTweetText,
   getDefaultTextTemplate,
   isDefaultTextTemplate,
+  ORIGINAL_TEXT_TEMPLATE,
 } from '../core/text-export.js';
 import type { FrameOrientation } from '../core/frame.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
@@ -76,41 +77,40 @@ const sampleMedia: MediaRecord = {
 };
 function getPresets(): Record<SettingKey, Preset[]> {
   const locale = getLocale();
-  const original = t('core.translation.original', {}, locale);
   return {
     frameTemplate: [
       {
-        label: t('options.preset.frame.classic.label'),
-        description: t('options.preset.frame.classic.description'),
+        label: t('options.preset.frame.handle.label'),
+        description: t('options.preset.frame.handle.description'),
         value: DEFAULT_SETTINGS.frameTemplate,
       },
       {
         label: t('options.preset.frame.avatar.label'),
         description: t('options.preset.frame.avatar.description'),
-        value: '{author.avatar} {author.name}',
+        value: '{author.avatar} {author.name} (@{author.handle})',
       },
       {
-        label: t('options.preset.frame.handle.label'),
-        description: t('options.preset.frame.handle.description'),
-        value: '@{author.handle}',
+        label: t('options.preset.frame.dated.label'),
+        description: t('options.preset.frame.dated.description'),
+        value:
+          '{author.avatar} {author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD HH:mm:ss}',
       },
     ],
     filenameTemplate: [
       {
-        label: t('options.preset.filename.account.label'),
-        description: t('options.preset.filename.account.description'),
+        label: t('options.preset.filename.date.label'),
+        description: t('options.preset.filename.date.description'),
         value: DEFAULT_SETTINGS.filenameTemplate,
       },
       {
-        label: t('options.preset.filename.date.label'),
-        description: t('options.preset.filename.date.description'),
-        value:
-          '{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}',
+        label: t('options.preset.filename.account.label'),
+        description: t('options.preset.filename.account.description'),
+        value: 'X_{author.handle}_{tweet.id}_{media.index}.{extension}',
       },
       {
         label: t('options.preset.filename.id.label'),
         description: t('options.preset.filename.id.description'),
-        value: '{tweet.id}_{media.index}.{extension}',
+        value: 'X_{tweet.id}_{media.index}.{extension}',
       },
     ],
     textTemplate: [
@@ -120,14 +120,9 @@ function getPresets(): Record<SettingKey, Preset[]> {
         value: getDefaultTextTemplate(locale),
       },
       {
-        label: t('options.preset.text.simple.label'),
-        description: t('options.preset.text.simple.description'),
-        value: `{?translation.text}{translation.text}\n\n${original}\n{/translation.text}{translation.originalText}\n\n{tweet.url}`,
-      },
-      {
-        label: t('options.preset.text.source.label'),
-        description: t('options.preset.text.source.description'),
-        value: '{author.name} (@{author.handle})\n{tweet.publishedAt:YYYY-MM-DD}\n{tweet.url}',
+        label: t('options.preset.text.original.label'),
+        description: t('options.preset.text.original.description'),
+        value: ORIGINAL_TEXT_TEMPLATE,
       },
       {
         label: t('options.preset.text.custom.label'),

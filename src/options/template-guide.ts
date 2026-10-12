@@ -53,6 +53,30 @@ const groupKeys = {
   引用: 'options.guide.group.quote',
   输出: 'options.guide.group.output',
 } as const;
+const quickVariables: Record<TemplateScope, readonly string[]> = {
+  frameTemplate: [
+    'author.name',
+    'author.handle',
+    'author.avatar',
+    'tweet.publishedAt:YYYY-MM-DD HH:mm:ss',
+  ],
+  filenameTemplate: [
+    'author.handle',
+    'tweet.id',
+    'media.index',
+    'tweet.publishedAt:YYYYMMDD',
+    'extension',
+  ],
+  textTemplate: [
+    'tweet.text',
+    'translation.text',
+    'poll.originalText',
+    'poll.translatedText',
+    'author.name',
+    'author.handle',
+    'tweet.url',
+  ],
+};
 
 /** The field registry is the source of template grammar and availability. */
 export function mountTemplateGuide(
@@ -66,10 +90,19 @@ export function mountTemplateGuide(
   container.replaceChildren();
   container.className = 'template-guide';
   const guide = node('details');
-  guide.append(node('summary', t('options.guide.title')));
+  guide.append(
+    node(
+      'summary',
+      t(scope === 'textTemplate' ? 'options.guide.title' : 'options.guide.sourceTitle'),
+    ),
+  );
   guide.append(node('p', t('options.guide.intro')));
-  guide.append(node('p', t('options.guide.syntax')));
-  guide.append(node('p', t('options.guide.quote')));
+  guide.append(
+    node('p', t(scope === 'textTemplate' ? 'options.guide.syntax' : 'options.guide.sourceSyntax')),
+  );
+  guide.append(
+    node('p', t(scope === 'textTemplate' ? 'options.guide.quote' : 'options.guide.source')),
+  );
   const search = node('input');
   search.type = 'search';
   search.placeholder = t('options.guide.search');
@@ -222,21 +255,14 @@ export function mountTemplateGuide(
   });
   const quick = node('div');
   quick.className = 'token-list';
-  for (const name of [
-    'translation.text',
-    'translation.originalText',
-    'translation.sourceLanguage',
-    'translation.targetLanguage',
-    'tweet.text',
-    'author.name',
-    'author.handle',
-    'tweet.id',
-    'tweet.url',
-    'media.index',
-    'extension',
-  ]) {
+  for (const expression of quickVariables[scope]) {
+    const name = expression.split(':')[0];
     const field = fields.find((candidate) => candidate.name === name);
-    if (field) quick.append(insertButton(`{${name}}`, `+ ${field.label}`));
+    if (field) {
+      const label =
+        name === 'tweet.text' ? t('core.field.label.translation.originalText') : field.label;
+      quick.append(insertButton(`{${expression}}`, `+ ${label}`));
+    }
   }
   container.append(quick, guide);
   updatePreview();

@@ -1,6 +1,11 @@
 import { validateStorageArchive, StorageError } from '../src/core/storage.js';
 import { expect, it } from 'vitest';
-import { TEMPLATE_FIELDS, renderTemplate, TemplateError } from '../src/core/template.js';
+import {
+  TEMPLATE_FIELDS,
+  fieldsForScope,
+  renderTemplate,
+  TemplateError,
+} from '../src/core/template.js';
 import { mergeTweetRecords, type TweetRecord } from '../src/shared/model.js';
 import { normalizeTweetCandidate } from '../src/shared/tweet-normalizer.js';
 const tweet: TweetRecord = {
@@ -18,6 +23,48 @@ it('resolves every registered field with valid empty optional contexts', () => {
       renderTemplate(`{${field.name}}`, { tweet, media: { index: 1, type: 'photo' } }),
     ).not.toThrow();
   }
+});
+it('offers source variables in frame and filename editors while keeping text and quote variables in text editors', () => {
+  const shared = [
+    'author.name',
+    'author.handle',
+    'author.id',
+    'tweet.id',
+    'tweet.publishedAt',
+    'media.index',
+    'media.type',
+  ];
+  const names = (scope: Parameters<typeof fieldsForScope>[0]) =>
+    fieldsForScope(scope)
+      .map((field) => field.name)
+      .sort();
+  expect(names('frameTemplate')).toEqual([...shared, 'author.avatar', 'tweet.url'].sort());
+  expect(names('filenameTemplate')).toEqual([...shared, 'extension'].sort());
+  const text = names('textTemplate');
+  for (const name of [
+    'tweet.text',
+    'translation.text',
+    'translation.originalText',
+    'poll.originalText',
+    'poll.translatedText',
+    'quote.tweet.text',
+    'quote.poll.originalText',
+  ])
+    expect(text).toContain(name);
+  expect(text.some((name) => name.startsWith('media.') || name === 'extension')).toBe(false);
+});
+
+it('keeps legacy variables renderable even when omitted from source editor suggestions', () => {
+  expect(
+    renderTemplate('{tweet.text}/{author.description}/{media.width}/{quote.tweet.text}', {
+      tweet: {
+        ...tweet,
+        author: { ...tweet.author, description: 'bio' },
+        quote: { status: 'available', tweetId: '3', record: { ...tweet, text: 'quoted' } },
+      },
+      media: { index: 1, type: 'photo', width: 800 },
+    }),
+  ).toBe('body/bio/800/quoted');
 });
 it('preserves zero and false, handles missing dates and validates hidden branches', () => {
   expect(
