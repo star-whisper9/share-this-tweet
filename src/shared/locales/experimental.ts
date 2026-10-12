@@ -1,9 +1,7 @@
 export const zhCN = {
-  'gif.title': 'GIF 本地转码（实验性）',
+  'gif.title': 'GIF 本地转码',
   'gif.enable': '将单项 GIF 保存为 .gif',
   'gif.enableDescription': '默认开启。关闭后保存 X 提供的原始 MP4；与动态拼图和视频画框独立。',
-  'gif.quality':
-    '输出最长边 960 px、最高 20 fps、256 色调色板。处理使用本机 CPU，可在导出任务页查看进度或取消。',
   'gif.limits.title': 'GIF 转码限制',
   'gif.limits.description': '超过以下任一限制时保存原始 MP4，并在任务中说明原因。编码失败会报错。',
   'gif.limit.input': '输入 MP4 大小',
@@ -28,7 +26,6 @@ export const zhCN = {
 
   'experiment.tab': '实验功能',
   'experiment.title': '本地媒体处理（实验性）',
-  'experiment.description': '分别设置 GIF 转码、动态拼图与普通视频画框，处理均在本机完成。',
   'experiment.enable': '启用动态拼图与视频画框',
   'experiment.enableDescription': '它会使用本机 CPU，进度可在导出任务页查看。',
   'experiment.disabled': '动态拼图实验功能尚未启用。',
@@ -78,12 +75,10 @@ export const zhCN = {
 } as const;
 
 export const en: Record<keyof typeof zhCN, string> = {
-  'gif.title': 'Local GIF conversion (experimental)',
+  'gif.title': 'Local GIF conversion',
   'gif.enable': 'Save individual GIFs as .gif',
   'gif.enableDescription':
     'Enabled by default. When disabled, saves the original MP4 provided by X. Independent of animated collages and video frames.',
-  'gif.quality':
-    'Output: longest edge 960 px, up to 20 fps, 256-color palette. Uses your local CPU; track progress or cancel on the export tasks page.',
   'gif.limits.title': 'GIF conversion limits',
   'gif.limits.description':
     'Exceeding any limit saves the original MP4 with a reason in the task. Encoding failures are reported as errors.',
@@ -109,8 +104,6 @@ export const en: Record<keyof typeof zhCN, string> = {
 
   'experiment.tab': 'Experimental',
   'experiment.title': 'Local media processing (experimental)',
-  'experiment.description':
-    'Configure GIF conversion, animated collages, and ordinary video frames separately. Processing stays on your device.',
   'experiment.enable': 'Enable animated collages and video frames',
   'experiment.enableDescription':
     'It uses your local CPU. Track progress on the export tasks page.',

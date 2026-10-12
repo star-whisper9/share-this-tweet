@@ -427,6 +427,10 @@ h2 {
   padding-top: 20px;
   border-top: 1px solid var(--border);
 }
+.experiment-settings > .experiment-block:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
 .experiment-block-heading h3 {
   margin: 0;
   font-size: 14px;
@@ -1528,4 +1532,7 @@ textarea {
 .gif-experiment > h3 {
   font-size: 15px;
   margin: 0 0 14px;
+}
+.gif-settings {
+  margin-top: 22px;
 }
