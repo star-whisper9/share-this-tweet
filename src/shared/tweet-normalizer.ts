@@ -1,7 +1,7 @@
 import { normalizePoll } from './poll.js';
 import { decodeHtmlEntities } from './html-entities.js';
 import { normalizeTranslation } from './translation.js';
-import type { MediaRecord, MediaVariant, TweetRecord, TweetQuote } from './model.js';
+import type { MediaRecord, MediaVariant, TweetAuthor, TweetRecord, TweetQuote } from './model.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -39,6 +39,11 @@ function webUrl(value: unknown): string | undefined {
   }
 }
 function positiveNumber(value: unknown, key: string): number | undefined {
+  const number = getNumber(value, key);
+  return number !== undefined && number > 0 ? number : undefined;
+}
+
+function nonNegativeNumber(value: unknown, key: string): number | undefined {
   const number = getNumber(value, key);
   return number !== undefined && number >= 0 ? number : undefined;
 }
@@ -91,7 +96,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
       index,
       type: 'photo',
       originalUrl: getOriginalPhotoUrl(url),
-      width: getNumber(originalInfo, 'width'),
+      width: positiveNumber(originalInfo, 'width'),
       height: positiveNumber(originalInfo, 'height'),
       altText: optionalText(value, 'ext_alt_text'),
     };
@@ -124,7 +129,7 @@ function normalizeMedia(media: unknown, index: number): MediaRecord | undefined 
       getObject(value, 'original_info') ?? getObject(videoInfo, 'original_info'),
       'height',
     ),
-    durationMs: positiveNumber(videoInfo, 'duration_millis'),
+    durationMs: nonNegativeNumber(videoInfo, 'duration_millis'),
     altText: optionalText(value, 'ext_alt_text'),
   };
 }
@@ -148,34 +153,10 @@ function removeMediaEntityUrls(text: string, legacy: JsonObject): string {
 }
 
 function unwrapTweet(value: JsonObject): JsonObject {
-  if (value.__typename === 'TweetWithVisibilityResults') {
-    return getObject(value, 'tweet') ?? value;
-  }
   return getObject(value, 'tweet') ?? value;
 }
 
-export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undefined {
-  return normalizeCandidate(candidate, true);
-}
-
-function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRecord | undefined {
-  const input = asObject(candidate);
-  if (!input) return undefined;
-
-  const isGraphqlTweet =
-    input.__typename === 'Tweet' || input.__typename === 'TweetWithVisibilityResults';
-  const isLegacyTweet =
-    typeof input.id_str === 'string' &&
-    (typeof input.full_text === 'string' || typeof input.text === 'string') &&
-    (getObject(input, 'user') !== undefined || typeof input.user_id_str === 'string');
-  if (!isGraphqlTweet && !isLegacyTweet) return undefined;
-
-  const tweet = unwrapTweet(input);
-  const legacy = getObject(tweet, 'legacy') ?? tweet;
-  const tweetId =
-    getString(tweet, 'rest_id') ?? getString(legacy, 'id_str') ?? getString(tweet, 'id_str');
-  if (!tweetId) return undefined;
-
+function normalizeAuthor(tweet: JsonObject, legacy: JsonObject): TweetAuthor {
   const user = getObject(legacy, 'user');
   const userResults = getObject(getObject(tweet, 'core'), 'user_results');
   const userResult = getObject(userResults, 'result');
@@ -204,6 +185,65 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
     getString(userResultCore, 'profile_image_url_https') ??
     getString(getObject(userResult, 'avatar'), 'image_url');
   const avatarUrl = avatarUrlValue ? normalizeAvatarUrl(avatarUrlValue) : undefined;
+  const authorData = user ?? userResultLegacy;
+  const expandedAuthorUrl = getString(
+    (getArray(getObject(getObject(authorData, 'entities'), 'url'), 'urls') ?? [])[0],
+    'expanded_url',
+  );
+  return {
+    id: authorId,
+    handle,
+    name,
+    avatarUrl,
+    description: optionalText(authorData, 'description'),
+    location: optionalText(authorData, 'location'),
+    url: webUrl(expandedAuthorUrl ?? getString(authorData, 'url')),
+    createdAt: normalizePublishedAt(getString(authorData, 'created_at')),
+  };
+}
+
+function normalizeText(
+  tweet: JsonObject,
+  legacy: JsonObject,
+): Pick<TweetRecord, 'text' | 'textSource'> {
+  const note = getObject(getObject(getObject(tweet, 'note_tweet'), 'note_tweet_results'), 'result');
+  const noteText = getString(note, 'text');
+  const rawText = noteText ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '';
+  return {
+    text: decodeHtmlEntities(removeMediaEntityUrls(rawText, legacy)),
+    textSource: noteText
+      ? 'note'
+      : legacy.truncated === true || typeof legacy.full_text !== 'string'
+        ? 'partial'
+        : 'full',
+  };
+}
+
+export function normalizeTweetCandidate(candidate: unknown): TweetRecord | undefined {
+  return normalizeCandidate(candidate, true);
+}
+
+function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRecord | undefined {
+  const input = asObject(candidate);
+  if (!input) return undefined;
+
+  const isGraphqlTweet =
+    input.__typename === 'Tweet' || input.__typename === 'TweetWithVisibilityResults';
+  const isLegacyTweet =
+    typeof input.id_str === 'string' &&
+    (typeof input.full_text === 'string' || typeof input.text === 'string') &&
+    (getObject(input, 'user') !== undefined || typeof input.user_id_str === 'string');
+  if (!isGraphqlTweet && !isLegacyTweet) return undefined;
+
+  const tweet = unwrapTweet(input);
+  const legacy = getObject(tweet, 'legacy') ?? tweet;
+  const tweetId =
+    getString(tweet, 'rest_id') ?? getString(legacy, 'id_str') ?? getString(tweet, 'id_str');
+  if (!tweetId) return undefined;
+
+  const author = normalizeAuthor(tweet, legacy);
+  const { text, textSource } = normalizeText(tweet, legacy);
+  const language = getString(legacy, 'lang');
   const media = (
     getArray(getObject(legacy, 'extended_entities'), 'media') ??
     getArray(legacy, 'media') ??
@@ -211,23 +251,11 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
   )
     .map((item, index) => normalizeMedia(item, index + 1))
     .filter((item): item is MediaRecord => item !== undefined);
-  const note = getObject(getObject(getObject(tweet, 'note_tweet'), 'note_tweet_results'), 'result');
-  const text = decodeHtmlEntities(
-    removeMediaEntityUrls(
-      getString(note, 'text') ?? getString(legacy, 'full_text') ?? getString(legacy, 'text') ?? '',
-      legacy,
-    ),
-  );
-  const authorData = user ?? userResultLegacy;
-  const expandedAuthorUrl = getString(
-    (getArray(getObject(getObject(authorData, 'entities'), 'url'), 'urls') ?? [])[0],
-    'expanded_url',
-  );
   const editControl = getObject(tweet, 'edit_control') ?? getObject(legacy, 'edit_control');
   const editIds = getArray(editControl, 'edit_tweet_ids');
   const replyId = getString(legacy, 'in_reply_to_status_id_str');
   const replyUser = getString(legacy, 'in_reply_to_user_id_str');
-  const urlHandle = handle.replace(/^@+/, '');
+  const urlHandle = author.handle.replace(/^@+/, '');
 
   return {
     tweetId,
@@ -235,32 +263,15 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
       ? `https://x.com/${urlHandle}/status/${tweetId}`
       : `https://x.com/i/status/${tweetId}`,
     text,
-    author: {
-      id: authorId,
-      handle,
-      name,
-      avatarUrl,
-      description: optionalText(authorData, 'description'),
-      location: optionalText(authorData, 'location'),
-      url: webUrl(expandedAuthorUrl ?? getString(authorData, 'url')),
-      createdAt: normalizePublishedAt(getString(authorData, 'created_at')),
-    },
+    author,
     observedAt: new Date().toISOString(),
-    textSource: getString(note, 'text')
-      ? 'note'
-      : legacy.truncated === true || typeof legacy.full_text !== 'string'
-        ? 'partial'
-        : 'full',
+    textSource,
     poll: normalizePoll(
       tweet.card ?? tweet.tweet_card ?? legacy.card ?? legacy.tweet_card,
       tweet.grok_translated_post_with_availability,
     ),
-    language: getString(legacy, 'lang'),
-    translation: normalizeTranslation(
-      tweet.grok_translated_post_with_availability,
-      text,
-      getString(legacy, 'lang'),
-    ),
+    language,
+    translation: normalizeTranslation(tweet.grok_translated_post_with_availability, text, language),
     replyToTweetId: replyId && /^\d+$/.test(replyId) ? replyId : undefined,
     replyToUserId: replyUser && /^\d+$/.test(replyUser) ? replyUser : undefined,
     sensitive:

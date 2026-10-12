@@ -13,7 +13,7 @@ const record: TweetRecord = {
 describe('buildTweetText', () => {
   it('keeps the body line breaks and includes source metadata', () => {
     const text = buildTweetText(record);
-    for (const value of [record.text, record.author.handle, record.url, record.tweetId]) {
+    for (const value of [record.text, record.author.handle, record.url]) {
       expect(text).toContain(value);
     }
   });

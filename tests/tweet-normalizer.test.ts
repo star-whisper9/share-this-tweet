@@ -2,6 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { normalizeTweetCandidate } from '../src/shared/tweet-normalizer.js';
 
 describe('normalizeTweetCandidate', () => {
+  it('keeps only positive media dimensions while allowing zero duration', () => {
+    for (const dimension of [-1, 0, NaN, Infinity, 1200]) {
+      const record = normalizeTweetCandidate({
+        id_str: '42',
+        full_text: 'body',
+        user: { screen_name: 'alice' },
+        extended_entities: {
+          media: ['photo', 'video'].map((type) => ({
+            type,
+            media_url_https: 'https://pbs.twimg.com/media/photo.jpg',
+            original_info: { width: dimension, height: dimension },
+            video_info: { duration_millis: 0, variants: [] },
+          })),
+        },
+      })!;
+      for (const media of record.media) {
+        expect(media.width).toBe(dimension === 1200 ? dimension : undefined);
+        expect(media.height).toBe(dimension === 1200 ? dimension : undefined);
+      }
+      expect(record.media[1].durationMs).toBe(0);
+    }
+  });
+
   it('normalizes a GraphQL tweet with photo and video media', () => {
     const record = normalizeTweetCandidate({
       __typename: 'Tweet',

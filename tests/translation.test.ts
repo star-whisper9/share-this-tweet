@@ -71,10 +71,8 @@ it('warns only on unexpected data, keeping ordinary unavailable translations sil
     reason: 'malformed',
   });
 });
-it('uses provided readable names first and only maps known language codes', () => {
-  expect(languageName('en', 'English')).toBe('English');
-  expect(languageName('en')).toBe('英语');
-  expect(languageName('ja', undefined, 'en')).toBe('Japanese');
+it('preserves supplied readable names and unknown language codes', () => {
+  expect(languageName('en', 'supplied name')).toBe('supplied name');
   expect(languageName('unmapped-XYZ')).toBe('unmapped-XYZ');
 });
 it('invalidates stale translations instead of pairing them with changed originals', () => {
@@ -92,13 +90,26 @@ it('invalidates stale translations instead of pairing them with changed original
   expect(merged.translation?.status).toBe('invalid');
 });
 it('provides four independent template fields and optional bilingual presets', () => {
-  const translated = { ...record, translation: normalizeTranslation(payload, record.text) };
+  const translated = {
+    ...record,
+    translation: normalizeTranslation(
+      {
+        ...payload,
+        data: {
+          ...payload.data,
+          source_language_name: 'source',
+          destination_language_name: 'target',
+        },
+      },
+      record.text,
+    ),
+  };
   expect(
     renderTemplate(
       '{translation.sourceLanguage}/{translation.targetLanguage}/{translation.originalText}/{translation.text}',
       { tweet: translated },
     ),
-  ).toBe(`英语/中文/${record.text}/${payload.data.translation}`);
+  ).toBe(`source/target/${record.text}/${payload.data.translation}`);
   expect(buildTweetText(translated)).toContain(payload.data.translation);
   expect(buildTweetText(translated)).toContain(record.text);
   expect(

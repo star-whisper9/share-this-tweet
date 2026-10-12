@@ -94,39 +94,56 @@ function mergeMediaRecords(current: MediaRecord, incoming: MediaRecord): MediaRe
   };
 }
 
-export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): TweetRecord {
-  const newer =
-    !!incoming.observedAt && (!current.observedAt || incoming.observedAt >= current.observedAt);
-  const mediaByIndex = new Map(current.media.map((media) => [media.index, media]));
-  for (const media of incoming.media) {
+function mergeMedia(
+  current: MediaRecord[],
+  incoming: MediaRecord[],
+  incomingIsNewer: boolean,
+): MediaRecord[] {
+  const mediaByIndex = new Map(current.map((media) => [media.index, media]));
+  for (const media of incoming) {
     const existing = mediaByIndex.get(media.index);
     mediaByIndex.set(
       media.index,
       existing
-        ? newer
+        ? incomingIsNewer
           ? mergeMediaRecords(existing, media)
           : mergeMediaRecords(media, existing)
         : media,
     );
   }
+  return Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index);
+}
 
-  const preferred = newer ? incoming : current;
-  const fallback = newer ? current : incoming;
-  const authorHandle = preferValue(preferred.author.handle, fallback.author.handle) ?? '';
-  const authorName = preferValue(preferred.author.name, fallback.author.name) ?? authorHandle;
-
-  if (current.tweetId !== incoming.tweetId) throw new Error('Cannot merge different tweets');
-  if (current.author.id && incoming.author.id && current.author.id !== incoming.author.id)
-    throw new Error('Conflicting tweet author identity');
+function selectTextRecord(
+  current: TweetRecord,
+  incoming: TweetRecord,
+  incomingIsNewer: boolean,
+): TweetRecord {
   const rank = { partial: 0, full: 1, note: 2 };
   const currentRank = rank[current.textSource ?? 'partial'];
   const incomingRank = rank[incoming.textSource ?? 'partial'];
   const useIncomingText =
-    incomingRank > currentRank || (incomingRank === currentRank && (newer || !current.text));
+    incomingRank > currentRank ||
+    (incomingRank === currentRank && (incomingIsNewer || !current.text));
+  return useIncomingText ? incoming : current;
+}
+
+export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): TweetRecord {
+  if (current.tweetId !== incoming.tweetId) throw new Error('Cannot merge different tweets');
+  if (current.author.id && incoming.author.id && current.author.id !== incoming.author.id)
+    throw new Error('Conflicting tweet author identity');
+
+  const incomingIsNewer =
+    !!incoming.observedAt && (!current.observedAt || incoming.observedAt >= current.observedAt);
+  const preferred = incomingIsNewer ? incoming : current;
+  const fallback = incomingIsNewer ? current : incoming;
+  const textRecord = selectTextRecord(current, incoming, incomingIsNewer);
+  const authorHandle = preferValue(preferred.author.handle, fallback.author.handle) ?? '';
+  const authorName = preferValue(preferred.author.name, fallback.author.name) ?? authorHandle;
   const translation = mergeTranslation(
     preferred.translation,
     fallback.translation,
-    useIncomingText ? incoming.text : current.text,
+    textRecord.text,
   );
   return {
     tweetId: current.tweetId,
@@ -134,8 +151,8 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
       current.url.includes('/i/status/') && !incoming.url.includes('/i/status/')
         ? incoming.url
         : current.url,
-    text: useIncomingText ? incoming.text : current.text,
-    textSource: useIncomingText ? incoming.textSource : current.textSource,
+    text: textRecord.text,
+    textSource: textRecord.textSource,
     observedAt: preferred.observedAt ?? fallback.observedAt,
     language: preferred.language ?? fallback.language,
     translation,
@@ -155,7 +172,7 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
       createdAt: preferred.author.createdAt ?? fallback.author.createdAt,
     },
     publishedAt: current.publishedAt ?? incoming.publishedAt,
-    media: Array.from(mediaByIndex.values()).sort((left, right) => left.index - right.index),
+    media: mergeMedia(current.media, incoming.media, incomingIsNewer),
     ...(current.quote || incoming.quote
       ? { quote: mergeQuote(current.quote, incoming.quote) }
       : {}),
