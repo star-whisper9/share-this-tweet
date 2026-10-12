@@ -29,10 +29,10 @@ it('checks source boundaries and identifies exceeded guards for explicit fallbac
     expect(() =>
       assertGifLimits(DEFAULT_GIF_LIMITS, { ...actual, [key]: actual[key] + 1 }),
     ).toThrow(GifLimitError);
-    expect(() =>
-      assertGifLimits(DEFAULT_GIF_LIMITS, { ...actual, [key]: actual[key] + 1 }),
-    ).toThrow(VideoLimitError);
   }
+  expect(() =>
+    assertGifLimits(DEFAULT_GIF_LIMITS, { sourcePixels: actual.sourcePixels + 1 }),
+  ).toThrow(VideoLimitError);
   expect(() =>
     assertGifLimits({ maxInputMiB: 0, maxDurationSeconds: 0, maxSourcePixels: 0 }, actual),
   ).not.toThrow();

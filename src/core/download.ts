@@ -31,6 +31,10 @@ async function downloadOnAndroid(url: string, filename: string): Promise<void> {
   const blob = await response.blob();
   if (blob.size === 0) throw new Error(t('core.download.emptyResponse'));
 
+  downloadBlob(blob, filename);
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = objectUrl;
@@ -46,21 +50,6 @@ async function downloadOnAndroid(url: string, filename: string): Promise<void> {
       URL.revokeObjectURL(objectUrl);
     }, 1000);
   }
-}
-
-export function downloadBlob(blob: Blob, filename: string): void {
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download = filename;
-  anchor.rel = 'noreferrer';
-  anchor.hidden = true;
-  document.body.append(anchor);
-  anchor.click();
-  window.setTimeout(() => {
-    anchor.remove();
-    URL.revokeObjectURL(objectUrl);
-  }, 1000);
 }
 
 export async function downloadMedia(

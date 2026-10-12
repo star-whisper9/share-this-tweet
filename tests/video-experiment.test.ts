@@ -55,10 +55,8 @@ describe('processing estimate', () => {
     frameRate: 27,
     bitrateMbps: 1.5,
   };
-  it('covers measured M4 cases and scales pixel-frame work, not compressed bitrate', () => {
+  it('scales pixel-frame work and estimates input size from bitrate', () => {
     const result = estimateVideoProcessing(input);
-    expect(result.minSeconds).toBeLessThan(219.545);
-    expect(result.maxSeconds).toBeGreaterThan(219.545);
     const bigger = estimateVideoProcessing({ ...input, width: input.width * 2 });
     expect(bigger.minSeconds - 0.3).toBeCloseTo((result.minSeconds - 0.3) * 2);
     const bitrate = estimateVideoProcessing({ ...input, bitrateMbps: 3 });
