@@ -54,7 +54,11 @@ class FakeContext {
     if (image.id) drawCalls.push(image.id);
   }
   measureText(text: string): TextMetrics {
-    return { width: Math.max(1, [...text].length * 10) } as TextMetrics;
+    return {
+      width: Math.max(1, [...text].length * 10),
+      actualBoundingBoxAscent: 8,
+      actualBoundingBoxDescent: 2,
+    } as TextMetrics;
   }
 }
 
@@ -251,7 +255,7 @@ describe('renderTweetCard polls', () => {
         poll: {
           status: 'available' as const,
           options: [
-            { index: 1, label: 'Main option one', votes: 3 },
+            { index: 1, label: 'Main option one '.repeat(10).trim(), votes: 3 },
             { index: 2, label: 'Main option two', votes: 1 },
           ],
           selectedChoice: 1,
@@ -283,13 +287,19 @@ describe('renderTweetCard polls', () => {
       for (const layout of [mainLayout, quoteLayout]) {
         const block = layout.pollBlocks[0]!;
         for (const option of block.options) {
-          expect(textCalls.filter((call) => call.text === option.lines[0])).toEqual([
-            {
-              text: option.lines[0],
+          const centerY = option.y + option.height / 2;
+          for (const [index, line] of option.lines.entries()) {
+            expect(textCalls).toContainEqual({
+              text: line,
               x: layout.padding + block.optionPadding + block.selectionWidth,
-              y: option.y + block.optionPadding,
-            },
-          ]);
+              y: centerY + 3 + (index - (option.lines.length - 1) / 2) * layout.textLineHeight,
+            });
+          }
+          expect(textCalls).toContainEqual({
+            text: `${option.percentage}%`,
+            x: layout.padding + layout.contentWidth - block.optionPadding,
+            y: centerY + 3,
+          });
           expect(fillCalls).toContainEqual({
             x: layout.padding,
             y: option.y,

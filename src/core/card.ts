@@ -394,6 +394,12 @@ function drawPoll(
   context.fillStyle = palette.muted;
   context.font = `600 ${layout.labelFontSize}px ${CARD_FONT_FAMILY}`;
   context.fillText(block.heading, layout.padding, block.y);
+  const centeredBaseline = (lines: string[], centerY: number): number => {
+    const metrics = lines.map((line) => context.measureText(line || 'Mg'));
+    const ascent = Math.max(...metrics.map((metric) => metric.actualBoundingBoxAscent));
+    const descent = Math.max(...metrics.map((metric) => metric.actualBoundingBoxDescent));
+    return centerY - ((lines.length - 1) * layout.textLineHeight + ascent + descent) / 2 + ascent;
+  };
   for (const option of block.options) {
     const x = layout.padding;
     context.fillStyle = palette.imageBackground;
@@ -408,10 +414,10 @@ function drawPoll(
     context.strokeStyle = option.selected ? accent : palette.border;
     context.lineWidth = option.selected ? 2 : 1;
     context.strokeRect(x + 0.5, option.y + 0.5, layout.contentWidth - 1, option.height - 1);
-    const textY = option.y + block.optionPadding;
+    const centerY = option.y + option.height / 2;
     if (option.selected) {
       const checkX = x + block.optionPadding;
-      const checkY = textY + layout.bodyFontSize * 0.5;
+      const checkY = centerY - layout.bodyFontSize * 0.125;
       context.strokeStyle = accent;
       context.lineWidth = Math.max(2, layout.bodyFontSize * 0.12);
       context.beginPath();
@@ -422,6 +428,9 @@ function drawPoll(
     }
     context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
     context.fillStyle = palette.text;
+    context.textBaseline = 'alphabetic';
+    // Center the visible glyphs, including a wrapped label's complete text block.
+    const textY = centeredBaseline(option.lines, centerY);
     option.lines.forEach((line, index) =>
       context.fillText(
         line,
@@ -432,14 +441,16 @@ function drawPoll(
     if (option.percentage !== undefined) {
       context.textAlign = 'right';
       context.font = `600 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
+      const percentage = `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(option.percentage)}%`;
       context.fillText(
-        `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(option.percentage)}%`,
+        percentage,
         x + layout.contentWidth - block.optionPadding,
-        textY,
+        centeredBaseline([percentage], centerY),
       );
       context.textAlign = 'left';
     }
   }
+  context.textBaseline = 'top';
   context.fillStyle = palette.muted;
   context.font = `400 ${layout.labelFontSize}px ${CARD_FONT_FAMILY}`;
   block.footerLines.forEach((line, index) =>
