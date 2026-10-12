@@ -341,6 +341,32 @@ describe('durable export queue', () => {
     expect(mocks.blobs.size).toBe(0);
   });
 
+  it.each([false, true])(
+    'cancels a timed-out desktop download and continues the queue (cancel fails: %s)',
+    async (cancelFails) => {
+      vi.useFakeTimers();
+      try {
+        search.mockResolvedValueOnce([{ id: 9, state: 'in_progress' }]);
+        if (cancelFails) cancel.mockRejectedValueOnce(new Error('cancel unavailable'));
+        const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+        await handleExportJobMessage({ type: 'export-job-enqueue', request: request('stalled') });
+        await handleExportJobMessage({ type: 'export-job-enqueue', request: request('next') });
+        await vi.waitFor(() => expect(search).toHaveBeenCalledOnce());
+        await vi.advanceTimersByTimeAsync(30 * 60_000);
+        await vi.waitFor(() => {
+          expect(mocks.jobs.get('stalled')?.summary.status).toBe('failed');
+          expect(mocks.jobs.get('next')?.summary.status).toBe('completed');
+        });
+        expect(cancel).toHaveBeenCalledExactlyOnceWith(9);
+        expect(mocks.jobs.get('stalled')?.files[0]?.saved).toBe(false);
+        expect(mocks.jobs.get('stalled')?.summary.error).toEqual(expect.any(String));
+        expect(mocks.jobs.get('stalled')?.summary.warnings).toHaveLength(cancelFails ? 1 : 0);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('cancels a running task and leaves its durable status cancelled', async () => {
     mocks.render.mockImplementationOnce(
       async (_job: ExportJobRequest, callbacks: { signal: AbortSignal }) => {

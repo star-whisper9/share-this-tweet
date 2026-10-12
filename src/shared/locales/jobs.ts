@@ -78,6 +78,7 @@ export const zhCN = {
   'jobs.interrupted': '任务已中断。',
   'jobs.cancelled': '任务已取消。',
   'jobs.downloadFailed': '无法开始保存文件：{error}',
+  'jobs.downloadCancelFailed': '无法取消浏览器下载，请检查下载列表后再重试：{error}',
   'jobs.savedWarning': '保存记录失败：{error}',
   'jobs.openError': '无法打开任务页：{error}',
   'jobs.notFound': '未找到该导出任务。',
@@ -178,6 +179,8 @@ export const en: Record<keyof typeof zhCN, string> = {
   'jobs.interrupted': 'Task was interrupted.',
   'jobs.cancelled': 'Task was cancelled.',
   'jobs.downloadFailed': 'Could not start file save: {error}',
+  'jobs.downloadCancelFailed':
+    'Could not cancel the browser download. Check the downloads list before retrying: {error}',
   'jobs.savedWarning': 'Could not record saved file: {error}',
   'jobs.openError': 'Could not open task page: {error}',
   'jobs.notFound': 'Export task was not found.',

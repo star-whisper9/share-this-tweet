@@ -1,3 +1,4 @@
+import { waitForBrowserDownload } from '../core/download-monitor.js';
 import { isTweetRecord } from '../shared/record-validation.js';
 import { handleExportJobMessage, initializeExportJobs } from './export-jobs.js';
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
@@ -13,7 +14,6 @@ import {
   importStorageRecords,
   listStorageRecords,
   recordOutput,
-  StorageError,
   upsertTweetRecord,
 } from '../core/storage.js';
 
@@ -33,14 +33,24 @@ browser.runtime.onMessage.addListener((message: unknown) => {
     return downloadSourcedMedia(message.url, message.filename, message.source, locale);
   if (message.type === 'prepare-sourced-media')
     return prepareSourcedMedia(message.url, message.source, locale);
-  if (message.type === 'save-tweet-record') return saveTweetRecord(message.record);
-  if (message.type === 'record-output') return saveOutputRecord(message.output);
-  if (message.type === 'get-tweet-record') return readTweetRecord(message.tweetId);
-  if (message.type === 'list-storage-records') return readStorageRecords();
-  if (message.type === 'delete-tweet-record') return removeTweetRecord(message.tweetId);
-  if (message.type === 'clear-storage-records') return clearRecords();
-  if (message.type === 'export-storage-records') return exportRecords();
-  if (message.type === 'import-storage-records') return importRecords(message.archive);
+  if (message.type === 'save-tweet-record')
+    return storageResponse(async () => {
+      await upsertTweetRecord(message.record);
+    });
+  if (message.type === 'record-output')
+    return storageResponse(async () => {
+      await recordOutput(message.output);
+    });
+  if (message.type === 'get-tweet-record')
+    return storageResponse(async () => ({ record: await getTweetRecord(message.tweetId) }));
+  if (message.type === 'list-storage-records') return storageResponse(listStorageRecords);
+  if (message.type === 'delete-tweet-record')
+    return storageResponse(() => deleteTweetRecord(message.tweetId));
+  if (message.type === 'clear-storage-records') return storageResponse(clearStorageRecords);
+  if (message.type === 'export-storage-records')
+    return storageResponse(async () => ({ archive: await exportStorageRecords() }));
+  if (message.type === 'import-storage-records')
+    return storageResponse(() => importStorageRecords(message.archive));
 });
 
 function isExtensionMessage(message: unknown): message is ExtensionMessage {
@@ -92,102 +102,11 @@ function isOutputRecordInput(
   return typeof output.tweetId === 'string' && typeof output.outputType === 'string';
 }
 
-async function saveTweetRecord(
-  record: Extract<ExtensionMessage, { type: 'save-tweet-record' }>['record'],
-) {
+async function storageResponse<T extends object | void>(operation: () => Promise<T>) {
   try {
-    await upsertTweetRecord(record);
-    return { ok: true as const };
+    return { ok: true as const, ...(await operation()) };
   } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function saveOutputRecord(
-  output: Extract<ExtensionMessage, { type: 'record-output' }>['output'],
-) {
-  try {
-    await recordOutput(output);
-    return { ok: true as const };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function readTweetRecord(tweetId: string) {
-  try {
-    return { ok: true as const, record: await getTweetRecord(tweetId) };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function readStorageRecords() {
-  try {
-    return { ok: true as const, ...(await listStorageRecords()) };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function removeTweetRecord(tweetId: string) {
-  try {
-    await deleteTweetRecord(tweetId);
-    return { ok: true as const };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function clearRecords() {
-  try {
-    await clearStorageRecords();
-    return { ok: true as const };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function exportRecords() {
-  try {
-    return { ok: true as const, archive: await exportStorageRecords() };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
-  }
-}
-
-async function importRecords(
-  archive: Extract<ExtensionMessage, { type: 'import-storage-records' }>['archive'],
-) {
-  try {
-    await importStorageRecords(archive);
-    return { ok: true as const };
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof StorageError ? error.message : String(error),
-    };
+    return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -216,39 +135,7 @@ const MAX_SOURCE_MEDIA_SIZE = 512 * 1024 * 1024;
 const MAX_ACTIVE_SOURCE_TASKS = 2;
 const SOURCE_FETCH_TIMEOUT_MS = 90_000;
 const SOURCE_WORKER_TIMEOUT_MS = 120_000;
-const DOWNLOAD_COMPLETION_TIMEOUT_MS = 30 * 60_000;
 let activeSourceTasks = 0;
-const pendingDownloads = new Map<
-  number,
-  { resolve: () => void; reject: (error: Error) => void; locale: Locale }
->();
-
-browser.downloads?.onChanged.addListener((delta) => {
-  const state = delta.state?.current;
-  if (state !== 'complete' && state !== 'interrupted') return;
-  settlePendingDownload(delta.id, state, delta.error?.current);
-});
-
-function settlePendingDownload(
-  downloadId: number,
-  state: 'complete' | 'interrupted',
-  error?: string,
-): void {
-  const pending = pendingDownloads.get(downloadId);
-  if (!pending) return;
-  pendingDownloads.delete(downloadId);
-  if (state === 'complete') pending.resolve();
-  else
-    pending.reject(
-      new Error(
-        t(
-          'core.background.downloadInterrupted',
-          { error: error ? `：${error}` : '' },
-          pending.locale,
-        ),
-      ),
-    );
-}
 
 export function validateDownloadRequest(
   url: string,
@@ -332,54 +219,6 @@ async function fetchSourceMedia(url: string, locale: Locale): Promise<Blob> {
   }
 }
 
-async function waitForDownloadCompletion(downloadId: number, locale: Locale): Promise<void> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const finish = (operation: () => void): void => {
-        if (timeout !== undefined) clearTimeout(timeout);
-        operation();
-      };
-      pendingDownloads.set(downloadId, {
-        resolve: () => finish(resolve),
-        reject: (error) => finish(() => reject(error)),
-        locale,
-      });
-      timeout = setTimeout(() => {
-        pendingDownloads.delete(downloadId);
-        reject(new Error(t('core.background.downloadTimeout', {}, locale)));
-      }, DOWNLOAD_COMPLETION_TIMEOUT_MS);
-      void browser.downloads
-        .search({ id: downloadId })
-        .then(([item]) => {
-          if (!item) {
-            const pending = pendingDownloads.get(downloadId);
-            if (pending) pending.reject(new Error(t('core.background.noDownloadTask', {}, locale)));
-            return;
-          }
-          if (item.state === 'complete' || item.state === 'interrupted')
-            settlePendingDownload(downloadId, item.state, item.error);
-        })
-        .catch((error) => {
-          const pending = pendingDownloads.get(downloadId);
-          if (pending)
-            pending.reject(
-              new Error(
-                t(
-                  'core.background.downloadStateUnknown',
-                  { message: error instanceof Error ? error.message : String(error) },
-                  locale,
-                ),
-              ),
-            );
-        });
-    });
-  } finally {
-    pendingDownloads.delete(downloadId);
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
-}
-
 async function withSourceTask<T>(operation: () => Promise<T>, locale: Locale): Promise<T> {
   if (activeSourceTasks >= MAX_ACTIVE_SOURCE_TASKS)
     throw new Error(t('core.background.sourceBusy', {}, locale));
@@ -439,7 +278,7 @@ async function downloadSourcedMedia(
         filename,
         saveAs: false,
       });
-      await waitForDownloadCompletion(downloadId, locale);
+      await waitForBrowserDownload(downloadId, { locale });
       return { ok: true, downloadId };
     }, locale);
   } catch (error) {

@@ -1,3 +1,5 @@
+import { DownloadTimeoutError, waitForBrowserDownload } from '../core/download-monitor.js';
+import { JobUpdateBuffer } from './job-updates.js';
 import { newestJobsFirst } from '../shared/job-list.js';
 import { fileCacheDeadline, JOB_RETENTION } from '../shared/job-retention.js';
 import { renderExportJob } from '../core/job-renderer.js';
@@ -41,32 +43,9 @@ type JobResponse = { ok: true; [key: string]: unknown } | { ok: false; error: st
 const jobs = new Map<string, StoredExportJob>();
 const controllers = new Map<string, AbortController>();
 const activeDownloads = new Map<string, number>();
-const pendingDownloads = new Map<
-  number,
-  {
-    resolve: () => void;
-    reject: (error: Error) => void;
-    locale: Locale;
-    signal: AbortSignal;
-    abort: () => void;
-  }
->();
 let initialization: Promise<void> | undefined;
 let processing = false;
 let mutation = Promise.resolve();
-const callbackWrites = new Map<string, Promise<void>>();
-const pendingUpdates = new Map<
-  string,
-  {
-    progress?: string;
-    warnings: string[];
-    diagnostics?: VideoDiagnosticsReport;
-    scheduled: boolean;
-    timer?: ReturnType<typeof setTimeout>;
-  }
->();
-const CALLBACK_PERSIST_INTERVAL_MS = 500;
-
 function messageError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -272,11 +251,24 @@ async function addWarning(id: string, warning: string): Promise<void> {
   });
 }
 
-function queueCallbackWrite(id: string, operation: () => Promise<void>): void {
-  const previous = callbackWrites.get(id) ?? Promise.resolve();
-  const next = previous.then(operation);
-  callbackWrites.set(id, next);
-  void next.catch(async (error) => {
+const callbackUpdates = new JobUpdateBuffer(
+  async (id, latest) => {
+    await mutateJob(id, (job) => {
+      if (job.summary.status === 'running') {
+        if (latest.progress !== undefined) job.summary.progress = latest.progress;
+        for (const warning of latest.warnings) {
+          if (!job.summary.warnings.includes(warning)) job.summary.warnings.push(warning);
+        }
+      }
+      // Keep final diagnostics even if cancellation won the status race.
+      if (latest.diagnostics) {
+        job.diagnosticsExpiresAt = Date.now() + JOB_RETENTION.diagnostics;
+        job.summary.hasDiagnostics = true;
+        return { diagnostics: latest.diagnostics };
+      }
+    });
+  },
+  async (id, error) => {
     controllers.get(id)?.abort();
     const job = jobs.get(id);
     if (!job || job.summary.status !== 'running') return;
@@ -288,64 +280,13 @@ function queueCallbackWrite(id: string, operation: () => Promise<void>): void {
         current.summary.error = messageError(error);
       });
     } catch {
-      // If IndexedDB itself is unavailable, retain the visible in-memory
-      // failure instead of letting a callback rejection disappear.
+      // Storage failure still remains visible in this session.
       job.summary.status = 'failed';
       job.summary.progress = undefined;
       job.summary.error = messageError(error);
     }
-  });
-}
-
-/** Renderer callbacks are synchronous. Batch same-turn progress/diagnostics into one durable write. */
-function receiveCallbackUpdate(
-  id: string,
-  update: { progress?: string; warning?: string; diagnostics?: VideoDiagnosticsReport },
-): void {
-  const pending = pendingUpdates.get(id) ?? { warnings: [], scheduled: false };
-  if (update.progress !== undefined) pending.progress = update.progress;
-  if (update.warning !== undefined) pending.warnings.push(update.warning);
-  if (update.diagnostics !== undefined) pending.diagnostics = update.diagnostics;
-  pendingUpdates.set(id, pending);
-  if (pending.scheduled) return;
-  pending.scheduled = true;
-  pending.timer = setTimeout(() => commitCallbackUpdate(id), CALLBACK_PERSIST_INTERVAL_MS);
-}
-
-function commitCallbackUpdate(id: string): void {
-  const scheduled = pendingUpdates.get(id);
-  if (!scheduled) return;
-  scheduled.scheduled = false;
-  scheduled.timer = undefined;
-  queueCallbackWrite(id, async () => {
-    const latest = pendingUpdates.get(id);
-    if (!latest) return;
-    pendingUpdates.delete(id);
-    await mutateJob(id, (job) => {
-      if (job.summary.status === 'running') {
-        if (latest.progress !== undefined) job.summary.progress = latest.progress;
-        for (const warning of latest.warnings) {
-          if (!job.summary.warnings.includes(warning)) job.summary.warnings.push(warning);
-        }
-      }
-      // A dynamic renderer reports its final diagnostic record immediately
-      // before rejecting. Keep it even if cancellation won the status race.
-      if (latest.diagnostics) {
-        job.diagnosticsExpiresAt = Date.now() + JOB_RETENTION.diagnostics;
-        job.summary.hasDiagnostics = true;
-        return { diagnostics: latest.diagnostics };
-      }
-    });
-  });
-}
-
-async function flushCallbackUpdates(id: string): Promise<void> {
-  const pending = pendingUpdates.get(id);
-  if (pending?.timer !== undefined) clearTimeout(pending.timer);
-  if (pending) commitCallbackUpdate(id);
-  await callbackWrites.get(id);
-  callbackWrites.delete(id);
-}
+  },
+);
 
 async function storeHistory(job: StoredExportJob, file: StoredExportJobFile): Promise<void> {
   try {
@@ -376,55 +317,6 @@ async function markFileSaved(id: string, fileId: string): Promise<StoredExportJo
   return jobs.get(id);
 }
 
-function waitForDownload(downloadId: number, locale: Locale, signal: AbortSignal): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const abort = (): void => {
-      pendingDownloads.delete(downloadId);
-      reject(new DOMException(t('jobs.cancelled', {}, locale), 'AbortError'));
-    };
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    pendingDownloads.set(downloadId, { resolve, reject, locale, signal, abort });
-    signal.addEventListener('abort', abort, { once: true });
-    void browser.downloads
-      .search({ id: downloadId })
-      .then(([item]) => {
-        if (!item) {
-          settleDownload(downloadId, 'interrupted', t('jobs.noDownloadTask', {}, locale));
-          return;
-        }
-        if (item.state === 'complete' || item.state === 'interrupted') {
-          settleDownload(downloadId, item.state, item.error);
-        }
-      })
-      .catch((error) => settleDownload(downloadId, 'interrupted', messageError(error)));
-  });
-}
-
-function settleDownload(
-  downloadId: number,
-  state: 'complete' | 'interrupted',
-  error?: string,
-): void {
-  const pending = pendingDownloads.get(downloadId);
-  if (!pending) return;
-  pendingDownloads.delete(downloadId);
-  pending.signal.removeEventListener('abort', pending.abort);
-  if (state === 'complete') pending.resolve();
-  else
-    pending.reject(
-      new Error(t('jobs.downloadInterrupted', { error: error ?? '—' }, pending.locale)),
-    );
-}
-
-browser.downloads?.onChanged.addListener((delta) => {
-  const state = delta.state?.current;
-  if (state === 'complete' || state === 'interrupted')
-    settleDownload(delta.id, state, delta.error?.current);
-});
-
 async function downloadDesktopFile(
   jobId: string,
   file: ExportJobFile,
@@ -432,8 +324,9 @@ async function downloadDesktopFile(
   locale: Locale,
 ): Promise<void> {
   const objectUrl = URL.createObjectURL(file.blob);
+  let downloadId: number | undefined;
   try {
-    const downloadId = await browser.downloads.download({
+    downloadId = await browser.downloads.download({
       url: objectUrl,
       filename: file.filename,
       saveAs: false,
@@ -443,7 +336,19 @@ async function downloadDesktopFile(
       await browser.downloads.cancel(downloadId);
       signal.throwIfAborted();
     }
-    await waitForDownload(downloadId, locale, signal);
+    await waitForBrowserDownload(downloadId, { locale, signal });
+  } catch (error) {
+    if (error instanceof DownloadTimeoutError && downloadId !== undefined) {
+      try {
+        await browser.downloads.cancel(downloadId);
+      } catch (cancelError) {
+        await addWarning(
+          jobId,
+          t('jobs.downloadCancelFailed', { error: messageError(cancelError) }, locale),
+        );
+      }
+    }
+    throw error;
   } finally {
     activeDownloads.delete(jobId);
     URL.revokeObjectURL(objectUrl);
@@ -500,13 +405,13 @@ async function processJob(job: StoredExportJob): Promise<void> {
     if (!started || started.summary.status !== 'running') return;
     await renderExportJob(job.request, {
       signal: controller.signal,
-      onProgress: (progress: string) => receiveCallbackUpdate(job.id, { progress }),
-      onWarning: (warning: string) => receiveCallbackUpdate(job.id, { warning }),
+      onProgress: (progress: string) => callbackUpdates.receive(job.id, { progress }),
+      onWarning: (warning: string) => callbackUpdates.receive(job.id, { warning }),
       onDiagnostics: (diagnostics: VideoDiagnosticsReport) =>
-        receiveCallbackUpdate(job.id, { diagnostics }),
+        callbackUpdates.receive(job.id, { diagnostics }),
       onFile: async (file: ExportJobFile) => acceptFile(job.id, file),
     });
-    await flushCallbackUpdates(job.id);
+    await callbackUpdates.flush(job.id);
     await mutateJob(job.id, (current) => {
       if (current.summary.status !== 'running') return;
       current.summary.progress = undefined;
@@ -517,7 +422,7 @@ async function processJob(job: StoredExportJob): Promise<void> {
     let error = renderError;
     let callbackWriteFailed = false;
     try {
-      await flushCallbackUpdates(job.id);
+      await callbackUpdates.flush(job.id);
     } catch (flushError) {
       error = flushError;
       callbackWriteFailed = true;
@@ -546,10 +451,7 @@ async function processJob(job: StoredExportJob): Promise<void> {
     }
   } finally {
     controllers.delete(job.id);
-    const pending = pendingUpdates.get(job.id);
-    if (pending?.timer !== undefined) clearTimeout(pending.timer);
-    pendingUpdates.delete(job.id);
-    callbackWrites.delete(job.id);
+    callbackUpdates.dispose(job.id);
   }
 }
 
