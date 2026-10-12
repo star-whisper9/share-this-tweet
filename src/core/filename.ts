@@ -35,11 +35,15 @@ export function buildMediaFilename(
 ): string {
   const target = getMediaDownloadTarget(media);
   const outputExtension = extension ?? target.extension;
-  const rendered = renderTemplate(template, {
-    tweet: record,
-    media,
-    extension: outputExtension,
-  });
+  const rendered = renderTemplate(
+    template,
+    {
+      tweet: record,
+      media,
+      extension: outputExtension,
+    },
+    'filenameTemplate',
+  );
   return finishFilename(sanitizeFilename(rendered), outputExtension);
 }
 
@@ -60,7 +64,11 @@ export function buildFrameFilename(
   template = DEFAULT_FILENAME_TEMPLATE,
   extension: 'jpg' | 'webp' | 'mp4' = 'jpg',
 ): string {
-  const rendered = renderTemplate(template, { tweet: record, media, extension });
+  const rendered = renderTemplate(
+    template,
+    { tweet: record, media, extension },
+    'filenameTemplate',
+  );
   return finishFilename(sanitizeFilename(rendered), extension, '_framed');
 }
 
@@ -70,12 +78,16 @@ export function buildCardFilename(
   template = DEFAULT_FILENAME_TEMPLATE,
   row = false,
 ): string {
-  const rendered = renderTemplate(template, {
-    tweet: record,
-    media,
-    extension: 'png',
-    card: true,
-  });
+  const rendered = renderTemplate(
+    template,
+    {
+      tweet: record,
+      media,
+      extension: 'png',
+      card: true,
+    },
+    'filenameTemplate',
+  );
   return finishFilename(sanitizeFilename(rendered), 'png', row ? '_row_card' : '_card');
 }
 
@@ -85,7 +97,11 @@ export function buildStitchFilename(
   extension: 'png' | 'jpg' | 'webp' | 'mp4' = 'png',
   framed = false,
 ): string {
-  const rendered = renderTemplate(template, { tweet: record, media: record.media[0], extension });
+  const rendered = renderTemplate(
+    template,
+    { tweet: record, media: record.media[0], extension },
+    'filenameTemplate',
+  );
   return finishFilename(
     sanitizeFilename(rendered),
     extension,

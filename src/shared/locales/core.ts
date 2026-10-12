@@ -128,6 +128,12 @@ export const zhCN = {
   'core.gif.verificationFailed': '写入来源后的 GIF 验证失败',
   'core.template.defaultContainsPipe': '默认值不能包含 |',
   'core.template.unknownField': '未知模板字段：{name}',
+  'core.template.forbidden.filenameTemplate':
+    '文件名模板不允许使用变量 {name}，请改用填写指南中的变量或选择预设。',
+  'core.template.forbidden.frameTemplate':
+    '来源画框模板不允许使用变量 {name}，请改用填写指南中的变量或选择预设。',
+  'core.template.forbidden.textTemplate':
+    '复制文本模板不允许使用变量 {name}，请改用填写指南中的变量或选择预设。',
   'core.template.unsupportedFormat': '不支持的模板格式：{format}',
   'core.template.needsMedia': '模板字段需要媒体上下文：{name}',
   'core.template.invalidDate': '日期字段无法格式化：{name}',
@@ -389,6 +395,12 @@ export const en: Record<keyof typeof zhCN, string> = {
   'core.gif.verificationFailed': 'The GIF failed validation after writing its source',
   'core.template.defaultContainsPipe': 'A default value cannot contain |',
   'core.template.unknownField': 'Unknown template field: {name}',
+  'core.template.forbidden.filenameTemplate':
+    'Variable {name} is not allowed in filename templates. Use a variable from the guide or choose a preset.',
+  'core.template.forbidden.frameTemplate':
+    'Variable {name} is not allowed in source-frame templates. Use a variable from the guide or choose a preset.',
+  'core.template.forbidden.textTemplate':
+    'Variable {name} is not allowed in copied-text templates. Use a variable from the guide or choose a preset.',
   'core.template.unsupportedFormat': 'Unsupported template format: {format}',
   'core.template.needsMedia': 'The template field requires media context: {name}',
   'core.template.invalidDate': 'The date field cannot be formatted: {name}',

@@ -4,6 +4,7 @@ import {
   buildCardFilename,
   buildSourcedMediaFilename,
   buildFrameFilename,
+  buildStitchFilename,
   sanitizeFilename,
 } from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
@@ -70,6 +71,17 @@ describe('renderTemplate', () => {
 });
 
 describe('buildMediaFilename', () => {
+  it('rejects body variables in every output filename path', () => {
+    const template = '{tweet.text|empty}_{media.index}.{extension}';
+    for (const build of [
+      () => buildMediaFilename(record, photo, template),
+      () => buildSourcedMediaFilename(record, photo, template),
+      () => buildFrameFilename(record, photo, template),
+      () => buildCardFilename(record, undefined, template),
+      () => buildStitchFilename(record, template),
+    ])
+      expect(build).toThrow(TemplateError);
+  });
   it('formats archive dates and uses a fallback when the publishing date is unavailable', () => {
     const template =
       'X_{tweet.publishedAt:YYYYMMDD|undated}_{author.handle}_{tweet.id}_{media.index}.{extension}';

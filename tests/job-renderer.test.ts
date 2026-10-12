@@ -6,6 +6,7 @@ import { embedGifSourceInWorker, embedMp4SourceInWorker } from '../src/core/medi
 import { renderStitchedMedia } from '../src/core/stitch.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 import type { ExportJobRequest } from '../src/shared/export-jobs.js';
+import { TemplateError } from '../src/core/template.js';
 
 vi.mock('../src/background/video-render.js', () => ({ renderVideoInBackground: vi.fn() }));
 vi.mock('../src/core/stitch.js', async (original) => ({
@@ -59,6 +60,39 @@ function gifRequest(mode: 'original' | 'sourced' | 'framed' = 'original'): Expor
     },
   };
 }
+
+it('rejects forbidden export variables before downloading, transcoding or emitting files', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const callbacks = {
+    signal: new AbortController().signal,
+    onProgress: vi.fn(),
+    onDiagnostics: vi.fn(),
+    onWarning: vi.fn(),
+    onFile: vi.fn(),
+  };
+  const invalidFrame = { ...request.settings, frameTemplate: '{tweet.text}' };
+  for (const job of [
+    { ...request, settings: { ...request.settings, filenameTemplate: '{tweet.text}.jpg' } },
+    {
+      ...request,
+      settings: invalidFrame,
+      media: [{ index: 1, mode: 'framed' as const, orientation: 'bottom' as const }],
+    },
+    { ...request, kind: 'stitch' as const, frame: 'bottom' as const, settings: invalidFrame },
+  ])
+    await expect(renderExportJob(job, callbacks)).rejects.toThrow(TemplateError);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(renderVideoInBackground).not.toHaveBeenCalled();
+  expect(renderPhotoFrame).not.toHaveBeenCalled();
+  expect(renderStitchedMedia).not.toHaveBeenCalled();
+  expect(callbacks.onFile).not.toHaveBeenCalled();
+
+  // An unrelated invalid frame must not block an original-media download.
+  fetch.mockImplementation(async () => new Response(new Uint8Array([1])));
+  await renderExportJob({ ...request, settings: invalidFrame }, callbacks);
+  expect(callbacks.onFile).toHaveBeenCalledTimes(2);
+});
 
 it.each(['original', 'sourced'] as const)('saves a converted GIF in %s mode', async (mode) => {
   vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.5.3' }) } });

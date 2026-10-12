@@ -12,6 +12,7 @@ import { ImageResources } from './image-resources.js';
 import { getMediaDownloadTarget } from './media.js';
 import { embedGifSourceInWorker, embedMp4SourceInWorker } from './media-source-client.js';
 import { renderStitchedMedia } from './stitch.js';
+import { validateTemplateScope } from './template.js';
 import type { BackgroundVideoRenderRequest } from '../shared/video-job.js';
 import {
   appendVideoDiagnostic,
@@ -207,6 +208,12 @@ export async function renderExportJob(
 ): Promise<void> {
   const { record, settings, locale } = request;
   callbacks.signal.throwIfAborted();
+  validateTemplateScope(settings.filenameTemplate, 'filenameTemplate');
+  if (
+    (request.kind === 'stitch' && request.frame && request.frame !== 'original') ||
+    (request.kind === 'media' && request.media?.some((selection) => selection.mode === 'framed'))
+  )
+    validateTemplateScope(settings.frameTemplate, 'frameTemplate');
   const resources = new ImageResources();
   const dispose = () => resources.dispose();
   callbacks.signal.addEventListener('abort', dispose, { once: true });

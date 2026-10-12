@@ -12,6 +12,7 @@ import {
   type LanguagePreference,
 } from './i18n.js';
 import { DEFAULT_FILENAME_TEMPLATE } from '../core/filename.js';
+import { validateTemplateScope } from '../core/template.js';
 import {
   DEFAULT_FRAME_ORIENTATION,
   DEFAULT_FRAME_TEMPLATE,
@@ -102,6 +103,8 @@ export async function loadSettings(): Promise<ExtensionSettings> {
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {
+  for (const scope of ['filenameTemplate', 'frameTemplate', 'textTemplate'] as const)
+    validateTemplateScope(settings[scope], scope);
   // Language is saved independently: saving a stale template draft must not
   // overwrite a language change made in the popup.
   const { language: _language, ...templates } = settings;

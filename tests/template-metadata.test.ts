@@ -4,6 +4,7 @@ import {
   TEMPLATE_FIELDS,
   fieldsForScope,
   renderTemplate,
+  validateTemplateScope,
   TemplateError,
 } from '../src/core/template.js';
 import { mergeTweetRecords, type TweetRecord } from '../src/shared/model.js';
@@ -54,17 +55,42 @@ it('offers source variables in frame and filename editors while keeping text and
   expect(text.some((name) => name.startsWith('media.') || name === 'extension')).toBe(false);
 });
 
-it('keeps legacy variables renderable even when omitted from source editor suggestions', () => {
+it('enforces the same variable whitelist in every editor and scoped renderer', () => {
+  const context = { tweet, media: { index: 1, type: 'photo' as const }, extension: 'jpg' };
+  for (const scope of ['filenameTemplate', 'frameTemplate', 'textTemplate'] as const) {
+    const allowed = new Set(fieldsForScope(scope).map((field) => field.name));
+    for (const field of TEMPLATE_FIELDS) {
+      const template = `{${field.name}}`;
+      if (allowed.has(field.name)) {
+        expect(() => validateTemplateScope(template, scope)).not.toThrow();
+        expect(() => renderTemplate(template, context, scope)).not.toThrow();
+      } else {
+        expect(() => validateTemplateScope(template, scope)).toThrow(TemplateError);
+        expect(() => renderTemplate(template, context, scope)).toThrow(TemplateError);
+      }
+    }
+  }
+});
+
+it('rejects forbidden variables in defaults, conditions and hidden optional content', () => {
+  for (const scope of ['filenameTemplate', 'frameTemplate'] as const)
+    for (const template of [
+      '{translation.text|fallback}',
+      '{?translation.text}literal{/translation.text}',
+      '{?tweet.publishedAt}{tweet.text}{/tweet.publishedAt}',
+    ])
+      expect(() => renderTemplate(template, { tweet }, scope)).toThrow(TemplateError);
   expect(
-    renderTemplate('{tweet.text}/{author.description}/{media.width}/{quote.tweet.text}', {
-      tweet: {
-        ...tweet,
-        author: { ...tweet.author, description: 'bio' },
-        quote: { status: 'available', tweetId: '3', record: { ...tweet, text: 'quoted' } },
+    renderTemplate(
+      '{tweet.publishedAt:YYYYMMDD|undated}_{tweet.id}.{extension}',
+      {
+        tweet,
+        extension: 'jpg',
       },
-      media: { index: 1, type: 'photo', width: 800 },
-    }),
-  ).toBe('body/bio/800/quoted');
+      'filenameTemplate',
+    ),
+  ).toBe('undated_1.jpg');
+  expect(renderTemplate('{tweet.text}', { tweet }, 'textTemplate')).toBe('body');
 });
 it('preserves zero and false, handles missing dates and validates hidden branches', () => {
   expect(

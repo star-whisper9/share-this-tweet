@@ -149,7 +149,8 @@ export const zhCN = {
   'options.records.clearFailed': '清空失败：{message}',
   'options.guide.title': '填写指南与全部变量',
   'options.guide.sourceTitle': '填写指南与来源变量',
-  'options.guide.source': '这里提供画框和命名常用的精简变量。已有自定义模板中的其他变量仍可使用。',
+  'options.guide.source':
+    '画框和文件名模板只能使用各自指南中列出的变量。旧模板含有禁用变量时会提示修改，也可选择预设替换。',
   'options.guide.sourceSyntax':
     '默认值：{author.name|未知作者}。可选日期：{?tweet.publishedAt}{tweet.publishedAt:YYYY-MM-DD}{/tweet.publishedAt}。区块按有无值显示，不支持嵌套；字面花括号与默认值中的 | 不支持转义。',
   'options.guide.intro':
@@ -359,7 +360,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.guide.title': 'Guide and all variables',
   'options.guide.sourceTitle': 'Guide and source variables',
   'options.guide.source':
-    'A reduced set of variables for frames and filenames. Other variables in existing custom templates remain supported.',
+    'Frame and filename templates can only use the variables listed in their guides. If an older template uses a disallowed variable, edit it or choose a preset.',
   'options.guide.sourceSyntax':
     'Default value: {author.name|unknown author}. Optional date: {?tweet.publishedAt}{tweet.publishedAt:YYYY-MM-DD}{/tweet.publishedAt}. Blocks display only when their value exists and cannot nest. Literal braces and | in default values cannot be escaped.',
   'options.guide.intro':

@@ -201,7 +201,7 @@ const sourceFields = new Set([
   'media.type',
 ]);
 export function fieldsForScope(scope: TemplateScope): readonly TemplateField[] {
-  // Limit editor suggestions, not the grammar: existing custom templates still resolve all fields.
+  // The editor and renderer share the same allowed variables.
   return TEMPLATE_FIELDS.filter((item) => {
     if (scope === 'textTemplate') return !item.media && item.name !== 'extension';
     return (

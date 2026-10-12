@@ -5,6 +5,7 @@ import {
   normalizeSettings,
   saveSettings,
 } from '../src/shared/settings.js';
+import { TemplateError } from '../src/core/template.js';
 
 describe('normalizeSettings', () => {
   it('keeps valid templates and falls back from removed directions', () => {
@@ -58,6 +59,20 @@ it('enables standalone GIF conversion by default and preserves independent GIF l
 });
 
 afterEach(() => vi.unstubAllGlobals());
+it('preserves invalid legacy templates on read but refuses to save them', async () => {
+  const set = vi.fn();
+  vi.stubGlobal('browser', { storage: { local: { set } } });
+  for (const [scope, template] of [
+    ['filenameTemplate', '{tweet.text}_{media.index}.{extension}'],
+    ['frameTemplate', '{translation.text}'],
+    ['textTemplate', '{extension}'],
+  ] as const) {
+    const settings = normalizeSettings({ [SETTINGS_STORAGE_KEY]: { [scope]: template } });
+    expect(settings[scope]).toBe(template);
+    await expect(saveSettings(settings)).rejects.toThrow(TemplateError);
+  }
+  expect(set).not.toHaveBeenCalled();
+});
 it('persists GIF preferences separately from the video experiment and language', async () => {
   const set = vi.fn(async (_values: unknown) => {});
   vi.stubGlobal('browser', { storage: { local: { set } } });

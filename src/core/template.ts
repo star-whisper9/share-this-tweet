@@ -1,6 +1,12 @@
-import { TEMPLATE_FIELDS, DATE_FORMATS, type TemplateContext } from './template-fields.js';
+import {
+  TEMPLATE_FIELDS,
+  DATE_FORMATS,
+  fieldsForScope,
+  type TemplateContext,
+  type TemplateScope,
+} from './template-fields.js';
 import { t } from '../shared/i18n.js';
-export type { TemplateContext } from './template-fields.js';
+export type { TemplateContext, TemplateScope } from './template-fields.js';
 export { TEMPLATE_FIELDS, DATE_FORMATS, fieldsForScope } from './template-fields.js';
 
 export class TemplateError extends Error {
@@ -10,6 +16,26 @@ export class TemplateError extends Error {
   }
 }
 const fields = new Map(TEMPLATE_FIELDS.map((field) => [field.name, field]));
+const scopedFields = {
+  filenameTemplate: new Set(fieldsForScope('filenameTemplate').map((field) => field.name)),
+  frameTemplate: new Set(fieldsForScope('frameTemplate').map((field) => field.name)),
+  textTemplate: new Set(fieldsForScope('textTemplate').map((field) => field.name)),
+};
+
+function validateScope(segments: readonly TemplateSegment[], scope: TemplateScope): void {
+  for (const segment of segments) {
+    if (segment.type === 'literal') continue;
+    const name = segment.value.replace(/^[?/]/, '').split(/[|:]/, 1)[0];
+    if (!fields.has(name)) throw new TemplateError(t('core.template.unknownField', { name }));
+    if (!scopedFields[scope].has(name))
+      throw new TemplateError(t(`core.template.forbidden.${scope}`, { name }));
+  }
+}
+
+/** Validate allowed variables without reading tweet data or changing stored templates. */
+export function validateTemplateScope(template: string, scope: TemplateScope): void {
+  validateScope(parseTemplate(template), scope);
+}
 
 function valueFor(expression: string, context: TemplateContext, marker = true): string {
   const [formatted, ...defaults] = expression.split('|');
@@ -45,11 +71,17 @@ function valueFor(expression: string, context: TemplateContext, marker = true): 
 }
 
 /** Optional blocks are deliberately non-nesting and never evaluate JavaScript. */
-export function renderTemplate(template: string, context: TemplateContext): string {
+export function renderTemplate(
+  template: string,
+  context: TemplateContext,
+  scope?: TemplateScope,
+): string {
+  const segments = parseTemplate(template);
+  if (scope) validateScope(segments, scope);
   let condition: string | undefined;
   let visible = true;
   const result: string[] = [];
-  for (const segment of parseTemplate(template)) {
+  for (const segment of segments) {
     if (segment.type === 'literal') {
       if (visible) result.push(segment.value);
       continue;

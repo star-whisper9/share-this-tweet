@@ -39,7 +39,7 @@ export function buildTweetText(
   // Validate poll data even when a custom template intentionally omits poll fields.
   const poll = buildPollText(record.poll, false, locale);
   const resolved = isDefaultTextTemplate(template) ? getDefaultTextTemplate(locale) : template;
-  let main = renderTemplate(resolved, { tweet: record, locale });
+  let main = renderTemplate(resolved, { tweet: record, locale }, 'textTemplate');
   if (poll && !/\{(?:\?)?poll\./.test(resolved))
     main += `\n\n${t('core.poll.heading', {}, locale)}\n${poll}`;
   const quote = record.quote;

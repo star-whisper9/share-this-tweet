@@ -215,7 +215,7 @@ function renderValue(name: SettingKey, value: string): string {
   }
   const output =
     name === 'frameTemplate'
-      ? renderTemplate(value, { tweet: sampleRecord, media: sampleMedia, extension: 'png' })
+      ? renderTemplate(value, { tweet: sampleRecord, media: sampleMedia, extension: 'png' }, name)
       : buildTweetText(sampleRecord, value);
   if (!output.trim()) throw new Error(t('options.error.previewEmpty'));
   return name === 'frameTemplate'

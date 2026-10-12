@@ -242,7 +242,8 @@ export function mountTemplateGuide(
       extension: scope === 'textTemplate' ? undefined : 'jpg',
     };
     try {
-      preview.textContent = renderTemplate(input.value, context) || t('options.guide.emptyResult');
+      preview.textContent =
+        renderTemplate(input.value, context, scope) || t('options.guide.emptyResult');
     } catch (error) {
       preview.textContent = error instanceof Error ? error.message : String(error);
     }

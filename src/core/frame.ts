@@ -122,11 +122,15 @@ function getFrameText(
   locale: Locale = getLocale(),
 ): string {
   const context = { tweet: record, media, extension };
-  return renderTemplate(template, {
-    ...context,
-    avatarMarker: FRAME_AVATAR_MARKER,
-    locale,
-  }).trim();
+  return renderTemplate(
+    template,
+    {
+      ...context,
+      avatarMarker: FRAME_AVATAR_MARKER,
+      locale,
+    },
+    'frameTemplate',
+  ).trim();
 }
 
 function getSourceLines(record: TweetRecord, locale: Locale): string[] {
