@@ -154,6 +154,40 @@ function input(bytes: Uint8Array = fixture): Blob {
 }
 
 describe('MP4 file provenance', () => {
+  it.each(['iso5', 'iso6'])(
+    'accepts compatible MP4 brands when the major brand is %s',
+    async (major) => {
+      const original = new Uint8Array(fixture);
+      const ftyp = find(original, ['ftyp']);
+      original.set(new TextEncoder().encode(major), ftyp.start + ftyp.header);
+      // X GIF MP4s use iso5 with iso6/mp41 compatibility. Put mp41 last to scan all entries.
+      original.set(new TextEncoder().encode('iso6iso6iso6mp41'), ftyp.start + ftyp.header + 8);
+      const gifSource = { ...source, media: { index: 1, type: 'animated_gif' as const } };
+      expect(await readMp4Source(input(original))).toBeUndefined();
+      const result = await embedMp4Source(input(original), gifSource);
+      expect(await readMp4Source(result)).toEqual(gifSource);
+      const bytes = await outputBytes(result);
+      expect(raw(bytes, ['ftyp'])).toEqual(raw(original, ['ftyp']));
+      expect(raw(bytes, ['mdat'])).toEqual(raw(original, ['mdat']));
+      expect(raw(bytes, ['moov', 'trak'])).toEqual(raw(original, ['moov', 'trak']));
+      await expect(
+        embedMp4Source(input(concat([original, atom('moof', [])])), gifSource),
+      ).rejects.toMatchObject({ code: 'unsupported-mp4' });
+    },
+  );
+
+  it('rejects unsupported brands without treating the minor version as a compatible brand', async () => {
+    const original = new Uint8Array(fixture);
+    const ftyp = find(original, ['ftyp']);
+    original.set(new TextEncoder().encode('iso5mp41iso6iso6iso6iso6'), ftyp.start + ftyp.header);
+    await expect(embedMp4Source(input(original), source)).rejects.toMatchObject({
+      code: 'unsupported-mp4',
+    });
+    await expect(readMp4Source(input(original))).rejects.toMatchObject({
+      code: 'unsupported-mp4',
+    });
+  });
+
   it('round-trips sources while preserving media position, tracks, and existing metadata', async () => {
     expect(await readMp4Source(input())).toBeUndefined();
     const result = await embedMp4Source(input(), source);

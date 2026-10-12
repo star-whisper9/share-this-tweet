@@ -262,7 +262,12 @@ async function parse(input: Blob): Promise<ParsedMp4> {
   );
   if ((brands.length - 8) % 4) invalid();
   const supportedBrands = ['isom', 'iso2', 'mp41', 'mp42', 'avc1'];
-  if (!supportedBrands.includes(typeAt(brands, 0))) unsupported(t('core.mp4.unsupportedBrand'));
+  let supported = supportedBrands.includes(typeAt(brands, 0));
+  // ftyp declares compatibility after the major brand and four-byte minor version.
+  // X GIFs can have an iso5 major brand while remaining compatible with mp41.
+  for (let offset = 8; !supported && offset < brands.length; offset += 4)
+    supported = supportedBrands.includes(typeAt(brands, offset));
+  if (!supported) unsupported(t('core.mp4.unsupportedBrand'));
   const moov = only(top, 'moov')!;
   const mediaData = top.filter((box) => box.type === 'mdat');
   if (!mediaData.length || mediaData.some((box) => box.size === box.header)) invalid();
