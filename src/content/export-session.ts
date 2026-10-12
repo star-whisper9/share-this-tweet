@@ -3,7 +3,7 @@ import { detectCardTheme } from '../core/card.js';
 import { copyTweetText } from '../core/text-export.js';
 import { recordOutput, saveTweetRecord } from '../core/storage-client.js';
 import type { FrameOrientation } from '../core/frame.js';
-import type { TweetRecord } from '../shared/model.js';
+import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import type { ExtensionSettings } from '../shared/settings.js';
 import type { ExportJobRequest } from '../shared/export-jobs.js';
 import { getLocale, t } from '../shared/i18n.js';
@@ -20,7 +20,6 @@ export interface SheetStatus {
   message: string;
 }
 export type TweetAction = 'copy-text' | 'save-card' | 'save-row-card' | 'stitch-media';
-export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
 export interface MediaSaveOptions {
   photo: 'original' | FrameOrientation;
   video: 'original' | 'sourced' | FrameOrientation;
@@ -28,6 +27,17 @@ export interface MediaSaveOptions {
 }
 const IDLE: Readonly<ActionState> = Object.freeze({ status: 'idle' });
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function mediaRequestItem(
+  media: MediaRecord,
+  options: MediaSaveOptions,
+  defaultOrientation: FrameOrientation,
+): NonNullable<ExportJobRequest['media']>[number] {
+  const choice = options[media.type === 'animated_gif' ? 'gif' : media.type];
+  if (choice === 'top' || choice === 'bottom')
+    return { index: media.index, mode: 'framed', orientation: choice };
+  return { index: media.index, mode: choice, orientation: defaultOrientation };
+}
 
 /** The page only submits immutable jobs. Disposing it never cancels accepted work. */
 export class ExportSession {
@@ -92,19 +102,16 @@ export class ExportSession {
   action(key: TweetAction): Readonly<ActionState> {
     return this.actions.get(key) ?? IDLE;
   }
-  private mediaKey(mode: MediaMode, orientation: FrameOrientation): string {
+  private mediaKey(): string {
     const indexes = this.selection
       .selected(this.record.media)
       .map((media) => media.index)
       .join(',');
     const { photo, video, gif } = this.mediaPreferences;
-    return `${mode}:${indexes}:${orientation}:${photo}:${video}:${gif}`;
+    return `${indexes}:${this.settings.frameOrientation}:${photo}:${video}:${gif}`;
   }
-  mediaAction(
-    mode: MediaMode,
-    orientation = this.settings.frameOrientation,
-  ): Readonly<ActionState> {
-    return this.actions.get(this.mediaKey(mode, orientation)) ?? IDLE;
+  mediaAction(): Readonly<ActionState> {
+    return this.actions.get(this.mediaKey()) ?? IDLE;
   }
   toggleMedia(index: number): void {
     if (!this.active || this.submitting) return;
@@ -196,37 +203,14 @@ export class ExportSession {
       1,
     );
   }
-  saveSelected(mode: MediaMode, orientation = this.settings.frameOrientation): Promise<void> {
+  saveSelected(): Promise<void> {
     const media = this.selection.selected(this.record.media);
     if (!media.length) return Promise.resolve();
     const options = { ...this.mediaOptions };
-    const items = media.map((item) => {
-      const choice =
-        item.type === 'photo'
-          ? options.photo
-          : item.type === 'animated_gif'
-            ? options.gif
-            : options.video;
-      const configured = choice === 'top' || choice === 'bottom';
-      return {
-        index: item.index,
-        mode:
-          mode === 'configured'
-            ? configured
-              ? 'framed'
-              : (choice as 'original' | 'sourced')
-            : mode === 'sourced' && item.type === 'photo'
-              ? 'original'
-              : mode,
-        orientation:
-          mode === 'configured' && configured ? (choice as FrameOrientation) : orientation,
-      };
-    });
-    return this.submit(
-      this.mediaKey(mode, orientation),
-      { ...this.request('media'), media: items },
-      items.length,
+    const items = media.map((item) =>
+      mediaRequestItem(item, options, this.settings.frameOrientation),
     );
+    return this.submit(this.mediaKey(), { ...this.request('media'), media: items }, items.length);
   }
   async copyText(): Promise<void> {
     if (!this.active || this.actions.get('copy-text')?.status === 'loading') return;

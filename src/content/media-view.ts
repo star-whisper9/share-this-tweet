@@ -154,7 +154,7 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
     (session.settings.experimentalVideo || record.media.every((item) => item.type === 'photo'));
   const wrapper = node('div', 'stt-media-action');
   wrapper.dataset.tweetId = record.tweetId;
-  const state = session.mediaAction('configured');
+  const state = session.mediaAction();
   wrapper.dataset.state = state.status;
   if (selected.length || canStitch) {
     const settings = node('div', 'stt-save-settings');
@@ -267,7 +267,7 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
       primary: true,
       disabled: session.isSavingBatch || !selected.length || !!filenameError,
       onClick: () => {
-        void session.saveSelected('configured');
+        void session.saveSelected();
       },
     }),
   );

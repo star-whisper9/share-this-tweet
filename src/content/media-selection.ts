@@ -4,13 +4,9 @@ import type { MediaRecord } from '../shared/model.js';
 export class MediaSelection {
   private readonly indexes = new Set<number>();
   private initialized = false;
-  private primaryIndex?: number;
 
   get size(): number {
     return this.indexes.size;
-  }
-  get primary(): number | undefined {
-    return this.primaryIndex;
   }
   has(index: number): boolean {
     return this.indexes.has(index);
@@ -21,14 +17,9 @@ export class MediaSelection {
     for (const index of this.indexes) {
       if (!available.has(index)) this.indexes.delete(index);
     }
-    if (this.primaryIndex !== undefined && !available.has(this.primaryIndex)) {
-      this.primaryIndex = undefined;
-    }
-    this.primaryIndex ??= this.indexes.values().next().value;
     if (!this.initialized && media.length > 0) {
       this.initialized = true;
-      this.primaryIndex ??= media[0].index;
-      this.indexes.add(this.primaryIndex);
+      this.indexes.add(media[0].index);
     }
   }
 
@@ -36,10 +27,8 @@ export class MediaSelection {
     if (!media.some((item) => item.index === index)) return;
     if (this.indexes.has(index)) {
       this.indexes.delete(index);
-      this.primaryIndex = this.indexes.values().next().value;
     } else {
       this.indexes.add(index);
-      this.primaryIndex = index;
     }
   }
 

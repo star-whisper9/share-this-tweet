@@ -51,7 +51,7 @@ it('submits the whole selection with independent frame modes and an immutable sn
   const session = new ExportSession(structuredClone(record), structuredClone(settings));
   session.toggleMedia(2);
   session.configureMedia({ photo: 'top', video: 'bottom' });
-  await session.saveSelected('configured');
+  await session.saveSelected();
   const job = vi.mocked(enqueueExportJob).mock.calls[0]![0];
   expect(job).toMatchObject({
     kind: 'media',
@@ -65,7 +65,7 @@ it('submits the whole selection with independent frame modes and an immutable sn
   session.settings.frameTemplate = 'changed';
   expect(job.record.author.name).toBe('A');
   expect(job.settings.frameTemplate).toBe(settings.frameTemplate);
-  expect(session.mediaAction('configured')).toMatchObject({ status: 'success', queued: true });
+  expect(session.mediaAction()).toMatchObject({ status: 'success', queued: true });
   expect(recordOutput).not.toHaveBeenCalled();
 });
 it('submits before disposal, suppresses duplicate submissions and never cancels accepted work', async () => {
@@ -73,8 +73,13 @@ it('submits before disposal, suppresses duplicate submissions and never cancels 
   vi.mocked(enqueueExportJob).mockReturnValueOnce(pending.promise);
   const changed = vi.fn();
   const session = new ExportSession(record, settings, changed);
-  const task = session.saveSelected('original');
-  await session.saveSelected('original');
+  session.configureMedia({ photo: 'original' });
+  const task = session.saveSelected();
+  await session.saveSelected();
+  session.configureMedia({ photo: 'top' });
+  session.toggleMedia(2);
+  expect(session.mediaOptions.photo).toBe('original');
+  expect(session.selection.selected(session.record.media).map((media) => media.index)).toEqual([1]);
   expect(enqueueExportJob).toHaveBeenCalledOnce();
   session.dispose();
   const count = changed.mock.calls.length;
@@ -119,7 +124,8 @@ it('queues cards including quotes and submits quote downloads with their own ide
   );
   await session.saveCard();
   await session.saveCard(true);
-  await session.quoted!.saveSelected('original');
+  session.quoted!.configureMedia({ photo: 'original' });
+  await session.quoted!.saveSelected();
   expect(vi.mocked(enqueueExportJob).mock.calls.map(([j]) => [j.kind, j.record.tweetId])).toEqual([
     ['card', '42'],
     ['row-card', '42'],
@@ -161,7 +167,7 @@ it('keeps GIF source choices independent from video frames in one selection', as
   session.toggleMedia(3);
   session.configureMedia({ video: 'top' });
   expect(session.mediaOptions.gif).toBe('original');
-  await session.saveSelected('configured');
+  await session.saveSelected();
   expect(vi.mocked(enqueueExportJob).mock.calls[0]![0].media).toEqual([
     { index: 1, mode: 'framed', orientation: 'bottom' },
     { index: 2, mode: 'framed', orientation: 'top' },
@@ -170,7 +176,7 @@ it('keeps GIF source choices independent from video frames in one selection', as
   session.configureMedia({ gif: 'sourced' });
   session.updateSettings({ ...settings, experimentalGif: false, experimentalVideo: false });
   expect(session.mediaOptions).toMatchObject({ gif: 'sourced', video: 'sourced' });
-  await session.saveSelected('configured');
+  await session.saveSelected();
   expect(vi.mocked(enqueueExportJob).mock.calls[1]![0]).toMatchObject({
     settings: { experimentalGif: false },
     media: [
@@ -179,4 +185,24 @@ it('keeps GIF source choices independent from video frames in one selection', as
       { index: 3, mode: 'sourced' },
     ],
   });
+});
+
+it('selects the first arriving media once and preserves choices across media updates', () => {
+  const session = new ExportSession({ ...record, media: [] }, settings);
+  expect(session.selection.size).toBe(0);
+  session.updateRecord(record);
+  expect(session.selection.selected(session.record.media).map((media) => media.index)).toEqual([1]);
+  session.toggleMedia(2);
+  session.updateRecord({ ...record, media: [record.media[1]] });
+  expect(session.selection.selected(session.record.media).map((media) => media.index)).toEqual([2]);
+  session.updateRecord({ ...record, media: [record.media[0]] });
+  expect(session.selection.size).toBe(0);
+  session.updateRecord(record);
+  expect(session.selection.size).toBe(0);
+  session.toggleMedia(99);
+  expect(session.selection.size).toBe(0);
+  session.toggleMedia(1);
+  session.toggleMedia(1);
+  session.updateRecord(record);
+  expect(session.selection.size).toBe(0);
 });

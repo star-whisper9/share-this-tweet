@@ -147,7 +147,7 @@ it('routes pinned media actions to the active tweet, keeps each selection, and e
   ui.button('stitch-media-2').click();
   ui.button('save-row-card').click();
   ui.button('copy-text').click();
-  expect(saveQuote).toHaveBeenCalledWith('configured');
+  expect(saveQuote).toHaveBeenCalledWith();
   expect(stitchQuote).toHaveBeenCalledOnce();
   expect(saveMain).not.toHaveBeenCalled();
   expect(card).toHaveBeenCalledWith(true);
