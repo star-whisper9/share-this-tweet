@@ -90,20 +90,6 @@
           <button
             type="button"
             role="tab"
-            id="tab-records"
-            aria-controls="panel-records"
-            aria-selected="false"
-            tabindex="-1"
-            data-settings-tab="records"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 5h16M4 12h16M4 19h10" />
-              <circle cx="18" cy="19" r="2" /></svg
-            ><span data-i18n="options.tab.records">来源记录</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
             id="tab-experiment"
             aria-controls="panel-experiment"
             aria-selected="false"
@@ -116,6 +102,20 @@
               />
               <path d="M8.2 15h7.6" /></svg
             ><span data-i18n="experiment.tab">实验功能</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="tab-records"
+            aria-controls="panel-records"
+            aria-selected="false"
+            tabindex="-1"
+            data-settings-tab="records"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5h16M4 12h16M4 19h10" />
+              <circle cx="18" cy="19" r="2" /></svg
+            ><span data-i18n="options.tab.records">来源记录</span>
           </button>
         </div>
         <fieldset class="settings-body" data-editable disabled>
@@ -725,33 +725,6 @@
                 </div>
               </div>
             </div>
-            <aside class="settings-preview experiment-preview">
-              <div class="preview-heading">
-                <span data-i18n="experiment.preview.title">实验功能说明</span
-                ><span class="preview-tag" data-i18n="experiment.preview.tag">本机处理</span>
-              </div>
-              <div class="experiment-preview-card">
-                <span class="experiment-preview-icon" aria-hidden="true">▰</span>
-                <strong data-i18n="experiment.preview.heading">动态拼图会生成 MP4</strong>
-                <p data-i18n="experiment.preview.body">
-                  GIF 和视频可与静态图片横向拼接；如选择来源画框，也会一并编码进视频。
-                </p>
-              </div>
-              <dl class="experiment-preview-points">
-                <div>
-                  <dt data-i18n="experiment.preview.cpu">处理方式</dt>
-                  <dd data-i18n="experiment.preview.cpuValue">CPU 编码</dd>
-                </div>
-                <div>
-                  <dt data-i18n="experiment.preview.storage">临时文件</dt>
-                  <dd data-i18n="experiment.preview.storageValue">浏览器内存</dd>
-                </div>
-                <div>
-                  <dt data-i18n="experiment.preview.cancel">随时取消</dt>
-                  <dd data-i18n="experiment.preview.cancelValue">停止后清理任务</dd>
-                </div>
-              </dl>
-            </aside>
           </section>
         </fieldset>
         <section

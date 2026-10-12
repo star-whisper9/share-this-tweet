@@ -75,16 +75,6 @@ export const zhCN = {
     '参考环境：Apple M4 · Firefox Desktop。不含加载与下载；长视频可能超出此范围。码率仅用于估算输入文件大小。',
   'experiment.calculator.reference':
     '示例码率来自 X Engineering 2020 的历史质量样例，并非当前上传规则。',
-  'experiment.preview.title': '实验功能说明',
-  'experiment.preview.tag': '本机处理',
-  'experiment.preview.heading': '动态拼图会生成 MP4',
-  'experiment.preview.body': 'GIF 和视频可与静态图片横向拼接；如选择来源画框，也会一并编码进视频。',
-  'experiment.preview.cpu': '处理方式',
-  'experiment.preview.cpuValue': 'CPU 编码',
-  'experiment.preview.storage': '临时文件',
-  'experiment.preview.storageValue': '浏览器内存',
-  'experiment.preview.cancel': '随时取消',
-  'experiment.preview.cancelValue': '停止后清理任务',
 } as const;
 
 export const en: Record<keyof typeof zhCN, string> = {
@@ -172,15 +162,4 @@ export const en: Record<keyof typeof zhCN, string> = {
     'Reference environment: Apple M4 · Firefox Desktop. Excludes loading and downloading; long videos may fall outside this range. Bitrate only estimates input-file size.',
   'experiment.calculator.reference':
     'Example bitrates are from a historical X Engineering quality sample (2020), not current upload rules.',
-  'experiment.preview.title': 'About this experiment',
-  'experiment.preview.tag': 'Local processing',
-  'experiment.preview.heading': 'Animated collages export as MP4',
-  'experiment.preview.body':
-    'GIFs and videos can be stitched horizontally with still images. A selected source frame is encoded into the video too.',
-  'experiment.preview.cpu': 'Processing',
-  'experiment.preview.cpuValue': 'CPU encoding',
-  'experiment.preview.storage': 'Temporary files',
-  'experiment.preview.storageValue': 'Browser memory',
-  'experiment.preview.cancel': 'Cancel anytime',
-  'experiment.preview.cancelValue': 'Stops and cleans up the task',
 };

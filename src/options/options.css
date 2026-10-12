@@ -343,8 +343,9 @@ h2 {
 .text-presets {
   grid-template-columns: 1fr 1fr;
 }
-.experiment-panel {
-  min-height: 560px;
+.settings-panel.experiment-panel {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
 }
 .experiment-editor {
   display: flex;
@@ -519,60 +520,6 @@ h2 {
   color: var(--text);
   font-size: 12px;
   font-weight: 650;
-}
-.experiment-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 17px;
-}
-.experiment-preview .preview-heading {
-  margin-bottom: 0;
-}
-.experiment-preview-card {
-  padding: 19px;
-  border: 1px solid var(--tint-border);
-  border-radius: 15px;
-  background: var(--tint);
-}
-.experiment-preview-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  margin-bottom: 13px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--on-accent);
-}
-.experiment-preview-card strong {
-  display: block;
-  font-size: 14px;
-}
-.experiment-preview-card p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.experiment-preview-points {
-  display: grid;
-  gap: 9px;
-  margin: 0;
-}
-.experiment-preview-points > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-}
-.experiment-preview-points dt {
-  color: var(--muted);
-}
-.experiment-preview-points dd {
-  margin: 0;
-  text-align: end;
 }
 form[data-active-tab='records'] .save-bar {
   display: none;
