@@ -1,5 +1,6 @@
 import { calculateStitchLayout, type StitchStyle } from './stitch.js';
 import { tagRunsForLines, type CardTextRun } from './card-tags.js';
+import { wrapText } from './text-wrap.js';
 import { languageName } from '../shared/translation.js';
 import { getLocale, t, type Locale } from '../shared/i18n.js';
 import {
@@ -136,25 +137,7 @@ export function wrapCardText(
   maxWidth: number,
   measureText: CardTextMeasurement['measureText'],
 ): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.trim().split(/\r?\n/)) {
-    if (!paragraph) {
-      lines.push('');
-      continue;
-    }
-    let current = '';
-    for (const character of [...paragraph]) {
-      const candidate = current + character;
-      if (current && measureText(candidate).width > maxWidth) {
-        lines.push(current);
-        current = character;
-      } else {
-        current = candidate;
-      }
-    }
-    if (current) lines.push(current);
-  }
-  return lines;
+  return wrapText(text.trim(), maxWidth, measureText);
 }
 
 function validateImageDimensions(images: CardImageDimension[]): void {
@@ -174,23 +157,32 @@ function validateImageDimensions(images: CardImageDimension[]): void {
   }
 }
 
+function cardWidthForImages(images: CardImageDimension[], requestedWidth?: number): number {
+  const naturalWidth = images.length
+    ? Math.max(...images.map((image) => image.width))
+    : CARD_TEXT_WIDTH;
+  return Math.max(CARD_MIN_WIDTH, Math.min(CARD_MAX_WIDTH, requestedWidth ?? naturalWidth));
+}
+
+function cardTextSizes(width: number) {
+  const bodyFontSize = Math.max(18, Math.min(30, Math.round(width * 0.024)));
+  const labelFontSize = Math.max(12, Math.round(bodyFontSize * 0.7));
+  return {
+    bodyFontSize,
+    labelFontSize,
+    textLineHeight: Math.round(bodyFontSize * 1.42),
+    labelLineHeight: Math.round(labelFontSize * 1.5),
+  };
+}
+
 export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCardLayout {
   if (input.poll?.status === 'invalid') throw new Error(t('core.poll.invalid', {}, input.locale));
   validateImageDimensions(input.images);
-  const naturalWidth = input.images.length
-    ? Math.max(...input.images.map((image) => image.width))
-    : CARD_TEXT_WIDTH;
-  const width = Math.max(
-    CARD_MIN_WIDTH,
-    Math.min(CARD_MAX_WIDTH, Math.round(input.cardWidth ?? naturalWidth)),
-  );
+  const width = Math.round(cardWidthForImages(input.images, input.cardWidth));
   const padding = Math.max(16, Math.round(width * 0.03));
   const contentWidth = width - padding * 2;
   const headerHeight = Math.max(48, Math.round(width * 0.05));
-  const bodyFontSize = Math.max(18, Math.min(30, Math.round(width * 0.024)));
-  const textLineHeight = Math.round(bodyFontSize * 1.42);
-  const labelFontSize = Math.max(12, Math.round(bodyFontSize * 0.7));
-  const labelLineHeight = Math.round(labelFontSize * 1.5);
+  const { bodyFontSize, textLineHeight, labelFontSize, labelLineHeight } = cardTextSizes(width);
   const gap = Math.max(12, Math.round(width * 0.015));
   const measureLabelText =
     input.measureLabelText ??
@@ -566,6 +558,75 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+/** The caller owns each decoded image, including successful loads before a failure. */
+async function loadCardMedia(
+  cardMedia: LoadedCardMedia[],
+  resources: ImageResources,
+  mediaLayout: CardRenderOptions['mediaLayout'],
+  locale: Locale | undefined,
+): Promise<void> {
+  for (let index = 0; index < cardMedia.length; index += 2) {
+    const pairMedia = cardMedia.slice(index, index + 2);
+    const pair = await Promise.allSettled(
+      pairMedia.map(async (item) => {
+        if (!item.preview.url) {
+          if (item.media.type === 'photo' || mediaLayout === 'row')
+            throw new Error(
+              t('core.card.staticImageUnavailable', { index: item.media.index }, locale),
+            );
+          return;
+        }
+        const image = await resources.load(item.preview.url);
+        item.preview.width = image.naturalWidth;
+        item.preview.height = image.naturalHeight;
+        item.image = image;
+      }),
+    );
+    for (const [pairIndex, result] of pair.entries()) {
+      if (
+        result.status === 'rejected' &&
+        (pairMedia[pairIndex]!.media.type === 'photo' || mediaLayout === 'row')
+      )
+        throw result.reason;
+    }
+  }
+}
+
+function drawCardBody(
+  context: CanvasRenderingContext2D,
+  layout: TweetCardLayout,
+  palette: CardPalette,
+  theme: CardTheme,
+  locale: Locale | undefined,
+  grokIcon?: HTMLCanvasElement,
+  xIcon?: HTMLCanvasElement,
+): void {
+  context.textAlign = 'left';
+  context.fillStyle = palette.text;
+  context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
+  layout.bodyLines.forEach((line) => {
+    const y = line.y;
+    const fontSize = line.label ? layout.labelFontSize : layout.bodyFontSize;
+    context.font = `400 ${fontSize}px ${CARD_FONT_FAMILY}`;
+    const icon = line.icon === 'grok' ? grokIcon : line.icon === 'x' ? xIcon : undefined;
+    context.fillStyle = line.label ? palette.muted : palette.text;
+    if (icon) context.drawImage(icon, layout.padding, y, fontSize, fontSize);
+    if (line.runs) {
+      for (const run of line.runs) {
+        context.fillStyle = run.tag ? (theme === 'dark' ? '#8cc8f5' : '#559bd2') : palette.text;
+        context.fillText(
+          run.text,
+          layout.padding + context.measureText(line.text.slice(0, run.start)).width,
+          y,
+        );
+      }
+    } else {
+      context.fillText(line.text, layout.padding + (line.icon ? fontSize * 1.4 : 0), y);
+    }
+  });
+  layout.pollBlocks.forEach((block) => drawPoll(context, block, layout, palette, theme, locale));
+}
+
 async function renderCardCanvas(
   record: TweetRecord,
   mediaInput: MediaRecord | MediaRecord[],
@@ -595,37 +656,7 @@ async function renderCardCanvas(
     // Two preview images at a time bound concurrent decoding. Video/GIF previews
     // use a visible slot in grid cards; row cards require every preview to load.
     const results = await Promise.allSettled([
-      (async () => {
-        for (let index = 0; index < cardMedia.length; index += 2) {
-          const pairMedia = cardMedia.slice(index, index + 2);
-          const pair = await Promise.allSettled(
-            pairMedia.map(async (item) => {
-              if (!item.preview.url) {
-                if (item.media.type === 'photo' || options.mediaLayout === 'row')
-                  throw new Error(
-                    t(
-                      'core.card.staticImageUnavailable',
-                      { index: item.media.index },
-                      options.locale,
-                    ),
-                  );
-                return;
-              }
-              const image = await resources.load(item.preview.url);
-              item.preview.width = image.naturalWidth;
-              item.preview.height = image.naturalHeight;
-              item.image = image;
-            }),
-          );
-          for (const [pairIndex, result] of pair.entries()) {
-            if (
-              result.status === 'rejected' &&
-              (pairMedia[pairIndex]!.media.type === 'photo' || options.mediaLayout === 'row')
-            )
-              throw result.reason;
-          }
-        }
-      })(),
+      loadCardMedia(cardMedia, resources, options.mediaLayout, options.locale),
       loadAvatar(record.author.avatarUrl, resources, palette.text).then((image) => {
         avatar = image;
       }),
@@ -647,17 +678,12 @@ async function renderCardCanvas(
     const context = canvas.getContext('2d');
     if (!context) throw new Error(t('core.card.canvasUnavailable', {}, options.locale));
 
-    const estimatedWidth = Math.max(
-      CARD_MIN_WIDTH,
-      Math.min(
-        CARD_MAX_WIDTH,
-        options.cardWidth ??
-          (cardMedia.length
-            ? Math.max(...cardMedia.map((item) => item.preview.width))
-            : CARD_TEXT_WIDTH),
+    const { bodyFontSize, labelFontSize } = cardTextSizes(
+      cardWidthForImages(
+        cardMedia.map((item) => item.preview),
+        options.cardWidth,
       ),
     );
-    const bodyFontSize = Math.max(18, Math.min(30, Math.round(estimatedWidth * 0.024)));
     context.font = `400 ${bodyFontSize}px ${CARD_FONT_FAMILY}`;
     const layout = calculateTweetCardLayout({
       images: cardMedia.map((item) => ({ width: item.preview.width, height: item.preview.height })),
@@ -681,7 +707,7 @@ async function renderCardCanvas(
       measureText: (text) => context.measureText(text),
       measureLabelText: (text) => {
         context.save();
-        context.font = `400 ${Math.max(12, Math.round(bodyFontSize * 0.7))}px ${CARD_FONT_FAMILY}`;
+        context.font = `400 ${labelFontSize}px ${CARD_FONT_FAMILY}`;
         const measured = context.measureText(text);
         context.restore();
         return measured;
@@ -737,32 +763,7 @@ async function renderCardCanvas(
       );
     }
 
-    context.textAlign = 'left';
-    context.fillStyle = palette.text;
-    context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
-    layout.bodyLines.forEach((line) => {
-      const y = line.y;
-      const fontSize = line.label ? layout.labelFontSize : layout.bodyFontSize;
-      context.font = `400 ${fontSize}px ${CARD_FONT_FAMILY}`;
-      const icon = line.icon === 'grok' ? grokIcon : line.icon === 'x' ? xIcon : undefined;
-      context.fillStyle = line.label ? palette.muted : palette.text;
-      if (icon) context.drawImage(icon, layout.padding, y, fontSize, fontSize);
-      if (line.runs) {
-        for (const run of line.runs) {
-          context.fillStyle = run.tag ? (theme === 'dark' ? '#8cc8f5' : '#559bd2') : palette.text;
-          context.fillText(
-            run.text,
-            layout.padding + context.measureText(line.text.slice(0, run.start)).width,
-            y,
-          );
-        }
-      } else {
-        context.fillText(line.text, layout.padding + (line.icon ? fontSize * 1.4 : 0), y);
-      }
-    });
-    layout.pollBlocks.forEach((block) =>
-      drawPoll(context, block, layout, palette, theme, options.locale),
-    );
+    drawCardBody(context, layout, palette, theme, options.locale, grokIcon, xIcon);
 
     cardMedia.forEach((item, index) => {
       const rect = layout.imageRects[index]!;

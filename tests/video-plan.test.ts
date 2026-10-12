@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { VideoLimitError } from '../src/shared/video-experiment.js';
 import {
   executeVideoJob,
   parseVideoProbe,
@@ -209,7 +210,7 @@ it('applies a configured duration limit after probing and before rendering or en
         throw new Error('frame should not render');
       },
     }),
-  ).rejects.toThrow('0.5');
+  ).rejects.toBeInstanceOf(VideoLimitError);
   expect(encoded).toBe(false);
   expect(files.size).toBe(0);
 });

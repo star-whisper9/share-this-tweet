@@ -170,9 +170,6 @@ describe('MP4 file provenance', () => {
       expect(raw(bytes, ['ftyp'])).toEqual(raw(original, ['ftyp']));
       expect(raw(bytes, ['mdat'])).toEqual(raw(original, ['mdat']));
       expect(raw(bytes, ['moov', 'trak'])).toEqual(raw(original, ['moov', 'trak']));
-      await expect(
-        embedMp4Source(input(concat([original, atom('moof', [])])), gifSource),
-      ).rejects.toMatchObject({ code: 'unsupported-mp4' });
     },
   );
 

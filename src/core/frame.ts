@@ -3,6 +3,7 @@ import { ImageResources, loadAvatar, releaseImage, type LoadedAvatar } from './i
 import { getLocale, t, type Locale } from '../shared/i18n.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { renderTemplate } from './template.js';
+import { wrapText } from './text-wrap.js';
 
 export const DEFAULT_FRAME_TEMPLATE = '{author.name}';
 export type FrameOrientation = 'top' | 'bottom';
@@ -45,25 +46,7 @@ export function wrapFrameText(
   maxWidth: number,
   measureText: FrameTextMeasurement['measureText'],
 ): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split(/\r?\n/)) {
-    if (paragraph.length === 0) {
-      lines.push('');
-      continue;
-    }
-    let current = '';
-    for (const character of [...paragraph]) {
-      const candidate = current + character;
-      if (current && measureText(candidate).width > maxWidth) {
-        lines.push(current);
-        current = character;
-      } else {
-        current = candidate;
-      }
-    }
-    lines.push(current);
-  }
-  return lines;
+  return wrapText(text, maxWidth, measureText);
 }
 
 function getMaxTextWidth(
@@ -352,6 +335,51 @@ function drawFrameContent(
   context.strokeRect(0.5, frameY + 0.5, layout.width - 1, layout.barHeight - 1);
 }
 
+interface FrameAssets {
+  image?: HTMLImageElement;
+  avatarImage?: LoadedAvatar;
+  brandImage?: HTMLImageElement;
+}
+
+function releaseFrameAssets(assets: FrameAssets): void {
+  if (assets.image) releaseImage(assets.image);
+  if (assets.avatarImage) releaseImage(assets.avatarImage);
+  if (assets.brandImage) releaseImage(assets.brandImage);
+}
+
+async function loadFrameAssets(
+  record: TweetRecord,
+  userText: string,
+  resources: ImageResources,
+  color: string,
+  sourceUrl?: string,
+): Promise<FrameAssets> {
+  const assets: FrameAssets = {};
+  try {
+    const loaded = await Promise.allSettled([
+      resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((image) => {
+        assets.brandImage = image;
+      }),
+      sourceUrl
+        ? resources.load(sourceUrl).then((image) => {
+            assets.image = image;
+          })
+        : Promise.resolve(),
+      userText.includes(FRAME_AVATAR_MARKER)
+        ? loadAvatar(record.author.avatarUrl, resources, color).then((image) => {
+            assets.avatarImage = image;
+          })
+        : Promise.resolve(),
+    ]);
+    const failed = loaded.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    return assets;
+  } catch (error) {
+    releaseFrameAssets(assets);
+    throw error;
+  }
+}
+
 export async function renderImageFrame(
   record: TweetRecord,
   media: MediaRecord,
@@ -367,30 +395,18 @@ export async function renderImageFrame(
   let userText = getFrameText(record, media, template, 'jpg', locale);
   if (!source && !media.originalUrl)
     throw new Error(t('core.frame.originalUnavailable', {}, locale));
-  let image: HTMLImageElement | undefined;
-  let avatarImage: LoadedAvatar | undefined;
-  let brandImage: HTMLImageElement | undefined;
+  let assets: FrameAssets | undefined;
   const canvas = document.createElement('canvas');
   try {
-    const loaded = await Promise.allSettled([
-      resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((value) => {
-        brandImage = value;
-      }),
-      source
-        ? Promise.resolve()
-        : resources.load(media.originalUrl!).then((value) => {
-            image = value;
-          }),
-      userText.includes(FRAME_AVATAR_MARKER)
-        ? loadAvatar(record.author.avatarUrl, resources, palette.text).then((value) => {
-            avatarImage = value;
-          })
-        : Promise.resolve(),
-    ]);
-    const failed = loaded.find((result) => result.status === 'rejected');
-    if (failed?.status === 'rejected') throw failed.reason;
+    assets = await loadFrameAssets(
+      record,
+      userText,
+      resources,
+      palette.text,
+      source ? undefined : media.originalUrl,
+    );
     resources.checkActive();
-    const drawable = source ?? image;
+    const drawable = source ?? assets.image;
     if (!drawable) throw new Error(t('core.frame.decodeFailed', {}, locale));
     const imageWidth = 'naturalWidth' in drawable ? drawable.naturalWidth : drawable.width;
     const imageHeight = 'naturalHeight' in drawable ? drawable.naturalHeight : drawable.height;
@@ -433,16 +449,14 @@ export async function renderImageFrame(
       sourceLines,
       orientation === 'top' ? 0 : imageHeight,
       palette,
-      avatarImage,
-      brandImage,
+      assets.avatarImage,
+      assets.brandImage,
     );
 
     resources.checkActive();
     return await encodeFrame(canvas, transparent, locale);
   } finally {
-    if (image) releaseImage(image);
-    if (avatarImage) releaseImage(avatarImage);
-    if (brandImage) releaseImage(brandImage);
+    if (assets) releaseFrameAssets(assets);
     canvas.width = 0;
     canvas.height = 0;
   }
@@ -467,22 +481,10 @@ export async function renderFrameStrip(
   const palette = IMAGE_PALETTES[theme];
   const userText = getFrameText(record, media, template, 'mp4', locale);
   const sourceLines = getSourceLines(record, locale);
-  let avatarImage: LoadedAvatar | undefined;
-  let brandImage: HTMLImageElement | undefined;
+  let assets: FrameAssets | undefined;
   const canvas = document.createElement('canvas');
   try {
-    const loaded = await Promise.allSettled([
-      resources.load(browser.runtime.getURL('/icons/icon-48.png')).then((value) => {
-        brandImage = value;
-      }),
-      userText.includes(FRAME_AVATAR_MARKER)
-        ? loadAvatar(record.author.avatarUrl, resources, palette.text).then((value) => {
-            avatarImage = value;
-          })
-        : Promise.resolve(),
-    ]);
-    const failed = loaded.find((result) => result.status === 'rejected');
-    if (failed?.status === 'rejected') throw failed.reason;
+    assets = await loadFrameAssets(record, userText, resources, palette.text);
     resources.checkActive();
 
     canvas.width = width;
@@ -503,7 +505,15 @@ export async function renderFrameStrip(
     const stripLayout =
       layout.barHeight % 2 === 0 ? layout : { ...layout, barHeight: layout.barHeight + 1 };
     canvas.height = stripLayout.barHeight;
-    drawFrameContent(context, stripLayout, sourceLines, 0, palette, avatarImage, brandImage);
+    drawFrameContent(
+      context,
+      stripLayout,
+      sourceLines,
+      0,
+      palette,
+      assets.avatarImage,
+      assets.brandImage,
+    );
     resources.checkActive();
     return {
       blob: await encodeCanvas(canvas, 'image/png', locale),
@@ -511,8 +521,7 @@ export async function renderFrameStrip(
       height: canvas.height,
     };
   } finally {
-    if (avatarImage) releaseImage(avatarImage);
-    if (brandImage) releaseImage(brandImage);
+    if (assets) releaseFrameAssets(assets);
     canvas.width = 0;
     canvas.height = 0;
   }

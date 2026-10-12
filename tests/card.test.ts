@@ -53,8 +53,8 @@ describe('tweet card layout', () => {
 });
 
 describe('wrapCardText', () => {
-  it('preserves explicit line breaks', () => {
-    expect(wrapCardText('first\nsecond', 100, measureText)).toEqual(['first', 'second']);
+  it('trims outer whitespace while preserving empty lines and Unicode characters', () => {
+    expect(wrapCardText(' \r\n😀A\n\nB \r\n ', 20, measureText)).toEqual(['😀A', '', 'B']);
   });
 });
 

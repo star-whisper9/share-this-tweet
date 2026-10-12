@@ -140,15 +140,6 @@ export interface VideoRenderFailure {
   limitExceeded?: boolean;
 }
 
-/** Sent by the background to let the UI choose its static/original fallback. */
-export interface VideoRenderFallback {
-  type: 'fallback';
-  id: string;
-  reason: string;
-  /** Available for a single framed source, which is already fully downloaded. */
-  blob?: Blob;
-}
-
 export type VideoRenderWorkerMessage =
   | VideoRenderLayout
   | VideoRenderProgress

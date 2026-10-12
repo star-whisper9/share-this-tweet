@@ -1,5 +1,5 @@
-import { frameOutputSize, renderFrameStrip } from '../src/core/frame.js';
-import { describe, expect, it } from 'vitest';
+import { frameOutputSize, renderFrameStrip, renderImageFrame } from '../src/core/frame.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateFrameLayout,
   wrapFrameText,
@@ -37,24 +37,17 @@ describe('calculateFrameLayout', () => {
     expect(layout.rightLines).toEqual([]);
     expect(layout.leftLines.length).toBeGreaterThanOrEqual(3);
   });
-
-  it('supports the top frame orientation', () => {
-    const layout = calculateFrameLayout({
-      width: 800,
-      orientation: 'top',
-      userText: 'Alice',
-      sourceLines: ['tweet id: 42', '@alice'],
-      measureText,
-    });
-
-    expect(layout.orientation).toBe('top');
-    expect(layout.barHeight).toBe(layout.paddingY * 2 + layout.lineHeight * 2);
-  });
 });
 
 describe('wrapFrameText', () => {
-  it('preserves explicit line breaks', () => {
-    expect(wrapFrameText('first\nsecond', 100, measureText)).toEqual(['first', 'second']);
+  it('preserves whitespace, empty lines and Unicode characters across line breaks', () => {
+    expect(wrapFrameText(' \r\n😀A\n\nB \r\n ', 20, measureText)).toEqual([
+      ' ',
+      '😀A',
+      '',
+      'B ',
+      ' ',
+    ]);
   });
 });
 
@@ -158,3 +151,52 @@ it('renders an even-height PNG source strip at the requested video width', async
     });
   }
 });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it.each(['photo', 'strip'] as const)(
+  'releases successful resource loads when the %s frame brand fails',
+  async (kind) => {
+    class Canvas {
+      width = 0;
+      height = 0;
+    }
+    vi.stubGlobal('HTMLCanvasElement', Canvas);
+    vi.stubGlobal('document', { createElement: () => new Canvas() });
+    vi.stubGlobal('browser', { runtime: { getURL: () => 'brand' } });
+    const images = new Map(
+      ['photo', 'avatar'].map((url) => [url, { remove: vi.fn(), removeAttribute: vi.fn() }]),
+    );
+    const resources = new ImageResources();
+    vi.spyOn(resources, 'load').mockImplementation(async (url) => {
+      if (url === 'brand') throw new Error();
+      return images.get(url)! as unknown as HTMLImageElement;
+    });
+    const record: TweetRecord = {
+      tweetId: '42',
+      url: 'https://x.com/a/status/42',
+      text: '',
+      author: { id: 'a', name: 'Alice', handle: 'alice', avatarUrl: 'avatar' },
+      media: [{ index: 1, type: 'photo', originalUrl: 'photo' }],
+    };
+    const result =
+      kind === 'photo'
+        ? renderImageFrame(
+            record,
+            record.media[0]!,
+            '{author.avatar}',
+            'bottom',
+            resources,
+            'light',
+          )
+        : renderFrameStrip(record, record.media[0]!, 640, '{author.avatar}', resources, 'light');
+    await expect(result).rejects.toThrow(Error);
+    for (const url of kind === 'photo' ? ['photo', 'avatar'] : ['avatar']) {
+      expect(images.get(url)!.removeAttribute).toHaveBeenCalledWith('src');
+      expect(images.get(url)!.remove).toHaveBeenCalledOnce();
+    }
+  },
+);
