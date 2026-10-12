@@ -2,6 +2,7 @@ import { isGifLimits, type GifLimits } from '../shared/gif-experiment.js';
 import { IMAGE_PALETTES, detectImageTheme } from '../core/image-theme.js';
 import { readMediaSourceInWorker } from '../core/media-source-client.js';
 import { mountTemplateGuide } from './template-guide.js';
+import { recordPreviewText } from './record-preview.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
 import {
@@ -655,27 +656,7 @@ function renderRecordDetail(): void {
   update('[data-record-saved-at]', formatRecordDate(record.savedAt));
   const link = document.querySelector<HTMLAnchorElement>('[data-record-link]');
   if (link) link.href = record.url;
-  const quote = record.quote;
-  update(
-    '[data-record-text]',
-    [
-      record.text || t('options.records.noText'),
-      quote
-        ? [
-            t('options.records.quote'),
-            quote.record ? `${quote.record.author.name} · @${quote.record.author.handle}` : '',
-            (quote.record?.text ?? quote.status === 'unavailable')
-              ? t('options.records.quoteUnavailable')
-              : t('options.records.quotePending'),
-            quote.tweetId ? `https://x.com/i/status/${quote.tweetId}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n')
-        : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
-  );
+  update('[data-record-text]', recordPreviewText(record));
   const outputs = getRecordOutputs(record.tweetId);
   const outputLabels: Record<string, string> = {
     'original-media': t('options.records.output.originalMedia'),
@@ -849,7 +830,9 @@ async function clearRecords(): Promise<void> {
   }
 }
 
+const disposeTemplateGuides: Array<() => void> = [];
 function buildControls(): void {
+  for (const dispose of disposeTemplateGuides.splice(0)) dispose();
   for (const name of keys) {
     const container = document.querySelector(`[data-presets="${name}"]`);
     container?.replaceChildren();
@@ -891,7 +874,9 @@ function buildControls(): void {
     const tokenContainer = document.querySelector<HTMLElement>(`[data-tokens="${name}"]`);
     const input = inputs[name];
     if (tokenContainer && input)
-      mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft);
+      disposeTemplateGuides.push(
+        mountTemplateGuide(tokenContainer, input, name, () => ready && !saving, updateDraft),
+      );
   }
   buildVideoControls();
 }

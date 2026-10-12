@@ -61,7 +61,7 @@ export function mountTemplateGuide(
   scope: TemplateScope,
   editable: () => boolean,
   changed: () => void,
-): void {
+): () => void {
   const example = exampleForLocale();
   container.replaceChildren();
   container.className = 'template-guide';
@@ -240,4 +240,8 @@ export function mountTemplateGuide(
   }
   container.append(quick, guide);
   updatePreview();
+  return () => {
+    input.removeEventListener('input', updatePreview);
+    input.removeEventListener('templatechange', updatePreview);
+  };
 }
