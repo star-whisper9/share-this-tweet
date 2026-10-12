@@ -1,5 +1,6 @@
+import { isGifLimits, type GifLimits } from '../shared/gif-experiment.js';
 import { IMAGE_PALETTES, detectImageTheme } from '../core/image-theme.js';
-import { readMp4SourceInWorker } from '../core/media-source-client.js';
+import { readMediaSourceInWorker } from '../core/media-source-client.js';
 import { mountTemplateGuide } from './template-guide.js';
 import { buildMediaFilename } from '../core/filename.js';
 import { renderTemplate } from '../core/template.js';
@@ -55,6 +56,7 @@ const videoLimitKeys = [
   'maxOutputPixels',
   'maxFrameRate',
 ] as const satisfies ReadonlyArray<keyof VideoLimits>;
+const gifLimitKeys = ['maxInputMiB', 'maxDurationSeconds', 'maxSourcePixels'] as const;
 const calculatorPresets = {
   '480p': { width: 854, height: 480, durationSeconds: 140, frameRate: 30, bitrateMbps: 1.25 },
   '720p': { width: 1280, height: 720, durationSeconds: 140, frameRate: 30, bitrateMbps: 2.5 },
@@ -75,6 +77,16 @@ const inputs = {
 const experimentalVideoInput = document.querySelector<HTMLInputElement>(
   '[data-experimental-video]',
 );
+const experimentalGifInput = document.querySelector<HTMLInputElement>('[data-experimental-gif]');
+const gifSettings = document.querySelector<HTMLElement>('[data-gif-settings]');
+const gifLimitsError = document.querySelector<HTMLElement>('[data-gif-limits-error]');
+const gifLimitInputs: Record<keyof GifLimits, HTMLInputElement | null> = {
+  maxInputMiB: document.querySelector<HTMLInputElement>('[data-gif-limit="maxInputMiB"]'),
+  maxDurationSeconds: document.querySelector<HTMLInputElement>(
+    '[data-gif-limit="maxDurationSeconds"]',
+  ),
+  maxSourcePixels: document.querySelector<HTMLInputElement>('[data-gif-limit="maxSourcePixels"]'),
+};
 const experimentSettings = document.querySelector<HTMLElement>('[data-experiment-settings]');
 const experimentLimitsError = document.querySelector<HTMLElement>('[data-experiment-limits-error]');
 const videoLimitInputs: Record<keyof VideoLimits, HTMLInputElement | null> = {
@@ -118,7 +130,7 @@ let recordsLoading = false;
 let recordsLoaded = false;
 let sourceReadController: AbortController | undefined;
 let displayedSource: { source: MediaSourceMetadata; filename: string } | undefined;
-// The reader only inspects bounded MP4 boxes in its Worker, so it can accept
+// The reader only inspects bounded metadata in its Worker, so it can accept
 // larger local files than the background network-download path buffers.
 const MAX_LOCAL_SOURCE_FILE_SIZE = 2 * 1024 * 1024 * 1024;
 function sampleRecordForLocale(): TweetRecord {
@@ -205,7 +217,11 @@ function getPresets(): Record<SettingKey, Preset[]> {
 }
 let presets = getPresets();
 function copySettings(settings: ExtensionSettings): ExtensionSettings {
-  return { ...settings, videoLimits: { ...settings.videoLimits } };
+  return {
+    ...settings,
+    videoLimits: { ...settings.videoLimits },
+    gifLimits: { ...settings.gifLimits },
+  };
 }
 let baseline: ExtensionSettings = copySettings(DEFAULT_SETTINGS);
 let ready = false;
@@ -234,18 +250,41 @@ function sameVideoLimits(left: VideoLimits, right: VideoLimits): boolean {
 function validVideoLimits(limits: VideoLimits): boolean {
   return videoLimitKeys.every((key) => Number.isSafeInteger(limits[key]) && limits[key] >= 0);
 }
+function readGifLimits(): GifLimits {
+  const read = (input: HTMLInputElement | null): number =>
+    input?.value.trim() === '' ? Number.NaN : Number(input?.value);
+  return {
+    maxInputMiB: read(gifLimitInputs.maxInputMiB),
+    maxDurationSeconds: read(gifLimitInputs.maxDurationSeconds),
+    maxSourcePixels: read(gifLimitInputs.maxSourcePixels),
+  };
+}
+function writeGifLimits(limits: GifLimits): void {
+  for (const key of gifLimitKeys) {
+    const input = gifLimitInputs[key];
+    if (input) input.value = String(limits[key]);
+  }
+}
+function setGifEnabled(enabled: boolean): void {
+  if (experimentalGifInput) experimentalGifInput.checked = enabled;
+  if (gifSettings) gifSettings.hidden = !enabled;
+}
 function validateExperimentSettings(settings: ExtensionSettings): boolean {
+  const gifValid = isGifLimits(settings.gifLimits);
+  if (gifLimitsError) gifLimitsError.textContent = gifValid ? '' : t('gif.invalidLimits');
+  for (const key of gifLimitKeys)
+    gifLimitInputs[key]?.setAttribute('aria-invalid', String(!gifValid));
   if (!settings.experimentalVideo) {
     if (experimentLimitsError) experimentLimitsError.textContent = '';
     for (const key of videoLimitKeys) videoLimitInputs[key]?.setAttribute('aria-invalid', 'false');
-    return true;
+    return gifValid;
   }
   const valid = validVideoLimits(settings.videoLimits);
   if (experimentLimitsError)
     experimentLimitsError.textContent = valid ? '' : t('experiment.invalidLimits');
   for (const key of videoLimitKeys)
     videoLimitInputs[key]?.setAttribute('aria-invalid', String(!valid));
-  return valid;
+  return valid && gifValid;
 }
 function setExperimentEnabled(enabled: boolean): void {
   if (experimentalVideoInput) experimentalVideoInput.checked = enabled;
@@ -263,6 +302,8 @@ function readSettings(): ExtensionSettings {
   )?.dataset.frameOrientation;
   return {
     language: (languageSelect?.value as LanguagePreference) ?? baseline.language,
+    experimentalGif: experimentalGifInput?.checked ?? DEFAULT_SETTINGS.experimentalGif,
+    gifLimits: readGifLimits(),
     experimentalVideo: experimentalVideoInput?.checked ?? DEFAULT_SETTINGS.experimentalVideo,
     videoLimits: readVideoLimits(),
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
@@ -445,6 +486,8 @@ function updateDraft(announce = true): void {
     keys.some((key) => settings[key] !== baseline[key]) ||
     settings.frameOrientation !== baseline.frameOrientation ||
     settings.stitchStyle !== baseline.stitchStyle ||
+    settings.experimentalGif !== baseline.experimentalGif ||
+    gifLimitKeys.some((key) => settings.gifLimits[key] !== baseline.gifLimits[key]) ||
     settings.experimentalVideo !== baseline.experimentalVideo ||
     !sameVideoLimits(settings.videoLimits, baseline.videoLimits);
   updatePresetSelection(settings);
@@ -461,6 +504,8 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
+  setGifEnabled(settings.experimentalGif);
+  writeGifLimits(settings.gifLimits);
   setExperimentEnabled(settings.experimentalVideo);
   writeVideoLimits(settings.videoLimits);
   if (languageSelect) languageSelect.value = settings.language;
@@ -513,9 +558,7 @@ function renderSourceMedia(source: MediaSourceMetadata, filename: string): void 
   update(
     '[data-source-media-kind]',
     t(
-      source.media.type === 'animated_gif'
-        ? 'options.records.source.kindGif'
-        : 'options.records.source.kindVideo',
+      source.media.type === 'animated_gif' ? 'gif.reader.kind' : 'options.records.source.kindVideo',
       { index: source.media.index },
     ),
   );
@@ -542,10 +585,10 @@ async function readSourceMedia(file: File): Promise<void> {
   }
   setSourceMediaStatus(t('options.records.source.reading', { filename: file.name }));
   try {
-    const source = await readMp4SourceInWorker(file, { signal: controller.signal });
+    const source = await readMediaSourceInWorker(file, { signal: controller.signal });
     if (sourceReadController !== controller) return;
     if (!source) {
-      setSourceMediaStatus(t('options.records.source.none'));
+      setSourceMediaStatus(t('gif.reader.none'));
       return;
     }
     renderSourceMedia(source, file.name);
@@ -909,6 +952,15 @@ experimentalVideoInput?.addEventListener('change', () => {
   setExperimentEnabled(experimentalVideoInput.checked);
   updateDraft();
 });
+experimentalGifInput?.addEventListener('change', () => {
+  if (!ready || saving) return;
+  if (!experimentalGifInput.checked && !isGifLimits(readGifLimits()))
+    writeGifLimits(baseline.gifLimits);
+  setGifEnabled(experimentalGifInput.checked);
+  updateDraft();
+});
+for (const input of Object.values(gifLimitInputs))
+  input?.addEventListener('input', () => updateDraft());
 for (const input of Object.values(videoLimitInputs))
   input?.addEventListener('input', () => updateDraft());
 for (const input of Object.values(calculatorInputs)) {
@@ -1045,7 +1097,10 @@ form?.addEventListener('submit', async (event) => {
     if (invalidFields[0]) openEditor(invalidFields[0]);
     else {
       activateTab('experiment');
-      videoLimitInputs.maxInputMiB?.focus();
+      (isGifLimits(settings.gifLimits)
+        ? videoLimitInputs.maxInputMiB
+        : gifLimitInputs.maxInputMiB
+      )?.focus();
     }
     return;
   }

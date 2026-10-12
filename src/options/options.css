@@ -1599,3 +1599,13 @@ textarea {
 .print-caption {
   border-top: 1px solid var(--frame-preview-border, #dfe3e8);
 }
+
+.gif-experiment {
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+.gif-experiment > h3 {
+  font-size: 15px;
+  margin: 0 0 14px;
+}

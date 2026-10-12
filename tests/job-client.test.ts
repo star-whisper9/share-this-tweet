@@ -59,3 +59,14 @@ it('waits for a matching accepted id and rejects bad file responses', async () =
   await expect(enqueueExportJob(job)).resolves.toBe('one');
   await expect(getExportJobFile('one', 'file')).rejects.toThrow();
 });
+
+it('accepts older queued settings and rejects malformed explicit GIF preferences', () => {
+  const { experimentalGif: _enabled, gifLimits: _limits, ...legacySettings } = DEFAULT_SETTINGS;
+  expect(isExportJobRequest({ ...job, settings: legacySettings })).toBe(true);
+  for (const patch of [
+    { experimentalGif: 1 },
+    { gifLimits: null },
+    { gifLimits: { ...DEFAULT_SETTINGS.gifLimits, maxSourcePixels: -1 } },
+  ])
+    expect(isExportJobRequest({ ...job, settings: { ...DEFAULT_SETTINGS, ...patch } })).toBe(false);
+});

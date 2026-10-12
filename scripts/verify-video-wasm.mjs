@@ -65,6 +65,14 @@ assert.equal(rateCheck.status, 0, rateCheck.stderr);
 const sourceFrameRate = rateCheck.stdout.trim();
 const cases = [
   {
+    name: 'individual-gif',
+    inputs: [{ type: 'animated_gif', blob: clip }],
+    frame: 'original',
+    style: 'seamless',
+    audio: false,
+    outputFormat: 'gif',
+  },
+  {
     name: 'mixed-seamless',
     inputs: [
       { type: 'photo', blob: png(32, 32) },
@@ -136,6 +144,7 @@ try {
           frame: job.frame,
           background: '#111820',
           locale: 'en',
+          ...(job.outputFormat ? { outputFormat: job.outputFormat } : {}),
         });
       });
       const samples = diagnostics.map((event) => event.sample);
@@ -144,7 +153,7 @@ try {
         'writing-input',
         'probing',
         'encoding',
-        'finalizing',
+        ...(job.outputFormat === 'gif' ? ['palette'] : ['finalizing']),
         'reading-output',
         'copying-output',
         'cleanup',
@@ -164,13 +173,17 @@ try {
         ),
       );
       assert.ok(samples.some((sample) => sample.outputCopyBytes === result.blob.size));
-      for (const phase of ['reading-output', 'copying-output', 'finalizing'])
+      for (const phase of [
+        'reading-output',
+        'copying-output',
+        ...(job.outputFormat === 'gif' ? ['palette'] : ['finalizing']),
+      ])
         assert.ok(
           samples.some((sample) => sample.phase === phase && sample.phaseElapsedMs > 0),
           `Missing final phase duration: ${phase}`,
         );
       assert.ok(diagnostics.some((event) => event.metadata?.args?.includes('-progress')));
-      const output = join(directory, `${job.name}.mp4`);
+      const output = join(directory, `${job.name}.${job.outputFormat ?? 'mp4'}`);
       await writeFile(output, new Uint8Array(await result.blob.arrayBuffer()));
       const check = spawnSync(
         'ffprobe',
@@ -178,7 +191,8 @@ try {
           '-v',
           'error',
           '-show_entries',
-          'stream=codec_type,codec_name,width,height,r_frame_rate:format=duration',
+          'stream=codec_type,codec_name,width,height,r_frame_rate,nb_read_frames:format=duration',
+          '-count_frames',
           '-of',
           'json',
           output,
@@ -189,10 +203,21 @@ try {
       assert.equal(check.status, 0, check.stderr);
       const probe = JSON.parse(check.stdout);
       const video = probe.streams.find((stream) => stream.codec_type === 'video');
-      assert.equal(video.codec_name, 'h264');
+      assert.equal(video.codec_name, job.outputFormat === 'gif' ? 'gif' : 'h264');
       assert.equal(video.width, layout.width);
       assert.equal(video.height, layout.height + (job.frame === 'original' ? 0 : 32));
-      assert.equal(video.r_frame_rate, sourceFrameRate);
+      if (job.outputFormat === 'gif') {
+        // GIF's reported r_frame_rate can be its 1/100s time base, not playback fps.
+        assert.equal(
+          Number(video.nb_read_frames),
+          Number(sourceFrameRate.split('/')[0]) / Number(sourceFrameRate.split('/')[1]),
+        );
+        assert.equal(result.blob.type, 'image/gif');
+        assert.equal(
+          new TextDecoder().decode(new Uint8Array(await result.blob.slice(0, 6).arrayBuffer())),
+          'GIF89a',
+        );
+      } else assert.equal(video.r_frame_rate, sourceFrameRate);
       assert.equal(
         probe.streams.some((stream) => stream.codec_type === 'audio'),
         job.audio,

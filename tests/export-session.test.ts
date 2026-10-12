@@ -143,3 +143,40 @@ it('clears disabled dynamic frame choices and opens the independent task page', 
   await session.openTasks();
   expect(openExportJobs).toHaveBeenCalledOnce();
 });
+
+it('keeps GIF source choices independent from video frames in one selection', async () => {
+  const mixed: TweetRecord = {
+    ...record,
+    media: [
+      ...record.media,
+      {
+        index: 3,
+        type: 'animated_gif',
+        variants: [{ url: 'https://video.twimg.com/gif.mp4', mime: 'video/mp4' }],
+      },
+    ],
+  };
+  const session = new ExportSession(mixed, settings);
+  session.toggleMedia(2);
+  session.toggleMedia(3);
+  session.configureMedia({ video: 'top' });
+  expect(session.mediaOptions.gif).toBe('original');
+  await session.saveSelected('configured');
+  expect(vi.mocked(enqueueExportJob).mock.calls[0]![0].media).toEqual([
+    { index: 1, mode: 'framed', orientation: 'bottom' },
+    { index: 2, mode: 'framed', orientation: 'top' },
+    { index: 3, mode: 'original', orientation: 'bottom' },
+  ]);
+  session.configureMedia({ gif: 'sourced' });
+  session.updateSettings({ ...settings, experimentalGif: false, experimentalVideo: false });
+  expect(session.mediaOptions).toMatchObject({ gif: 'sourced', video: 'sourced' });
+  await session.saveSelected('configured');
+  expect(vi.mocked(enqueueExportJob).mock.calls[1]![0]).toMatchObject({
+    settings: { experimentalGif: false },
+    media: [
+      { index: 1, mode: 'framed' },
+      { index: 2, mode: 'sourced' },
+      { index: 3, mode: 'sourced' },
+    ],
+  });
+});

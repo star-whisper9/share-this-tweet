@@ -30,23 +30,26 @@ export function buildMediaFilename(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
+  extension?: 'gif' | 'mp4',
 ): string {
   const target = getMediaDownloadTarget(media);
+  const outputExtension = extension ?? target.extension;
   const rendered = renderTemplate(template, {
     tweet: record,
     media,
-    extension: target.extension,
+    extension: outputExtension,
   });
-  return forceExtension(sanitizeFilename(rendered), target.extension);
+  return forceExtension(sanitizeFilename(rendered), outputExtension);
 }
 
 export function buildSourcedMediaFilename(
   record: TweetRecord,
   media: MediaRecord,
   template = DEFAULT_FILENAME_TEMPLATE,
+  outputExtension?: 'gif' | 'mp4',
 ): string {
-  const filename = buildMediaFilename(record, media, template);
-  const extension = getMediaDownloadTarget(media).extension;
+  const filename = buildMediaFilename(record, media, template, outputExtension);
+  const extension = outputExtension ?? getMediaDownloadTarget(media).extension;
   const base = filename.slice(0, -(extension.length + 1));
   const suffix = `_source.${extension}`;
   const trimmedBase = [...base].slice(0, Math.max(1, MAX_FILENAME_LENGTH - suffix.length)).join('');

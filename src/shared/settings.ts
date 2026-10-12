@@ -1,9 +1,16 @@
+import { DEFAULT_GIF_LIMITS, normalizeGifLimits, type GifLimits } from './gif-experiment.js';
 import {
   DEFAULT_VIDEO_LIMITS,
   normalizeVideoLimits,
   type VideoLimits,
 } from './video-experiment.js';
-import { isLanguagePreference, resolveLocale, setLocale, type LanguagePreference } from './i18n.js';
+import {
+  isLanguagePreference,
+  resolveLocale,
+  setLocale,
+  t,
+  type LanguagePreference,
+} from './i18n.js';
 import { DEFAULT_FILENAME_TEMPLATE } from '../core/filename.js';
 import {
   DEFAULT_FRAME_ORIENTATION,
@@ -23,6 +30,8 @@ let latestLanguage: LanguagePreference | undefined;
 
 export interface ExtensionSettings {
   language: LanguagePreference;
+  experimentalGif: boolean;
+  gifLimits: GifLimits;
   experimentalVideo: boolean;
   videoLimits: VideoLimits;
   filenameTemplate: string;
@@ -34,6 +43,8 @@ export interface ExtensionSettings {
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   language: 'auto',
+  experimentalGif: true,
+  gifLimits: { ...DEFAULT_GIF_LIMITS },
   experimentalVideo: false,
   videoLimits: { ...DEFAULT_VIDEO_LIMITS },
   filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
@@ -60,7 +71,11 @@ function readOrientation(value: unknown): FrameOrientation {
 export function normalizeSettings(values: Record<string, unknown>): ExtensionSettings {
   const stored = asObject(values[SETTINGS_STORAGE_KEY]);
   const language = values[LANGUAGE_STORAGE_KEY] ?? stored?.language;
+  if (stored?.experimentalGif !== undefined && typeof stored.experimentalGif !== 'boolean')
+    throw new Error(t('gif.invalidPreference'));
   return {
+    experimentalGif: stored?.experimentalGif ?? DEFAULT_SETTINGS.experimentalGif,
+    gifLimits: normalizeGifLimits(stored?.gifLimits),
     experimentalVideo: stored?.experimentalVideo === true,
     videoLimits: normalizeVideoLimits(stored?.videoLimits),
     language: isLanguagePreference(language) ? language : DEFAULT_SETTINGS.language,

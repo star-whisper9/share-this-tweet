@@ -7,6 +7,8 @@ import {
   type VideoRenderPlan,
 } from './video-plan.js';
 import { assertVideoLimits } from '../shared/video-experiment.js';
+import { createGifFfmpegArgs, createGifRenderPlan } from './gif-plan.js';
+import { assertGifLimits } from '../shared/gif-experiment.js';
 import type {
   VideoDiagnosticMetadata,
   VideoDiagnosticPhase,
@@ -67,7 +69,21 @@ function assertLimits(
 ): void {
   // The background always sends limits. Keeping this optional lets the
   // standalone WASM harness keep exercising the raw renderer protocol.
-  if (request.limits) assertVideoLimits(request.limits, actual, request.locale);
+  if (request.outputFormat === 'gif' && request.limits) {
+    assertGifLimits(
+      {
+        maxInputMiB: request.limits.maxInputMiB,
+        maxDurationSeconds: request.limits.maxDurationSeconds,
+        maxSourcePixels: request.limits.maxOutputPixels,
+      },
+      {
+        inputBytes: actual.inputBytes,
+        durationSeconds: actual.durationSeconds,
+        sourcePixels: actual.outputPixels,
+      },
+      request.locale,
+    );
+  } else if (request.limits) assertVideoLimits(request.limits, actual, request.locale);
 }
 
 function toFiniteNumber(value: number | string | undefined): number | undefined {
@@ -165,12 +181,21 @@ export async function executeVideoJob(
   if (request.inputs.length > MAX_VIDEO_INPUTS) throw new VideoPlanError('maxInputs');
   if (!request.inputs.some((input) => input.type !== 'photo'))
     throw new VideoPlanError('atLeastOneDynamic');
+  const gif = request.outputFormat === 'gif';
+  if (
+    gif &&
+    (request.inputs.length !== 1 ||
+      request.inputs[0]?.type !== 'animated_gif' ||
+      request.frame !== 'original')
+  )
+    throw new VideoPlanError('invalidRequest');
   const inputBytes = request.inputs.reduce((total, input) => total + input.blob.size, 0);
   assertLimits(request, { inputBytes });
 
   const paths: string[] = [];
   const framePath = 'frame.png';
   let frameWritten = false;
+  const outputPath = gif ? 'output.gif' : 'output.mp4';
   try {
     callbacks.onDiagnosticStage?.('writing-input');
     for (const [index, input] of request.inputs.entries()) {
@@ -184,23 +209,28 @@ export async function executeVideoJob(
       assertLimits(request, {
         outputPixels: probeResult.width * probeResult.height,
       });
-    const plan = createVideoRenderPlan(
-      request.inputs.map((input, index) => ({ type: input.type, probe: probes[index]! })),
-      request.style,
-    );
+    const plan = gif
+      ? createGifRenderPlan(probes[0]!)
+      : createVideoRenderPlan(
+          request.inputs.map((input, index) => ({ type: input.type, probe: probes[index]! })),
+          request.style,
+        );
     assertLimits(request, {
       durationSeconds: plan.duration,
       outputPixels: plan.width * plan.height,
       frameRate: plan.frameRate,
     });
-    const ffmpegArgs = createVideoFfmpegArgs(
-      request.inputs.map((input, index) => ({ path: paths[index]!, type: input.type })),
-      plan,
-      request.style,
-      request.background,
-      request.frame,
-      framePath,
-    );
+    const gifArgs = gif ? createGifFfmpegArgs(paths[0]!, plan) : undefined;
+    const ffmpegArgs =
+      gifArgs?.encode ??
+      createVideoFfmpegArgs(
+        request.inputs.map((input, index) => ({ path: paths[index]!, type: input.type })),
+        plan,
+        request.style,
+        request.background,
+        request.frame,
+        framePath,
+      );
     callbacks.onDiagnosticMetadata?.({
       inputBytes,
       inputs: request.inputs.map((input, index) => ({
@@ -213,6 +243,9 @@ export async function executeVideoJob(
         bytes: input.blob.size,
       })),
       args: core.diagnosticArgs?.(ffmpegArgs) ?? ffmpegArgs,
+      ...(gifArgs
+        ? { paletteArgs: core.diagnosticArgs?.(gifArgs.palette) ?? gifArgs.palette }
+        : {}),
     });
     callbacks.onDiagnosticStage?.('frame');
     const frame = await callbacks.onLayout(plan);
@@ -240,18 +273,22 @@ export async function executeVideoJob(
       },
     });
     callbacks.onProgress('encoding');
+    if (gifArgs) {
+      callbacks.onDiagnosticStage?.('palette');
+      if (core.exec(gifArgs.palette) !== 0) throw new VideoPlanError('ffmpegFailed');
+    }
     callbacks.onDiagnosticStage?.('encoding');
     const exitCode = core.exec(ffmpegArgs);
     if (exitCode !== 0) throw new VideoPlanError('ffmpegFailed');
     callbacks.onDiagnosticStage?.('reading-output');
-    const bytes = core.readFile('output.mp4');
+    const bytes = core.readFile(outputPath);
     if (!bytes.byteLength) throw new VideoPlanError('emptyOutput');
     callbacks.onDiagnosticStage?.('copying-output');
     const output = new Uint8Array(bytes.byteLength);
     output.set(bytes);
     callbacks.onDiagnosticOutputCopyBytes?.(output.buffer.byteLength);
     return {
-      blob: new Blob([output], { type: 'video/mp4' }),
+      blob: new Blob([output], { type: gif ? 'image/gif' : 'video/mp4' }),
       width: plan.width,
       height: outputHeight,
       duration: plan.duration,
@@ -260,6 +297,7 @@ export async function executeVideoJob(
     callbacks.onDiagnosticStage?.('cleanup');
     for (const path of paths) release(core, path);
     if (frameWritten) release(core, framePath);
-    release(core, 'output.mp4');
+    release(core, outputPath);
+    if (gif) release(core, 'palette.png');
   }
 }

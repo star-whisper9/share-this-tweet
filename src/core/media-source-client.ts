@@ -11,6 +11,7 @@ function runWorker(
   input: Blob,
   source: MediaSourceMetadata | undefined,
   options: MediaSourceWorkerOptions,
+  format: 'mp4' | 'gif' | 'auto' = 'mp4',
 ): Promise<Blob | MediaSourceMetadata | undefined> {
   const locale = options.locale ?? getLocale();
   const timeoutMs = options.timeoutMs ?? 120_000;
@@ -71,10 +72,14 @@ function runWorker(
       else if (source) {
         if (
           !(response.result instanceof Blob) ||
-          response.result.type !== 'video/mp4' ||
+          response.result.type !== (format === 'gif' ? 'image/gif' : 'video/mp4') ||
           !response.result.size
         )
-          finish(new Error(t('core.worker.invalidMp4', {}, locale)));
+          finish(
+            new Error(
+              t(format === 'gif' ? 'core.worker.invalidGif' : 'core.worker.invalidMp4', {}, locale),
+            ),
+          );
         else finish(undefined, response.result);
       } else {
         try {
@@ -101,6 +106,7 @@ function runWorker(
         type: source ? 'embed' : 'read',
         blob: input,
         locale,
+        format,
         ...(source ? { source } : {}),
       });
     } catch (error) {
@@ -124,6 +130,26 @@ export async function readMp4SourceInWorker(
   options: MediaSourceWorkerOptions = {},
 ): Promise<MediaSourceMetadata | undefined> {
   const result = await runWorker(input, undefined, options);
+  if (result instanceof Blob)
+    throw new Error(t('core.worker.invalidReadResponse', {}, options.locale));
+  return result;
+}
+
+export async function embedGifSourceInWorker(
+  input: Blob,
+  source: MediaSourceMetadata,
+  options: MediaSourceWorkerOptions = {},
+): Promise<Blob> {
+  const result = await runWorker(input, parseMediaSourceMetadata(source), options, 'gif');
+  if (!(result instanceof Blob)) throw new Error(t('core.worker.invalidGif', {}, options.locale));
+  return result;
+}
+
+export async function readMediaSourceInWorker(
+  input: Blob,
+  options: MediaSourceWorkerOptions = {},
+): Promise<MediaSourceMetadata | undefined> {
+  const result = await runWorker(input, undefined, options, 'auto');
   if (result instanceof Blob)
     throw new Error(t('core.worker.invalidReadResponse', {}, options.locale));
   return result;

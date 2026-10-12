@@ -10,7 +10,7 @@ import {
 import { renderPhotoFrame, type FrameOrientation } from './frame.js';
 import { ImageResources } from './image-resources.js';
 import { getMediaDownloadTarget } from './media.js';
-import { embedMp4SourceInWorker } from './media-source-client.js';
+import { embedGifSourceInWorker, embedMp4SourceInWorker } from './media-source-client.js';
 import { renderStitchedMedia } from './stitch.js';
 import type { VideoRenderRequest } from './video-client.js';
 import {
@@ -132,6 +132,7 @@ async function renderDynamic(
   media: MediaRecord[],
   frame: 'original' | FrameOrientation,
   callbacks: ExportJobRendererCallbacks,
+  outputFormat: 'mp4' | 'gif' = 'mp4',
 ): Promise<{ blob?: Blob; fallback?: { reason: string; blob?: Blob } }> {
   const report = createVideoReport(
     request,
@@ -158,11 +159,13 @@ async function renderDynamic(
     frameTemplate: request.settings.frameTemplate,
     theme: request.theme,
     locale: request.locale,
+    outputFormat,
   };
   try {
     const result = await renderVideoInBackground(workerRequest, {
       signal: callbacks.signal,
       limits: request.settings.videoLimits,
+      gifLimits: request.settings.gifLimits,
       onProgress: ({ phase, progress }) => {
         callbacks.onProgress(
           phase === 'encoding' && progress !== undefined
@@ -292,12 +295,36 @@ export async function renderExportJob(
         callbacks.signal.throwIfAborted();
         const media = record.media.find((item) => item.index === selection.index);
         if (!media) throw new Error(t('dynamic.invalidRequest', {}, locale));
+        if (media.type === 'animated_gif' && selection.mode === 'framed')
+          throw new Error(t('gif.invalidFrame', {}, locale));
         callbacks.onProgress(t('content.mediaSaving', {}, locale));
         let mode = selection.mode;
         let blob: Blob;
         let filename: string;
         let fallbackWarning: string | undefined;
-        if (mode === 'framed' && media.type !== 'photo') {
+        if (media.type === 'animated_gif' && settings.experimentalGif !== false) {
+          const dynamic = await renderDynamic(request, [media], 'original', callbacks, 'gif');
+          if (dynamic.blob) {
+            blob = dynamic.blob;
+            if (blob.type !== 'image/gif')
+              throw new Error(t('dynamic.invalidResponse', {}, locale));
+            if (mode === 'sourced') {
+              blob = await embedGifSourceInWorker(
+                blob,
+                createMediaSourceMetadata(record, media, browser.runtime.getManifest().version),
+                { signal: callbacks.signal, locale },
+              );
+              filename = buildSourcedMediaFilename(record, media, settings.filenameTemplate, 'gif');
+            } else filename = buildMediaFilename(record, media, settings.filenameTemplate, 'gif');
+          } else {
+            if (!dynamic.fallback?.blob)
+              throw new Error(dynamic.fallback?.reason ?? t('dynamic.invalidResponse', {}, locale));
+            blob = dynamic.fallback.blob;
+            mode = 'original';
+            filename = buildMediaFilename(record, media, settings.filenameTemplate);
+            fallbackWarning = t('gif.fallback', { reason: dynamic.fallback.reason }, locale);
+          }
+        } else if (mode === 'framed' && media.type !== 'photo') {
           const dynamic = await renderDynamic(request, [media], selection.orientation, callbacks);
           if (dynamic.blob) {
             blob = dynamic.blob;

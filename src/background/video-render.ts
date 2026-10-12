@@ -6,6 +6,7 @@ import { renderFrameStrip } from '../core/frame.js';
 import { isLocale, t, type Locale } from '../shared/i18n.js';
 import type { MediaRecord } from '../shared/model.js';
 import { loadSettings } from '../shared/settings.js';
+import { normalizeGifLimits, type GifLimits } from '../shared/gif-experiment.js';
 import {
   assertVideoLimits,
   VideoLimitError,
@@ -23,6 +24,7 @@ function validateRequest(value: unknown): value is VideoRenderRequest {
     typeof r.id === 'string' &&
     r.id.length <= 80 &&
     isLocale(r.locale) &&
+    (r.outputFormat === undefined || r.outputFormat === 'mp4' || r.outputFormat === 'gif') &&
     (r.theme === 'dark' || r.theme === 'light') &&
     (r.style === 'seamless' || r.style === 'gallery') &&
     ['original', 'top', 'bottom'].includes(r.frame ?? '') &&
@@ -65,6 +67,7 @@ export interface BackgroundVideoRenderOptions {
   /** A queued job captures its guard values at submission time. The current
    * experimental switch is still checked before this value is accepted. */
   limits?: VideoLimits;
+  gifLimits?: GifLimits;
   onProgress?: (progress: {
     phase: 'downloading' | 'loading' | 'probing' | 'encoding';
     progress?: number;
@@ -156,7 +159,19 @@ export async function renderVideoInBackground(
   const locale = request.locale;
   const settings = await loadSettings();
   signal.throwIfAborted();
-  if (!settings.experimentalVideo) throw new Error(t('experiment.disabled', {}, locale));
+  if (!validateRequest(request)) throw new Error(t('dynamic.invalidRequest', {}, locale));
+  const gif = request.outputFormat === 'gif';
+  if (gif ? settings.experimentalGif === false : !settings.experimentalVideo)
+    throw new Error(t(gif ? 'gif.disabled' : 'experiment.disabled', {}, locale));
+  const gifLimits = gif ? normalizeGifLimits(options.gifLimits ?? settings.gifLimits) : undefined;
+  const limits: VideoLimits = gifLimits
+    ? {
+        maxInputMiB: gifLimits.maxInputMiB,
+        maxDurationSeconds: gifLimits.maxDurationSeconds,
+        maxOutputPixels: gifLimits.maxSourcePixels,
+        maxFrameRate: 0,
+      }
+    : (options.limits ?? settings.videoLimits);
   if (activeRender) throw new Error(t('dynamic.busy', {}, locale));
   activeRender = true;
   const resources = new ImageResources();
@@ -170,6 +185,13 @@ export async function renderVideoInBackground(
       !media.some((item) => item?.type !== 'photo')
     )
       throw new Error(t('dynamic.invalidRequest', {}, locale));
+    if (
+      gif &&
+      (media.length !== 1 || media[0]?.type !== 'animated_gif' || request.frame !== 'original')
+    )
+      throw new Error(t('dynamic.invalidRequest', {}, locale));
+    if (media.length === 1 && media[0]?.type === 'animated_gif' && request.frame !== 'original')
+      throw new Error(t('gif.invalidFrame', {}, locale));
 
     const downloadStarted = performance.now();
     options.onProgress?.({ phase: 'downloading' });
@@ -177,14 +199,7 @@ export async function renderVideoInBackground(
     let inputBytes = 0;
     let inputLimitError: VideoLimitError | undefined;
     for (const item of media as MediaRecord[]) {
-      const result = await fetchInput(
-        item,
-        inputBytes,
-        options.limits ?? settings.videoLimits,
-        media.length === 1,
-        signal,
-        locale,
-      );
+      const result = await fetchInput(item, inputBytes, limits, media.length === 1, signal, locale);
       inputs.push({ blob: result.blob, type: item.type });
       inputBytes += result.blob.size;
       inputLimitError ??= result.limitError;
@@ -250,7 +265,7 @@ export async function renderVideoInBackground(
           if (
             layoutReceived ||
             !Number.isInteger(message.width) ||
-            message.width < 2 ||
+            message.width < (gif ? 1 : 2) ||
             !Number.isFinite(message.duration) ||
             message.duration <= 0
           )
@@ -283,7 +298,7 @@ export async function renderVideoInBackground(
         } else if (
           message.type === 'done' &&
           message.blob instanceof Blob &&
-          message.blob.type === 'video/mp4' &&
+          message.blob.type === (gif ? 'image/gif' : 'video/mp4') &&
           message.blob.size > 0
         )
           finish(undefined, { type: 'done', blob: message.blob });
@@ -306,7 +321,8 @@ export async function renderVideoInBackground(
           background: IMAGE_PALETTES[request.theme].background,
           frame: request.frame,
           locale,
-          limits: options.limits ?? settings.videoLimits,
+          limits,
+          ...(gif ? { outputFormat: 'gif' } : {}),
         });
       } catch (error) {
         finish(error);

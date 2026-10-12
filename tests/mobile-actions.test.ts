@@ -223,3 +223,38 @@ it.each([true, false])(
     expect(ui.button('save-media-1').disabled).toBe(true);
   },
 );
+
+it.each([true, false])(
+  'offers separate GIF provenance choices without GIF frames, mobile=%s',
+  (mobile) => {
+    const ui = setup();
+    const record: TweetRecord = {
+      ...tweet('1'),
+      media: [
+        {
+          index: 1,
+          type: 'video',
+          variants: [{ url: 'https://video.twimg.com/1.mp4', mime: 'video/mp4' }],
+        },
+        {
+          index: 2,
+          type: 'animated_gif',
+          variants: [{ url: 'https://video.twimg.com/2.mp4', mime: 'video/mp4' }],
+        },
+      ],
+    };
+    const session = new ExportSession(record, { ...DEFAULT_SETTINGS, experimentalVideo: true });
+    session.toggleMedia(2);
+    ui.render(session, mobile);
+    const keys = ui.sheet
+      .querySelectorAll('[data-stt-focus-key]')
+      .map((item) => item.dataset.sttFocusKey);
+    expect(keys).toContain('save-choice-1-gif-original');
+    expect(keys).toContain('save-choice-1-gif-sourced');
+    expect(keys).not.toContain('save-choice-1-gif-top');
+    expect(keys).not.toContain('save-choice-1-gif-bottom');
+    ui.button('save-choice-1-video-top').click();
+    ui.button('save-choice-1-gif-sourced').click();
+    expect(session.mediaOptions).toMatchObject({ video: 'top', gif: 'sourced' });
+  },
+);

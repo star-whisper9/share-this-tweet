@@ -38,6 +38,7 @@ export function isVideoDiagnosticSample(value: unknown): value is VideoDiagnosti
       'probing',
       'frame',
       'encoding',
+      'palette',
       'finalizing',
       'reading-output',
       'copying-output',

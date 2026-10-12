@@ -140,8 +140,9 @@ function readMemorySample(core: RawFfprobeCore, inputCount: number): VideoDiagno
     if (bytes !== undefined) foundInput = true;
     return total + (bytes ?? 0);
   }, 0);
-  const outputFileBytes = fileSize(core, 'output.mp4');
-  const outputCapacity = outputBufferCapacity(core, 'output.mp4');
+  const outputPath = fsExists(core, 'output.gif') ? 'output.gif' : 'output.mp4';
+  const outputFileBytes = fileSize(core, outputPath);
+  const outputCapacity = outputBufferCapacity(core, outputPath);
   const result: VideoDiagnosticMemorySample = {
     ...(core.HEAPU8?.buffer.byteLength !== undefined
       ? { wasmCapacityBytes: core.HEAPU8.buffer.byteLength }
@@ -204,6 +205,9 @@ function isRequest(value: unknown): value is VideoRenderRequest {
   const request = value as Partial<VideoRenderRequest>;
   return (
     request.type === 'start' &&
+    (request.outputFormat === undefined ||
+      request.outputFormat === 'mp4' ||
+      request.outputFormat === 'gif') &&
     typeof request.id === 'string' &&
     Array.isArray(request.inputs) &&
     (request.style === 'seamless' || request.style === 'gallery') &&
@@ -247,6 +251,7 @@ async function start(request: VideoRenderRequest): Promise<void> {
   active = { id: request.id, resolveFrame: resolveFrame! };
   let coreLoaded = false;
   let diagnosticCore: RawFfprobeCore | undefined;
+  let palettePass = false;
   const reporter = new VideoDiagnosticReporter({
     emit: (sample) => post({ type: 'diagnostics', id: request.id, sample }),
     readMemory: () =>
@@ -267,7 +272,17 @@ async function start(request: VideoRenderRequest): Promise<void> {
         // blocks below provide the time paired with frame and speed metrics.
         void time;
         reporter.update({ rawProgress: progress });
-        post({ type: 'progress', id: request.id, phase: 'encoding', progress });
+        post({
+          type: 'progress',
+          id: request.id,
+          phase: 'encoding',
+          progress:
+            request.outputFormat === 'gif'
+              ? palettePass
+                ? progress * 0.3
+                : 0.3 + progress * 0.7
+              : progress,
+        });
       }),
       request,
       {
@@ -275,7 +290,10 @@ async function start(request: VideoRenderRequest): Promise<void> {
           reporter.setPhase(phase);
           post({ type: 'progress', id: request.id, phase });
         },
-        onDiagnosticStage: (phase) => reporter.setPhase(phase),
+        onDiagnosticStage: (phase) => {
+          palettePass = phase === 'palette';
+          reporter.setPhase(phase);
+        },
         onDiagnosticMetadata: (metadata) =>
           post({ type: 'diagnostics', id: request.id, sample: reporter.snapshot(), metadata }),
         onDiagnosticOutputCopyBytes: (bytes) => reporter.update({ outputCopyBytes: bytes }),

@@ -21,6 +21,7 @@ export interface VideoRenderRequest {
   frameTemplate: string;
   theme: ImageTheme;
   locale: Locale;
+  outputFormat?: 'mp4' | 'gif';
 }
 /** A declared processing limit was exceeded; unrelated failures never use this path. */
 export class VideoLimitFallback extends Error {

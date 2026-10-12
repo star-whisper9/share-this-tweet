@@ -24,6 +24,7 @@ export type MediaMode = 'original' | 'framed' | 'sourced' | 'configured';
 export interface MediaSaveOptions {
   photo: 'original' | FrameOrientation;
   video: 'original' | 'sourced' | FrameOrientation;
+  gif: 'original' | 'sourced';
 }
 const IDLE: Readonly<ActionState> = Object.freeze({ status: 'idle' });
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -47,7 +48,7 @@ export class ExportSession {
   ) {
     this.tweet = record;
     this.preferences = settings;
-    this.mediaPreferences = { photo: settings.frameOrientation, video: 'sourced' };
+    this.mediaPreferences = { photo: settings.frameOrientation, video: 'sourced', gif: 'original' };
     this.selection.reconcile(record.media);
     this.syncQuote();
   }
@@ -92,10 +93,12 @@ export class ExportSession {
     return this.actions.get(key) ?? IDLE;
   }
   private mediaKey(mode: MediaMode, orientation: FrameOrientation): string {
-    return `${mode}:${this.selection
+    const indexes = this.selection
       .selected(this.record.media)
-      .map((m) => m.index)
-      .join(',')}:${orientation}:${this.mediaPreferences.photo}:${this.mediaPreferences.video}`;
+      .map((media) => media.index)
+      .join(',');
+    const { photo, video, gif } = this.mediaPreferences;
+    return `${mode}:${indexes}:${orientation}:${photo}:${video}:${gif}`;
   }
   mediaAction(
     mode: MediaMode,
@@ -198,7 +201,12 @@ export class ExportSession {
     if (!media.length) return Promise.resolve();
     const options = { ...this.mediaOptions };
     const items = media.map((item) => {
-      const choice = item.type === 'photo' ? options.photo : options.video;
+      const choice =
+        item.type === 'photo'
+          ? options.photo
+          : item.type === 'animated_gif'
+            ? options.gif
+            : options.video;
       const configured = choice === 'top' || choice === 'bottom';
       return {
         index: item.index,

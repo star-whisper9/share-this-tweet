@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { renderExportJob } from '../src/core/job-renderer.js';
 import { renderVideoInBackground } from '../src/background/video-render.js';
 import { renderPhotoFrame } from '../src/core/frame.js';
-import { embedMp4SourceInWorker } from '../src/core/media-source-client.js';
+import { embedGifSourceInWorker, embedMp4SourceInWorker } from '../src/core/media-source-client.js';
 import { renderStitchedMedia } from '../src/core/stitch.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 import type { ExportJobRequest } from '../src/shared/export-jobs.js';
@@ -16,7 +16,10 @@ vi.mock('../src/core/frame.js', async (original) => ({
   ...(await original<typeof import('../src/core/frame.js')>()),
   renderPhotoFrame: vi.fn(),
 }));
-vi.mock('../src/core/media-source-client.js', () => ({ embedMp4SourceInWorker: vi.fn() }));
+vi.mock('../src/core/media-source-client.js', () => ({
+  embedMp4SourceInWorker: vi.fn(),
+  embedGifSourceInWorker: vi.fn(),
+}));
 
 const request: ExportJobRequest = {
   id: 'job-one',
@@ -39,6 +42,108 @@ const request: ExportJobRequest = {
     { index: 2, mode: 'original', orientation: 'bottom' },
   ],
 };
+
+function gifRequest(mode: 'original' | 'sourced' | 'framed' = 'original'): ExportJobRequest {
+  return {
+    ...request,
+    media: [{ index: 1, mode, orientation: 'bottom' }],
+    record: {
+      ...request.record,
+      media: [
+        {
+          index: 1,
+          type: 'animated_gif',
+          variants: [{ mime: 'video/mp4', url: 'https://video.twimg.com/gif.mp4' }],
+        },
+      ],
+    },
+  };
+}
+
+it.each(['original', 'sourced'] as const)('saves a converted GIF in %s mode', async (mode) => {
+  vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.5.3' }) } });
+  const gif = new Blob(['gif'], { type: 'image/gif' });
+  vi.mocked(renderVideoInBackground).mockResolvedValueOnce({ type: 'done', blob: gif });
+  vi.mocked(embedGifSourceInWorker).mockResolvedValueOnce(gif);
+  const files: Array<{ filename: string; blob: Blob }> = [];
+  await renderExportJob(gifRequest(mode), {
+    signal: new AbortController().signal,
+    onProgress: vi.fn(),
+    onDiagnostics: vi.fn(),
+    onWarning: vi.fn(),
+    onFile: async (file) => {
+      files.push(file);
+    },
+  });
+  expect(files).toHaveLength(1);
+  expect(files[0].filename.endsWith(mode === 'sourced' ? '_source.gif' : '.gif')).toBe(true);
+  expect(files[0].blob).toBe(gif);
+  expect(vi.mocked(renderVideoInBackground).mock.calls.at(-1)?.[0]).toMatchObject({
+    outputFormat: 'gif',
+    frame: 'original',
+  });
+});
+
+it('saves the original MP4 with a warning only for a declared GIF limit', async () => {
+  vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.5.3' }) } });
+  const source = new Blob(['mp4'], { type: 'video/mp4' });
+  vi.mocked(renderVideoInBackground).mockResolvedValueOnce({
+    type: 'fallback',
+    reason: 'limit',
+    blob: source,
+  });
+  const onFile = vi.fn();
+  const onWarning = vi.fn();
+  const callbacks = {
+    signal: new AbortController().signal,
+    onProgress: vi.fn(),
+    onDiagnostics: vi.fn(),
+    onFile,
+    onWarning,
+  };
+  await renderExportJob(gifRequest('sourced'), callbacks);
+  expect(onFile).toHaveBeenCalledWith(
+    expect.objectContaining({
+      blob: source,
+      filename: expect.stringMatching(/\.mp4$/),
+      output: expect.objectContaining({ outputType: 'original-media' }),
+    }),
+  );
+  expect(onWarning).toHaveBeenCalledOnce();
+  onFile.mockClear();
+  onWarning.mockClear();
+  vi.mocked(renderVideoInBackground).mockRejectedValueOnce(new Error('encode failed'));
+  await expect(renderExportJob(gifRequest(), callbacks)).rejects.toThrow();
+  expect(onFile).not.toHaveBeenCalled();
+  expect(onWarning).not.toHaveBeenCalled();
+});
+
+it('keeps MP4 when GIF conversion is disabled and rejects old GIF frame jobs', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))),
+  );
+  const onFile = vi.fn();
+  const callbacks = {
+    signal: new AbortController().signal,
+    onProgress: vi.fn(),
+    onDiagnostics: vi.fn(),
+    onWarning: vi.fn(),
+    onFile,
+  };
+  const job = gifRequest();
+  await renderExportJob(
+    { ...job, settings: { ...job.settings, experimentalGif: false } },
+    callbacks,
+  );
+  expect(renderVideoInBackground).not.toHaveBeenCalled();
+  expect(onFile).toHaveBeenCalledWith(
+    expect.objectContaining({ filename: expect.stringMatching(/\.mp4$/), blob: expect.any(Blob) }),
+  );
+  onFile.mockClear();
+  await expect(renderExportJob(gifRequest('framed'), callbacks)).rejects.toThrow();
+  expect(onFile).not.toHaveBeenCalled();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

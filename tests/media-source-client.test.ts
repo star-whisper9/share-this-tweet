@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { embedMp4SourceInWorker, readMp4SourceInWorker } from '../src/core/media-source-client.js';
+import {
+  embedGifSourceInWorker,
+  embedMp4SourceInWorker,
+  readMediaSourceInWorker,
+  readMp4SourceInWorker,
+} from '../src/core/media-source-client.js';
 import type { MediaSourceMetadata } from '../src/shared/media-source.js';
 
 const source: MediaSourceMetadata = {
@@ -45,6 +50,21 @@ afterEach(() => {
 });
 
 describe('source Worker lifetime', () => {
+  it('uses explicit GIF embedding and signature-based generic reading', async () => {
+    const input = new Blob(['original']);
+    const output = new Blob(['GIF89a'], { type: 'image/gif' });
+    const pending = embedGifSourceInWorker(input, source);
+    expect(workers[0].postMessage.mock.calls[0][0]).toMatchObject({ type: 'embed', format: 'gif' });
+    workers[0].reply(output);
+    await expect(pending).resolves.toBe(output);
+    const reading = readMediaSourceInWorker(input);
+    expect(workers[1].postMessage.mock.calls[0][0]).toMatchObject({ type: 'read', format: 'auto' });
+    workers[1].reply(source);
+    await expect(reading).resolves.toEqual(source);
+    const invalid = embedGifSourceInWorker(input, source);
+    workers[2].reply(new Blob(['mp4'], { type: 'video/mp4' }));
+    await expect(invalid).rejects.toThrow();
+  });
   it('passes Blobs to an extension Worker and terminates after a validated result', async () => {
     const input = new Blob(['original']);
     const output = new Blob(['output'], { type: 'video/mp4' });

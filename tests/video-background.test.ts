@@ -191,6 +191,46 @@ it('rejects dynamic jobs while the experimental switch is off', async () => {
   expect(fetch).not.toHaveBeenCalled();
   expect(FakeWorker.instances).toHaveLength(0);
 });
+
+it('runs GIF conversion independently of video framing and enforces the GIF switch', async () => {
+  const gifRequest: VideoRenderRequest = {
+    ...request,
+    frame: 'original',
+    outputFormat: 'gif',
+    record: { ...request.record, media: [{ ...request.record.media[0], type: 'animated_gif' }] },
+  };
+  vi.mocked(loadSettings).mockResolvedValueOnce({
+    experimentalVideo: false,
+    experimentalGif: true,
+    gifLimits: { maxInputMiB: 64, maxDurationSeconds: 60, maxSourcePixels: 8294400 },
+  } as Awaited<ReturnType<typeof loadSettings>>);
+  const promise = renderVideoInBackground(gifRequest, { signal: new AbortController().signal });
+  await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+  const worker = FakeWorker.instances[0];
+  expect(worker.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outputFormat: 'gif',
+      limits: {
+        maxInputMiB: 64,
+        maxDurationSeconds: 60,
+        maxOutputPixels: 8294400,
+        maxFrameRate: 0,
+      },
+    }),
+  );
+  const gif = new Blob(['gif'], { type: 'image/gif' });
+  worker.emit({ type: 'done', id: request.id, blob: gif });
+  expect(await promise).toEqual({ type: 'done', blob: gif });
+  expect(worker.terminate).toHaveBeenCalledOnce();
+  vi.mocked(loadSettings).mockResolvedValueOnce({
+    experimentalVideo: true,
+    experimentalGif: false,
+  } as Awaited<ReturnType<typeof loadSettings>>);
+  await expect(
+    renderVideoInBackground(gifRequest, { signal: new AbortController().signal }),
+  ).rejects.toThrow();
+  expect(FakeWorker.instances).toHaveLength(1);
+});
 it('rejects unapproved hosts and incomplete downloads before starting FFmpeg', async () => {
   const bad = start({
     ...request,

@@ -1,3 +1,4 @@
+import { isGifLimits } from './gif-experiment.js';
 import type { TweetRecord } from './model.js';
 import type { ExtensionSettings } from './settings.js';
 import { isLanguagePreference, isLocale, type Locale } from './i18n.js';
@@ -135,6 +136,8 @@ export function isExportJobRequest(value: unknown): value is ExportJobRequest {
   if (
     !isLanguagePreference(s.language) ||
     typeof s.experimentalVideo !== 'boolean' ||
+    (s.experimentalGif !== undefined && typeof s.experimentalGif !== 'boolean') ||
+    (s.gifLimits !== undefined && !isGifLimits(s.gifLimits)) ||
     !isVideoLimits(s.videoLimits) ||
     !['top', 'bottom'].includes(String(s.frameOrientation)) ||
     !['seamless', 'gallery'].includes(String(s.stitchStyle)) ||

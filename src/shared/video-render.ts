@@ -18,6 +18,7 @@ export interface VideoRenderRequest {
   background: `#${string}`;
   frame: VideoFrame;
   locale: 'zh-CN' | 'en';
+  outputFormat?: 'mp4' | 'gif';
   /**
    * Set only by the background after loading saved settings. Requests from the
    * content script never get to choose the limits enforced by the Worker.
@@ -56,6 +57,7 @@ export type VideoDiagnosticPhase =
   | 'probing'
   | 'frame'
   | 'encoding'
+  | 'palette'
   | 'finalizing'
   | 'reading-output'
   | 'copying-output'
@@ -108,6 +110,7 @@ export interface VideoDiagnosticMetadata {
     audioInput?: number;
   };
   args?: string[];
+  paletteArgs?: string[];
   /** Measured by the extension background before this Worker starts. */
   downloadMs?: number;
 }

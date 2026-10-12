@@ -57,7 +57,7 @@ export function appendMediaActions(
     );
     choice.addEventListener('click', () => session.toggleMedia(media.index));
     const thumb = node('span', 'stt-media-thumb');
-    thumb.append(icon(media.type === 'photo' ? 'photo' : 'video'));
+    thumb.append(icon(media.type === 'video' ? 'video' : 'photo'));
     const url = thumbnailURL(media);
     if (url) {
       const image = node('img', '');
@@ -93,7 +93,7 @@ interface SaveChoice<T extends string> {
 
 function saveChoices<T extends string>(
   session: ExportSession,
-  kind: 'photo' | 'video',
+  kind: 'photo' | 'video' | 'gif',
   title: string,
   selected: T,
   choices: SaveChoice<T>[],
@@ -115,7 +115,7 @@ function saveChoices<T extends string>(
     symbol.dataset.format = choice.symbol;
     symbol.setAttribute('aria-hidden', 'true');
     symbol.append(
-      icon(kind === 'photo' ? 'photo' : choice.symbol === 'source' ? 'share' : 'video'),
+      icon(choice.symbol === 'source' ? 'share' : kind === 'video' ? 'video' : 'photo'),
     );
     button.append(symbol, node('span', '', choice.label));
     button.addEventListener('click', () => onSelect(choice.value));
@@ -129,18 +129,26 @@ function outputFilename(session: ExportSession, media: MediaRecord): string {
   const { record, settings, mediaOptions } = session;
   if (media.type === 'photo' && mediaOptions.photo !== 'original')
     return buildFrameFilename(record, media, settings.filenameTemplate);
-  if (media.type !== 'photo' && (mediaOptions.video === 'top' || mediaOptions.video === 'bottom'))
+  if (media.type === 'video' && (mediaOptions.video === 'top' || mediaOptions.video === 'bottom'))
     return buildFrameFilename(record, media, settings.filenameTemplate, 'mp4');
-  if (media.type !== 'photo' && mediaOptions.video === 'sourced')
-    return buildSourcedMediaFilename(record, media, settings.filenameTemplate);
-  return buildMediaFilename(record, media, settings.filenameTemplate);
+  const extension =
+    media.type === 'animated_gif'
+      ? (settings.experimentalGif ?? true)
+        ? 'gif'
+        : 'mp4'
+      : undefined;
+  const mode = media.type === 'animated_gif' ? mediaOptions.gif : mediaOptions.video;
+  if (media.type !== 'photo' && mode === 'sourced')
+    return buildSourcedMediaFilename(record, media, settings.filenameTemplate, extension);
+  return buildMediaFilename(record, media, settings.filenameTemplate, extension);
 }
 
 function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
   const { selection, record, mediaOptions } = session;
   const selected = selection.selected(record.media);
   const photos = selected.filter((item) => item.type === 'photo').length;
-  const dynamic = selected.length - photos;
+  const videos = selected.filter((item) => item.type === 'video').length;
+  const gifs = selected.filter((item) => item.type === 'animated_gif').length;
   const canStitch =
     record.media.length > 1 &&
     (session.settings.experimentalVideo || record.media.every((item) => item.type === 'photo'));
@@ -179,7 +187,7 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
           (photo) => session.configureMedia({ photo }),
         ),
       );
-    if (dynamic) {
+    if (videos) {
       const videoChoices: SaveChoice<MediaSaveOptions['video']>[] = [
         { value: 'original', label: t('content.originalFile'), symbol: 'original' },
         { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
@@ -201,13 +209,29 @@ function mediaActions(session: ExportSession, dock?: HTMLElement): HTMLElement {
         saveChoices<MediaSaveOptions['video']>(
           session,
           'video',
-          dock ? t('content.dynamic') : t('content.dynamicCount', { count: dynamic }),
+          dock ? t('content.video') : t('gif.videoCount', { count: videos }),
           mediaOptions.video,
           videoChoices,
           (video) => session.configureMedia({ video }),
         ),
       );
     }
+    if (gifs)
+      settings.append(
+        saveChoices<MediaSaveOptions['gif']>(
+          session,
+          'gif',
+          t((session.settings.experimentalGif ?? true) ? 'gif.saveGif' : 'gif.saveMp4', {
+            count: gifs,
+          }),
+          mediaOptions.gif,
+          [
+            { value: 'original', label: t('gif.original'), symbol: 'original' },
+            { value: 'sourced', label: t('content.writeProvenance'), symbol: 'source' },
+          ],
+          (gif) => session.configureMedia({ gif }),
+        ),
+      );
     wrapper.append(settings);
   } else {
     wrapper.append(node('p', 'stt-save-empty', t('content.selectMediaHint')));
