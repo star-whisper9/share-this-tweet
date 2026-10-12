@@ -12,7 +12,7 @@ import { ImageResources } from './image-resources.js';
 import { getMediaDownloadTarget } from './media.js';
 import { embedGifSourceInWorker, embedMp4SourceInWorker } from './media-source-client.js';
 import { renderStitchedMedia } from './stitch.js';
-import type { VideoRenderRequest } from './video-client.js';
+import type { BackgroundVideoRenderRequest } from '../shared/video-job.js';
 import {
   appendVideoDiagnostic,
   type VideoDiagnosticsReport,
@@ -149,7 +149,7 @@ async function renderDynamic(
     callbacks.onDiagnostics(report);
   };
   callbacks.onDiagnostics(report);
-  const workerRequest: VideoRenderRequest = {
+  const workerRequest: BackgroundVideoRenderRequest = {
     type: 'start',
     id: request.id,
     record: request.record,

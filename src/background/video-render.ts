@@ -1,4 +1,4 @@
-import { VIDEO_PORT_NAME, type VideoRenderRequest } from '../core/video-client.js';
+import type { BackgroundVideoRenderRequest } from '../shared/video-job.js';
 import { getMediaDownloadTarget } from '../core/media.js';
 import { ImageResources } from '../core/image-resources.js';
 import { IMAGE_PALETTES } from '../core/image-theme.js';
@@ -14,11 +14,10 @@ import {
 } from '../shared/video-experiment.js';
 import type { VideoRenderInput, VideoRenderWorkerMessage } from '../shared/video-render.js';
 
-let activePort: BrowserPort | undefined;
 let activeRender = false;
-function validateRequest(value: unknown): value is VideoRenderRequest {
+function validateRequest(value: unknown): value is BackgroundVideoRenderRequest {
   if (!value || typeof value !== 'object') return false;
-  const r = value as Partial<VideoRenderRequest>;
+  const r = value as Partial<BackgroundVideoRenderRequest>;
   return (
     r.type === 'start' &&
     typeof r.id === 'string' &&
@@ -146,12 +145,11 @@ async function fetchInput(
 }
 
 /**
- * Run one dynamic export without a content-script Port. This is the common
- * implementation for live exports and queued background jobs; its lifetime is
- * exclusively controlled by the supplied AbortSignal.
+ * Run one queued dynamic export. Its lifetime is controlled by the supplied
+ * AbortSignal; only one renderer can own the FFmpeg Worker at a time.
  */
 export async function renderVideoInBackground(
-  request: VideoRenderRequest,
+  request: BackgroundVideoRenderRequest,
   options: BackgroundVideoRenderOptions,
 ): Promise<BackgroundVideoRenderResult> {
   const { signal } = options;
@@ -329,9 +327,7 @@ export async function renderVideoInBackground(
       }
     });
   } catch (error) {
-    // A multi-item input guard used to throw through the live Port, whose
-    // caller translated it into a static stitch fallback. Keep that contract
-    // for direct queued rendering as well.
+    // A multi-item processing limit asks the queue to render a static fallback.
     if (error instanceof VideoLimitError) return { type: 'fallback', reason: error.message };
     throw error;
   } finally {
@@ -339,94 +335,4 @@ export async function renderVideoInBackground(
     worker?.terminate();
     activeRender = false;
   }
-}
-
-/** A live port owns each Worker: disconnect, cancel and errors all terminate it. */
-export function handleVideoPort(port: BrowserPort): void {
-  if (port.name !== VIDEO_PORT_NAME) return;
-  const controller = new AbortController();
-  let id: string | undefined;
-  let locale: Locale = 'zh-CN';
-  let finished = false;
-  const finish = (error?: unknown, blob?: Blob): void => {
-    if (finished) return;
-    finished = true;
-    controller.abort();
-    if (activePort === port) activePort = undefined;
-    port.onMessage.removeListener(onMessage);
-    port.onDisconnect.removeListener(onDisconnect);
-    if (id) {
-      try {
-        port.postMessage(
-          error
-            ? { type: 'error', id, error: error instanceof Error ? error.message : String(error) }
-            : { type: 'done', id, blob },
-        );
-      } catch {
-        /* The peer already disconnected; resources above are still released. */
-      }
-    }
-    port.disconnect();
-  };
-  const finishFallback = (error: VideoLimitError, blob?: Blob): void => {
-    if (finished) return;
-    finished = true;
-    controller.abort();
-    if (activePort === port) activePort = undefined;
-    port.onMessage.removeListener(onMessage);
-    port.onDisconnect.removeListener(onDisconnect);
-    if (id) {
-      try {
-        port.postMessage({
-          type: 'fallback',
-          id,
-          reason: error.message,
-          ...(blob ? { blob } : {}),
-        });
-      } catch {
-        /* The peer already disconnected; resources above are still released. */
-      }
-    }
-    port.disconnect();
-  };
-  const onDisconnect = () => finish(new Error(t('dynamic.cancelled', {}, locale)));
-  const post = (message: object) => {
-    if (!finished) port.postMessage({ ...message, id });
-  };
-  const run = async (request: VideoRenderRequest): Promise<void> => {
-    activePort = port;
-    const result = await renderVideoInBackground(request, {
-      signal: controller.signal,
-      onProgress: (progress) => post({ type: 'progress', ...progress }),
-      onDiagnostics: (diagnostics) => post(diagnostics),
-    });
-    if (result.type === 'fallback') finishFallback(new VideoLimitError(result.reason), result.blob);
-    else finish(undefined, result.blob);
-  };
-  const onMessage = (message: unknown): void => {
-    if (message && typeof message === 'object' && 'type' in message && message.type === 'ping') {
-      if (id) post({ type: 'pong' });
-      return;
-    }
-    if (id || !validateRequest(message)) {
-      if (
-        !id &&
-        message &&
-        typeof message === 'object' &&
-        'id' in message &&
-        typeof message.id === 'string'
-      )
-        id = message.id;
-      finish(new Error(t('dynamic.invalidRequest', {}, locale)));
-      return;
-    }
-    id = message.id;
-    locale = message.locale;
-    void run(message).catch((error) => {
-      if (error instanceof VideoLimitError) finishFallback(error);
-      else finish(error);
-    });
-  };
-  port.onMessage.addListener(onMessage);
-  port.onDisconnect.addListener(onDisconnect);
 }
