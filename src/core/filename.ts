@@ -18,8 +18,8 @@ export function sanitizeFilename(value: string): string {
   return [...sanitized].slice(0, MAX_FILENAME_LENGTH).join('');
 }
 
-function forceExtension(filename: string, extension: string): string {
-  const suffix = `.${extension}`;
+function finishFilename(filename: string, extension: string, modifier = ''): string {
+  const suffix = `${modifier}.${extension}`;
   const withoutExtension = filename.replace(/\.[^.]+$/, '');
   const maxBaseLength = Math.max(1, MAX_FILENAME_LENGTH - suffix.length);
   const base = [...(withoutExtension || 'download')].slice(0, maxBaseLength).join('');
@@ -39,7 +39,7 @@ export function buildMediaFilename(
     media,
     extension: outputExtension,
   });
-  return forceExtension(sanitizeFilename(rendered), outputExtension);
+  return finishFilename(sanitizeFilename(rendered), outputExtension);
 }
 
 export function buildSourcedMediaFilename(
@@ -50,10 +50,7 @@ export function buildSourcedMediaFilename(
 ): string {
   const filename = buildMediaFilename(record, media, template, outputExtension);
   const extension = outputExtension ?? getMediaDownloadTarget(media).extension;
-  const base = filename.slice(0, -(extension.length + 1));
-  const suffix = `_source.${extension}`;
-  const trimmedBase = [...base].slice(0, Math.max(1, MAX_FILENAME_LENGTH - suffix.length)).join('');
-  return `${trimmedBase}${suffix}`;
+  return finishFilename(filename, extension, '_source');
 }
 
 export function buildFrameFilename(
@@ -63,11 +60,7 @@ export function buildFrameFilename(
   extension: 'jpg' | 'webp' | 'mp4' = 'jpg',
 ): string {
   const rendered = renderTemplate(template, { tweet: record, media, extension });
-  const base = forceExtension(sanitizeFilename(rendered), extension).slice(
-    0,
-    -(extension.length + 1),
-  );
-  return forceExtension(`${base}_framed.${extension}`, extension);
+  return finishFilename(sanitizeFilename(rendered), extension, '_framed');
 }
 
 export function buildCardFilename(
@@ -82,9 +75,7 @@ export function buildCardFilename(
     extension: 'png',
     card: true,
   });
-  const base = forceExtension(sanitizeFilename(rendered), 'png').slice(0, -4);
-  const suffix = row ? '_row_card.png' : '_card.png';
-  return `${[...base].slice(0, MAX_FILENAME_LENGTH - suffix.length).join('')}${suffix}`;
+  return finishFilename(sanitizeFilename(rendered), 'png', row ? '_row_card' : '_card');
 }
 
 export function buildStitchFilename(
@@ -94,10 +85,9 @@ export function buildStitchFilename(
   framed = false,
 ): string {
   const rendered = renderTemplate(template, { tweet: record, media: record.media[0], extension });
-  const base = forceExtension(sanitizeFilename(rendered), extension).slice(
-    0,
-    -(extension.length + 1),
+  return finishFilename(
+    sanitizeFilename(rendered),
+    extension,
+    framed ? '_stitched_framed' : '_stitched',
   );
-  const suffix = `_stitched${framed ? '_framed' : ''}.${extension}`;
-  return `${[...base].slice(0, MAX_FILENAME_LENGTH - suffix.length).join('')}${suffix}`;
 }

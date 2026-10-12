@@ -3,6 +3,7 @@ import {
   buildMediaFilename,
   buildCardFilename,
   buildSourcedMediaFilename,
+  buildFrameFilename,
   sanitizeFilename,
 } from '../src/core/filename.js';
 import { getMediaDownloadTarget } from '../src/core/media.js';
@@ -71,6 +72,12 @@ describe('buildMediaFilename', () => {
     const filename = buildSourcedMediaFilename(record, video, `${'长'.repeat(180)}.mp4`);
     expect([...filename]).toHaveLength(180);
     expect(filename.endsWith('_source.mp4')).toBe(true);
+  });
+
+  it('reserves the frame suffix without splitting Unicode characters in long filenames', () => {
+    const filename = buildFrameFilename(record, photo, `${'🌟'.repeat(180)}.jpg`);
+    expect([...filename]).toHaveLength(180);
+    expect(filename).toBe(`${'🌟'.repeat(169)}_framed.jpg`);
   });
 });
 

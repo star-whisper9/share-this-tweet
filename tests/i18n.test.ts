@@ -33,11 +33,9 @@ afterEach(() => {
 describe('language resources', () => {
   it('ships matching keys and interpolation parameters for every language', () => {
     const keys = Object.keys(catalogs['zh-CN']) as MessageKey[];
-    for (const catalog of Object.values(catalogs)) {
-      expect(Object.keys(catalog).sort()).toEqual([...keys].sort());
-      for (const key of keys)
-        expect(placeholders(catalog[key]), key).toEqual(placeholders(catalogs['zh-CN'][key]));
-    }
+    expect(Object.keys(catalogs.en).sort()).toEqual([...keys].sort());
+    for (const key of keys)
+      expect(placeholders(catalogs.en[key]), key).toEqual(placeholders(catalogs['zh-CN'][key]));
   });
   it('only accepts known language preferences and resolves browser language', () => {
     expect(isLanguagePreference('en')).toBe(true);
@@ -142,14 +140,20 @@ describe('language preference storage', () => {
   });
 });
 
-it('resolves every public template field description after a language switch', async () => {
+it('resolves public template fields and keeps quote examples current after language switches', async () => {
   const { fieldsForScope } = await import('../src/core/template.js');
-  for (const locale of ['zh-CN', 'en'] as const) {
+  for (const locale of ['zh-CN', 'en', 'zh-CN'] as const) {
     setLocale(locale);
     for (const scope of ['filenameTemplate', 'frameTemplate', 'textTemplate'] as const) {
       for (const field of fieldsForScope(scope)) {
         expect(field.label.length, field.name).toBeGreaterThan(0);
         expect(field.description.length, field.name).toBeGreaterThan(0);
+        if (field.name.startsWith('quote.') && field.name !== 'quote.status') {
+          const original = fieldsForScope(scope).find(
+            (candidate) => candidate.name === field.name.slice('quote.'.length),
+          );
+          expect(field.example, field.name).toBe(original!.example);
+        }
       }
     }
   }

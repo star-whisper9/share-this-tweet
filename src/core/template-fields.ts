@@ -58,10 +58,10 @@ const base: TemplateField[] = [
     '推文',
     { key: 'core.field.example.translation.sourceLanguage' },
     ({ tweet, locale }) => {
-      const t = tweet.translation;
+      const translation = tweet.translation;
       return languageName(
-        t?.status === 'available' ? t.sourceLanguage : tweet.language,
-        t?.status === 'available' ? t.sourceLanguageName : undefined,
+        translation?.status === 'available' ? translation.sourceLanguage : tweet.language,
+        translation?.status === 'available' ? translation.sourceLanguageName : undefined,
         locale,
       );
     },
@@ -71,9 +71,9 @@ const base: TemplateField[] = [
     '推文',
     { key: 'core.field.example.translation.targetLanguage' },
     ({ tweet, locale }) => {
-      const t = tweet.translation;
-      return t?.status === 'available'
-        ? languageName(t.targetLanguage, t.targetLanguageName, locale)
+      const translation = tweet.translation;
+      return translation?.status === 'available'
+        ? languageName(translation.targetLanguage, translation.targetLanguageName, locale)
         : undefined;
     },
   ),
@@ -170,6 +170,9 @@ export const TEMPLATE_FIELDS: readonly TemplateField[] = [
     .map((item): TemplateField => ({
       ...item,
       name: `quote.${item.name}`,
+      get example() {
+        return item.example;
+      },
       get label() {
         return t('core.field.quotePrefix', { label: item.label });
       },
