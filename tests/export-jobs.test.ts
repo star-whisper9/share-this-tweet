@@ -87,6 +87,40 @@ function file(id: string) {
   };
 }
 
+function seedFinishedJob(id: string, saved = false): StoredExportJob {
+  const { blob, ...output } = file(id);
+  const now = Date.now();
+  const files = [
+    {
+      ...output,
+      size: blob.size,
+      saved,
+      cached: true,
+      cacheExpiresAt: now + JOB_RETENTION.androidUnsaved,
+    },
+  ];
+  const job: StoredExportJob = {
+    id,
+    request: request(id),
+    settledAt: now,
+    files,
+    summary: {
+      id,
+      kind: 'media',
+      tweetId: '42',
+      author: 'Alice',
+      createdAt: new Date(now).toISOString(),
+      status: saved ? 'completed' : 'ready',
+      warnings: [],
+      files,
+      hasDiagnostics: false,
+    },
+  };
+  mocks.jobs.set(id, job);
+  mocks.blobs.set(output.id, blob);
+  return job;
+}
+
 async function summaries() {
   const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
   return handleExportJobMessage({ type: 'export-job-list' }) as Promise<{
@@ -153,6 +187,152 @@ afterEach(() => {
 });
 
 describe('durable export queue', () => {
+  it('explicitly clears settled caches or history while preserving queued and active outputs', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Firefox Android' });
+    const unsaved = seedFinishedJob('unsaved');
+    seedFinishedJob('saved', true);
+    const report: VideoDiagnosticsReport = {
+      schemaVersion: 1,
+      jobId: unsaved.id,
+      tweetId: '42',
+      engine: { name: 'ffmpeg.wasm', coreVersion: '0.12.10', threading: 'single', gpu: false },
+      startedAt: new Date().toISOString(),
+      status: 'completed',
+      elapsedMs: 500,
+      mediaIndexes: [1],
+      frame: 'original',
+      style: 'seamless',
+      samples: [],
+      phaseDurationsMs: {},
+      droppedSamples: 0,
+      memoryMeasurement: 'wasm-linear-memory-capacity-and-memfs-files-not-process-rss',
+    };
+    unsaved.summary.hasDiagnostics = true;
+    unsaved.diagnosticsExpiresAt = Date.now() + JOB_RETENTION.diagnostics;
+    mocks.diagnostics.set(unsaved.id, report);
+    let release!: () => void;
+    mocks.render.mockImplementationOnce(async (job, callbacks) => {
+      await callbacks.onFile(file(job.id));
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    });
+    const { handleExportJobMessage: send } = await import('../src/background/export-jobs.js');
+    await send({ type: 'export-job-enqueue', request: request('active') });
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await send({ type: 'export-job-enqueue', request: request('queued') });
+    try {
+      await expect(send({ type: 'export-job-clear-cache' })).resolves.toEqual({
+        ok: true,
+        cleared: 2,
+        skipped: 2,
+      });
+      expect(mocks.jobs.get('unsaved')).toMatchObject({
+        settledAt: unsaved.settledAt,
+        summary: { status: 'expired', hasDiagnostics: false },
+        files: [{ saved: false, cached: false, cacheExpiresAt: 0, size: 5 }],
+      });
+      expect(mocks.jobs.get('saved')).toMatchObject({
+        summary: { status: 'completed' },
+        files: [{ saved: true, cached: false }],
+      });
+      expect(mocks.blobs.has('unsaved:media:1')).toBe(false);
+      expect(mocks.blobs.has('saved:media:1')).toBe(false);
+      expect(mocks.diagnostics.size).toBe(0);
+      expect(mocks.blobs.has('active:media:1')).toBe(true);
+      await expect(send({ type: 'export-job-clear-cache' })).resolves.toEqual({
+        ok: true,
+        cleared: 0,
+        skipped: 2,
+      });
+      await expect(
+        send({ type: 'export-job-file', id: 'unsaved', fileId: 'unsaved:media:1' }),
+      ).resolves.toMatchObject({ ok: false });
+      await expect(send({ type: 'export-job-clear-history' })).resolves.toEqual({
+        ok: true,
+        cleared: 2,
+        skipped: 2,
+      });
+      expect([...mocks.jobs.keys()]).toEqual(['active', 'queued']);
+      expect(mocks.blobs.has('active:media:1')).toBe(true);
+      expect(mocks.output).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    await vi.waitFor(() => expect(mocks.jobs.get('queued')?.summary.status).toBe('ready'));
+  });
+
+  it('reports explicit cleanup failures without changing the affected task in memory', async () => {
+    seedFinishedJob('one');
+    const { handleExportJobMessage: send } = await import('../src/background/export-jobs.js');
+    mocks.put.mockRejectedValueOnce(new Error('disk error'));
+    await expect(send({ type: 'export-job-clear-cache' })).resolves.toMatchObject({ ok: false });
+    expect(mocks.jobs.get('one')?.files[0]?.cached).toBe(true);
+    expect(mocks.blobs.has('one:media:1')).toBe(true);
+    await expect(send({ type: 'export-job-clear-cache' })).resolves.toMatchObject({
+      ok: true,
+      cleared: 1,
+    });
+    mocks.remove.mockRejectedValueOnce(new Error('disk error'));
+    await expect(send({ type: 'export-job-clear-history' })).resolves.toMatchObject({ ok: false });
+    expect(mocks.jobs.has('one')).toBe(true);
+    await expect(send({ type: 'export-job-clear-history' })).resolves.toMatchObject({
+      ok: true,
+      cleared: 1,
+    });
+    expect(mocks.jobs.size).toBe(0);
+  });
+
+  it('skips a finished task while a desktop cached-file download is in progress', async () => {
+    const job = seedFinishedJob('one');
+    job.summary.status = 'failed';
+    let release!: (id: number) => void;
+    download.mockImplementationOnce(
+      () =>
+        new Promise<number>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { handleExportJobMessage: send } = await import('../src/background/export-jobs.js');
+    const saving = send({ type: 'export-job-download', id: 'one', fileId: 'one:media:1' });
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    try {
+      for (const type of ['export-job-clear-cache', 'export-job-clear-history'])
+        await expect(send({ type })).resolves.toEqual({ ok: true, cleared: 0, skipped: 1 });
+      expect(mocks.blobs.has('one:media:1')).toBe(true);
+    } finally {
+      release(9);
+    }
+    await expect(saving).resolves.toEqual({ ok: true });
+  });
+
+  it('blocks new cached-file downloads while history and payload deletion is in progress', async () => {
+    seedFinishedJob('one');
+    let release!: () => void;
+    mocks.remove.mockImplementationOnce(async (id: string) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      for (const file of mocks.jobs.get(id)?.files ?? []) mocks.blobs.delete(file.id);
+      mocks.diagnostics.delete(id);
+      mocks.jobs.delete(id);
+    });
+    const { handleExportJobMessage: send } = await import('../src/background/export-jobs.js');
+    const cleanup = send({ type: 'export-job-clear-history' });
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    try {
+      await expect(
+        send({ type: 'export-job-download', id: 'one', fileId: 'one:media:1' }),
+      ).resolves.toMatchObject({ ok: false });
+      expect(download).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    await expect(cleanup).resolves.toEqual({ ok: true, cleared: 1, skipped: 0 });
+    expect(mocks.jobs.has('one')).toBe(false);
+    expect(mocks.blobs.has('one:media:1')).toBe(false);
+  });
+
   it('serializes conflicting submissions with the same ID', async () => {
     const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
     mocks.render.mockImplementation(async () => {});

@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { enqueueExportJob, getExportJobFile } from '../src/core/job-client.js';
+import {
+  enqueueExportJob,
+  getExportJobFile,
+  clearExportJobCache,
+  clearExportJobHistory,
+} from '../src/core/job-client.js';
 import { isExportJobRequest, type ExportJobRequest } from '../src/shared/export-jobs.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 const job: ExportJobRequest = {
@@ -18,6 +23,23 @@ const job: ExportJobRequest = {
   media: [{ index: 1, mode: 'original', orientation: 'bottom' }],
 };
 afterEach(() => vi.unstubAllGlobals());
+it('sends explicit cleanup requests and rejects failed or malformed results', async () => {
+  const sendMessage = vi
+    .fn()
+    .mockResolvedValueOnce({ ok: true, cleared: 2, skipped: 1 })
+    .mockResolvedValueOnce({ ok: true, cleared: 3, skipped: 0 })
+    .mockResolvedValueOnce({ ok: false, error: 'disk error' })
+    .mockResolvedValueOnce({ ok: true, cleared: -1, skipped: 0 });
+  vi.stubGlobal('browser', { runtime: { sendMessage } });
+  await expect(clearExportJobCache()).resolves.toEqual({ cleared: 2, skipped: 1 });
+  await expect(clearExportJobHistory()).resolves.toEqual({ cleared: 3, skipped: 0 });
+  expect(sendMessage.mock.calls.slice(0, 2)).toEqual([
+    [{ type: 'export-job-clear-cache' }],
+    [{ type: 'export-job-clear-history' }],
+  ]);
+  await expect(clearExportJobCache()).rejects.toThrow();
+  await expect(clearExportJobHistory()).rejects.toThrow();
+});
 it('validates complete snapshots and every fetchable URL including quoted avatars', () => {
   expect(isExportJobRequest(job)).toBe(true);
   expect(

@@ -21,6 +21,25 @@
         </button>
       </header>
 
+      <div class="cleanup-toolbar">
+        <button
+          type="button"
+          class="button button-secondary"
+          data-clear-cache
+          disabled
+          data-i18n="jobs.clearCache"
+        ></button>
+        <button
+          type="button"
+          class="button button-danger"
+          data-clear-history
+          disabled
+          data-i18n="jobs.clearHistory"
+        ></button>
+      </div>
+      <p class="cleanup-description" data-i18n="jobs.cleanupScope"></p>
+      <p class="cleanup-message" data-cleanup-message role="status" hidden></p>
+
       <p class="android-brief" data-android-note hidden data-i18n="jobs.androidBrief"></p>
       <details class="tasks-help">
         <summary data-i18n="jobs.help"></summary>

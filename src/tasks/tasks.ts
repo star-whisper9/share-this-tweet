@@ -2,6 +2,8 @@ import { createTaskView } from './tasks-view.js';
 import { downloadBlob } from '../core/download.js';
 import {
   cancelExportJob,
+  clearExportJobCache,
+  clearExportJobHistory,
   downloadExportJobFile,
   getExportJobDiagnostics,
   getExportJobFile,
@@ -9,6 +11,7 @@ import {
   markExportJobFileSaved,
   removeExportJob,
   retryExportJob,
+  type ExportJobCleanupResult,
 } from '../core/job-client.js';
 import { filterJobs, pendingFiles, type StorageFilter } from '../shared/job-list.js';
 import type { JobSummary } from '../shared/export-jobs.js';
@@ -24,6 +27,11 @@ const dateTo = document.querySelector<HTMLInputElement>('[data-to]')!;
 const saveAll = document.querySelector<HTMLButtonElement>('[data-save-all]')!;
 const stopBatch = document.querySelector<HTMLButtonElement>('[data-stop]')!;
 const batchMessage = document.querySelector<HTMLElement>('[data-batch-message]')!;
+const clearCacheButton = document.querySelector<HTMLButtonElement>('[data-clear-cache]')!;
+const clearHistoryButton = document.querySelector<HTMLButtonElement>('[data-clear-history]')!;
+const cleanupMessage = document.querySelector<HTMLElement>('[data-cleanup-message]')!;
+let cleanupRunning = false;
+let cleanupStatus: (ExportJobCleanupResult & { history: boolean }) | undefined;
 const expanded = new Set<string>();
 let batchRunning = false;
 let batchStopRequested = false;
@@ -76,12 +84,30 @@ function render(): void {
     );
     list.append(empty);
   } else {
-    const view = createTaskView({ isAndroid, expanded, busyJobs, batchRunning });
+    const view = createTaskView({
+      isAndroid,
+      expanded,
+      busyJobs,
+      batchRunning: batchRunning || cleanupRunning,
+    });
     for (const job of visibleJobs) list.append(view.renderJob(job));
   }
   const pending = pendingFiles(jobs).length;
   saveAll.textContent = t('jobs.saveAll', { count: pending });
-  saveAll.disabled = !pending || batchRunning || busyJobs.size > 0;
+  saveAll.disabled = !pending || batchRunning || cleanupRunning || busyJobs.size > 0;
+  const settled = jobs.filter((job) => !['queued', 'running'].includes(job.status));
+  const cleanupDisabled = cleanupRunning || batchRunning || busyJobs.size > 0;
+  clearHistoryButton.disabled = cleanupDisabled || !settled.length;
+  clearCacheButton.disabled =
+    cleanupDisabled ||
+    !settled.some((job) => job.hasDiagnostics || job.files.some((file) => file.cached));
+  cleanupMessage.hidden = !cleanupStatus;
+  cleanupMessage.textContent = cleanupStatus
+    ? t(cleanupStatus.history ? 'jobs.historyCleared' : 'jobs.cacheCleared', {
+        cleared: cleanupStatus.cleared,
+        skipped: cleanupStatus.skipped,
+      })
+    : '';
   stopBatch.hidden = !batchRunning;
   stopBatch.disabled = batchStopRequested;
   batchMessage.hidden = !batchStatus;
@@ -93,7 +119,7 @@ function render(): void {
     errorElement.hidden = !actionError;
     errorElement.textContent = actionError ?? '';
   }
-  if (refreshButton) refreshButton.disabled = refreshing;
+  if (refreshButton) refreshButton.disabled = refreshing || cleanupRunning;
   if (focusedButton?.action && focusedButton.jobId) {
     const replacement = Array.from(
       list.querySelectorAll<HTMLElement>('[data-action][data-job-id]'),
@@ -134,7 +160,7 @@ async function refresh(clearError = false): Promise<void> {
     if (revision === refreshRevision) {
       refreshing = false;
       list?.setAttribute('aria-busy', 'false');
-      if (refreshButton) refreshButton.disabled = false;
+      if (refreshButton) refreshButton.disabled = cleanupRunning;
     }
   }
 }
@@ -159,7 +185,7 @@ async function saveDiagnostics(jobId: string): Promise<void> {
 }
 
 async function performAction(action: string, jobId: string, fileId?: string): Promise<void> {
-  if (busyJobs.has(jobId) || batchRunning) return;
+  if (busyJobs.has(jobId) || batchRunning || cleanupRunning) return;
   busyJobs.add(jobId);
   actionError = undefined;
   render();
@@ -180,7 +206,7 @@ async function performAction(action: string, jobId: string, fileId?: string): Pr
 }
 
 async function saveBatch(targetJobs: JobSummary[]): Promise<void> {
-  if (batchRunning || busyJobs.size) return;
+  if (batchRunning || cleanupRunning || busyJobs.size) return;
   const targets = pendingFiles(targetJobs);
   if (!targets.length) return;
   batchRunning = true;
@@ -224,6 +250,27 @@ async function saveBatch(targetJobs: JobSummary[]): Promise<void> {
   }
 }
 
+async function clearTasks(history: boolean): Promise<void> {
+  if (cleanupRunning || batchRunning || busyJobs.size) return;
+  if (!window.confirm(t(history ? 'jobs.confirmClearHistory' : 'jobs.confirmClearCache'))) return;
+  cleanupRunning = true;
+  cleanupStatus = undefined;
+  batchStatus = undefined;
+  actionError = undefined;
+  render();
+  try {
+    const result = await (history ? clearExportJobHistory() : clearExportJobCache());
+    cleanupStatus = { ...result, history };
+  } catch (reason) {
+    actionError = t('jobs.actionFailed', { error: failureMessage(reason) });
+  } finally {
+    // A failed multi-task cleanup may have cleared earlier tasks already.
+    await refresh();
+    cleanupRunning = false;
+    render();
+  }
+}
+
 function toggleJob(jobId: string): void {
   if (expanded.has(jobId)) expanded.delete(jobId);
   else expanded.add(jobId);
@@ -249,6 +296,8 @@ list?.addEventListener('click', (event) => {
   if (card?.dataset.jobId) toggleJob(card.dataset.jobId);
 });
 refreshButton?.addEventListener('click', () => void refresh(true));
+clearCacheButton.addEventListener('click', () => void clearTasks(false));
+clearHistoryButton.addEventListener('click', () => void clearTasks(true));
 for (const control of [storageFilter, dateFrom, dateTo]) control.addEventListener('change', render);
 document.querySelector('[data-clear]')?.addEventListener('click', () => {
   storageFilter.value = 'all';

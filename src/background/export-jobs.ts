@@ -29,6 +29,8 @@ import { getLocale, t, type Locale } from '../shared/i18n.js';
 type ExportJobMessage =
   | { type: 'export-job-enqueue'; request: unknown }
   | { type: 'export-job-list' }
+  | { type: 'export-job-clear-cache' }
+  | { type: 'export-job-clear-history' }
   | { type: 'export-job-cancel'; id: unknown }
   | { type: 'export-job-retry'; id: unknown }
   | { type: 'export-job-remove'; id: unknown }
@@ -46,6 +48,7 @@ const activeDownloads = new Map<string, number>();
 let initialization: Promise<void> | undefined;
 let processing = false;
 let mutation = Promise.resolve();
+let clearing = false;
 function messageError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -57,7 +60,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
 function parseMessage(value: unknown): ExportJobMessage | undefined {
   if (!isObject(value) || typeof value.type !== 'string') return undefined;
   if (value.type === 'export-job-enqueue') return { type: value.type, request: value.request };
-  if (value.type === 'export-job-list' || value.type === 'export-job-open')
+  if (
+    value.type === 'export-job-list' ||
+    value.type === 'export-job-open' ||
+    value.type === 'export-job-clear-cache' ||
+    value.type === 'export-job-clear-history'
+  )
     return { type: value.type };
   if (
     [
@@ -237,6 +245,55 @@ async function sweepExpiredJobs(now: number): Promise<void> {
 export async function cleanupExportJobs(): Promise<void> {
   await initializeExportJobs();
   await sweepExpiredJobs(Date.now());
+}
+
+/** Explicit cleanup shares the mutation queue and preserves active work. */
+async function clearExportJobs(history: boolean): Promise<JobResponse> {
+  await initializeExportJobs();
+  const operation = mutation.then(async () => {
+    let cleared = 0;
+    let skipped = 0;
+    clearing = true;
+    try {
+      for (const [id, current] of jobs) {
+        if (controllers.has(id) || ['queued', 'running'].includes(current.summary.status)) {
+          skipped++;
+          continue;
+        }
+        if (history) {
+          await deleteExportJob(id);
+          jobs.delete(id);
+        } else {
+          const cached = current.files.filter((file) => file.cached);
+          if (!cached.length && !current.summary.hasDiagnostics) continue;
+          const job = structuredClone(current) as StoredExportJob;
+          for (const file of job.files) {
+            file.cached = false;
+            file.cacheExpiresAt = 0;
+          }
+          job.summary.hasDiagnostics = false;
+          job.diagnosticsExpiresAt = undefined;
+          if (job.summary.status === 'ready' && job.files.some((file) => !file.saved))
+            job.summary.status = 'expired';
+          job.summary.files = toSummary(job).files;
+          await putExportJob(job, {
+            removeFileIds: cached.map((file) => file.id),
+            diagnostics: null,
+          });
+          jobs.set(id, job);
+        }
+        cleared++;
+      }
+      return { ok: true as const, cleared, skipped };
+    } finally {
+      clearing = false;
+    }
+  });
+  mutation = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
 }
 
 function findQueuedJob(): StoredExportJob | undefined {
@@ -642,7 +699,7 @@ async function saveDesktopFile(id: string, fileId: string): Promise<JobResponse>
   const job = jobs.get(id);
   if (!job) return { ok: false, error: t('jobs.notFound') };
   if (isAndroid()) return { ok: false, error: t('jobs.invalidRequest') };
-  if (controllers.has(id) || ['queued', 'running'].includes(job.summary.status))
+  if (clearing || controllers.has(id) || ['queued', 'running'].includes(job.summary.status))
     return { ok: false, error: t('jobs.busy') };
   const controller = new AbortController();
   controllers.set(id, controller);
@@ -698,6 +755,11 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
       .catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-open')
     return open().catch((error) => ({ ok: false, error: messageError(error) }));
+  if (parsed.type === 'export-job-clear-cache' || parsed.type === 'export-job-clear-history')
+    return clearExportJobs(parsed.type === 'export-job-clear-history').catch((error) => ({
+      ok: false,
+      error: messageError(error),
+    }));
   if (!isExportJobId(parsed.id))
     return Promise.resolve({ ok: false, error: t('jobs.invalidTaskId') });
   if (parsed.type === 'export-job-cancel')

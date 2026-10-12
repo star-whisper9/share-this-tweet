@@ -296,6 +296,19 @@ button {
   gap: 0.6rem;
   margin: 0.85rem 0;
 }
+.cleanup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.cleanup-description,
+.cleanup-message {
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
 .task-count,
 .batch-message {
   color: var(--muted);

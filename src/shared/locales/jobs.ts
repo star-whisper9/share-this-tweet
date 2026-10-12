@@ -13,6 +13,16 @@ export const zhCN = {
   'jobs.filterFrom': '创建日期起',
   'jobs.filterTo': '创建日期止',
   'jobs.clearFilters': '清除筛选',
+  'jobs.clearCache': '清除缓存',
+  'jobs.clearHistory': '清除任务历史',
+  'jobs.cleanupScope':
+    '作用于全部已结束任务，不受筛选影响；跳过排队、处理及正在保存的任务。不会删除设备上的文件或来源记录。',
+  'jobs.confirmClearCache':
+    '清除全部已结束任务的导出文件缓存和诊断数据？任务记录会保留，未保存的文件需重新导出。排队、处理及正在保存的任务会跳过。',
+  'jobs.confirmClearHistory':
+    '删除全部已结束任务的记录、导出文件缓存和诊断数据？未保存的文件也会删除，此操作无法撤销。排队、处理及正在保存的任务会跳过。',
+  'jobs.cacheCleared': '已清除 {cleared} 个任务的缓存，跳过 {skipped} 个正在进行的任务。',
+  'jobs.historyCleared': '已清除 {cleared} 个任务的历史及缓存，跳过 {skipped} 个正在进行的任务。',
   'jobs.noMatches': '没有符合筛选条件的任务。',
   'jobs.dateInvalid': '起始日期不能晚于结束日期。',
   'jobs.pendingCount': '待保存 {count} 项',
@@ -113,6 +123,17 @@ export const en: Record<keyof typeof zhCN, string> = {
   'jobs.filterFrom': 'Created from',
   'jobs.filterTo': 'Created through',
   'jobs.clearFilters': 'Clear filters',
+  'jobs.clearCache': 'Clear cache',
+  'jobs.clearHistory': 'Clear task history',
+  'jobs.cleanupScope':
+    'Applies to all finished tasks, regardless of filters. Queued, processing, and saving tasks are skipped. Files on your device and provenance records are kept.',
+  'jobs.confirmClearCache':
+    'Clear cached export files and diagnostics for all finished tasks? Task records will remain. Unsaved files must be exported again. Queued, processing, and saving tasks will be skipped.',
+  'jobs.confirmClearHistory':
+    'Delete all finished task records, cached export files, and diagnostics? Unsaved files will also be deleted. This cannot be undone. Queued, processing, and saving tasks will be skipped.',
+  'jobs.cacheCleared': 'Cleared caches for {cleared} tasks; skipped {skipped} active tasks.',
+  'jobs.historyCleared':
+    'Cleared history and caches for {cleared} tasks; skipped {skipped} active tasks.',
   'jobs.noMatches': 'No tasks match these filters.',
   'jobs.dateInvalid': 'The start date must not be after the end date.',
   'jobs.pendingCount': '{count} to save',

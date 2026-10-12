@@ -39,6 +39,27 @@ export async function retryExportJob(id: string): Promise<void> {
 export async function removeExportJob(id: string): Promise<void> {
   await request({ type: 'export-job-remove', id });
 }
+export interface ExportJobCleanupResult {
+  cleared: number;
+  skipped: number;
+}
+async function clearJobs(type: string): Promise<ExportJobCleanupResult> {
+  const result = await request({ type });
+  if (
+    !Number.isSafeInteger(result.cleared) ||
+    Number(result.cleared) < 0 ||
+    !Number.isSafeInteger(result.skipped) ||
+    Number(result.skipped) < 0
+  )
+    throw new Error(t('jobs.invalidResponse'));
+  return { cleared: Number(result.cleared), skipped: Number(result.skipped) };
+}
+export function clearExportJobCache(): Promise<ExportJobCleanupResult> {
+  return clearJobs('export-job-clear-cache');
+}
+export function clearExportJobHistory(): Promise<ExportJobCleanupResult> {
+  return clearJobs('export-job-clear-history');
+}
 export async function markExportJobFileSaved(id: string, fileId: string): Promise<void> {
   await request({ type: 'export-job-file-saved', id, fileId });
 }
