@@ -153,6 +153,68 @@ afterEach(() => {
 });
 
 describe('durable export queue', () => {
+  it('serializes conflicting submissions with the same ID', async () => {
+    const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+    mocks.render.mockImplementation(async () => {});
+    const first = request('same');
+    const second = { ...first, record: { ...first.record, text: 'different' } };
+    const responses = await Promise.all([
+      handleExportJobMessage({ type: 'export-job-enqueue', request: first }),
+      handleExportJobMessage({ type: 'export-job-enqueue', request: second }),
+    ]);
+    expect(responses).toEqual([
+      { ok: true, id: 'same' },
+      { ok: false, error: expect.any(String) },
+    ]);
+    expect(mocks.jobs.get('same')?.request.record.text).toBe(first.record.text);
+    await expect(
+      handleExportJobMessage({ type: 'export-job-enqueue', request: first }),
+    ).resolves.toEqual({ ok: true, id: 'same' });
+  });
+
+  it('does not confirm a duplicate Android submission before opening succeeds', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Android' });
+    let rejectOpen!: (error: Error) => void;
+    vi.mocked(browser.tabs.create)
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOpen = reject;
+          }),
+      )
+      .mockRejectedValueOnce(new Error('open failed'));
+    const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+    const first = handleExportJobMessage({ type: 'export-job-enqueue', request: request('same') });
+    await vi.waitFor(() => expect(browser.tabs.create).toHaveBeenCalledOnce());
+    let duplicateSettled = false;
+    const second = handleExportJobMessage({
+      type: 'export-job-enqueue',
+      request: request('same'),
+    })!.then((response) => {
+      duplicateSettled = true;
+      return response;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(duplicateSettled).toBe(false);
+    rejectOpen(new Error('open failed'));
+    expect(await Promise.all([first, second])).toEqual([
+      { ok: false, error: expect.any(String) },
+      { ok: false, error: expect.any(String) },
+    ]);
+    expect(mocks.jobs.has('same')).toBe(false);
+    expect(mocks.render).not.toHaveBeenCalled();
+  });
+
+  it('accepts files derived from a maximum-length task ID', async () => {
+    const id = 'x'.repeat(80);
+    const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+    await expect(
+      handleExportJobMessage({ type: 'export-job-enqueue', request: request(id) }),
+    ).resolves.toEqual({ ok: true, id });
+    await vi.waitFor(() => expect(mocks.jobs.get(id)?.summary.status).toBe('completed'));
+    expect(mocks.jobs.get(id)?.files[0]?.id).toBe(`${id}:media:1`);
+  });
+
   it('reuses an existing Android task tab without focusing, but explicitly opening focuses it', async () => {
     vi.stubGlobal('navigator', { userAgent: 'Android' });
     vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 17, windowId: 3 }]);

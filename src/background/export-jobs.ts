@@ -15,6 +15,8 @@ import {
 import { recordOutput, upsertTweetRecord } from '../core/storage.js';
 import {
   isExportJobRequest,
+  isExportJobId,
+  isExportFileId,
   type ExportJobFile,
   type ExportJobRequest,
   type JobSummary,
@@ -71,10 +73,6 @@ function messageError(error: unknown): string {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 80;
 }
 
 function parseMessage(value: unknown): ExportJobMessage | undefined {
@@ -454,7 +452,12 @@ async function downloadDesktopFile(
 
 async function acceptFile(jobId: string, file: ExportJobFile): Promise<void> {
   const locale = jobs.get(jobId)?.request.locale ?? getLocale();
-  if (!(file.blob instanceof Blob) || !file.blob.size || !isId(file.id) || !file.filename) {
+  if (
+    !(file.blob instanceof Blob) ||
+    !file.blob.size ||
+    !isExportFileId(file.id) ||
+    !file.filename
+  ) {
     throw new Error(t('jobs.invalidFile', {}, locale));
   }
   await mutateJob(jobId, (job) => {
@@ -567,28 +570,42 @@ async function processQueue(): Promise<void> {
 
 async function enqueue(request: ExportJobRequest): Promise<JobResponse> {
   await cleanupExportJobs();
-  const existing = jobs.get(request.id) ?? (await getExportJob(request.id));
-  if (existing && JSON.stringify(existing.request) === JSON.stringify(request)) {
-    jobs.set(existing.id, existing);
-    return { ok: true, id: existing.id };
-  }
-  if (existing) {
-    return { ok: false, error: t('jobs.taskExists', {}, request.locale) };
-  }
-  const job: StoredExportJob = { id: request.id, request, summary: summaryFor(request), files: [] };
-  await putExportJob(job);
-  jobs.set(job.id, job);
-  if (isAndroid()) {
-    try {
-      await open(false);
-    } catch (error) {
-      jobs.delete(job.id);
-      await deleteExportJob(job.id);
-      return { ok: false, error: messageError(error) };
+  const operation = mutation.then(async () => {
+    const existing = jobs.get(request.id) ?? (await getExportJob(request.id));
+    if (existing) {
+      if (JSON.stringify(existing.request) !== JSON.stringify(request))
+        return { ok: false as const, error: t('jobs.taskExists', {}, request.locale) };
+      jobs.set(existing.id, existing);
+      return { ok: true as const, id: existing.id, created: false };
     }
-  }
+    const job: StoredExportJob = {
+      id: request.id,
+      request,
+      summary: summaryFor(request),
+      files: [],
+    };
+    await putExportJob(job);
+    if (isAndroid()) {
+      try {
+        await open(false);
+      } catch (error) {
+        await deleteExportJob(job.id);
+        return { ok: false as const, error: messageError(error) };
+      }
+    }
+    jobs.set(job.id, job);
+    return { ok: true as const, id: job.id, created: true };
+  });
+  mutation = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  const result = await operation;
+  if (!result.ok) return result;
+  if (!result.created) return { ok: true, id: result.id };
+  const id = result.id;
   scheduleProcessing();
-  return { ok: true, id: job.id };
+  return { ok: true, id: id };
 }
 
 async function cancel(id: string): Promise<JobResponse> {
@@ -779,7 +796,8 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
       .catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-open')
     return open().catch((error) => ({ ok: false, error: messageError(error) }));
-  if (!isId(parsed.id)) return Promise.resolve({ ok: false, error: t('jobs.invalidTaskId') });
+  if (!isExportJobId(parsed.id))
+    return Promise.resolve({ ok: false, error: t('jobs.invalidTaskId') });
   if (parsed.type === 'export-job-cancel')
     return cancel(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-retry')
@@ -788,7 +806,8 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
     return remove(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-diagnostics')
     return diagnostics(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
-  if (!isId(parsed.fileId)) return Promise.resolve({ ok: false, error: t('jobs.invalidFileId') });
+  if (!isExportFileId(parsed.fileId))
+    return Promise.resolve({ ok: false, error: t('jobs.invalidFileId') });
   if (parsed.type === 'export-job-file')
     return file(parsed.id, parsed.fileId).catch((error) => ({
       ok: false,

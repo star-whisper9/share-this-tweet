@@ -1,4 +1,4 @@
-import { validMetadata } from '../shared/metadata-validation.js';
+import { isRecordTimestamp, isTweetRecord } from '../shared/record-validation.js';
 import { t } from '../shared/i18n.js';
 import { mergeTweetRecords, type TweetRecord } from '../shared/model.js';
 import type {
@@ -222,71 +222,7 @@ export async function clearStorageRecords(): Promise<void> {
 }
 
 function isStoredTweetRecord(value: unknown): value is StoredTweetRecord {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as {
-    tweetId?: unknown;
-    url?: unknown;
-    text?: unknown;
-    author?: unknown;
-    media?: unknown;
-    savedAt?: unknown;
-    quote?: unknown;
-  };
-  return (
-    typeof record.tweetId === 'string' &&
-    typeof record.url === 'string' &&
-    typeof record.text === 'string' &&
-    typeof record.author === 'object' &&
-    record.author !== null &&
-    Array.isArray(record.media) &&
-    typeof record.savedAt === 'string' &&
-    isValidQuote(record.quote, record.tweetId) &&
-    validMetadata(record)
-  );
-}
-
-function isValidQuote(value: unknown, parentId: string): boolean {
-  if (value === undefined) return true;
-  if (!value || typeof value !== 'object') return false;
-  const quote = value as Record<string, unknown>;
-  if (!['available', 'pending', 'unavailable'].includes(String(quote.status))) return false;
-  if (
-    quote.tweetId !== undefined &&
-    (typeof quote.tweetId !== 'string' ||
-      !/^\d+$/.test(quote.tweetId) ||
-      quote.tweetId === parentId)
-  )
-    return false;
-  if (
-    quote.url !== undefined &&
-    (typeof quote.url !== 'string' || !/^https:\/\/(?:x\.com|twitter\.com)\//.test(quote.url))
-  )
-    return false;
-  if (quote.status !== 'available') return quote.record === undefined;
-  if (!quote.record || typeof quote.record !== 'object') return false;
-  const record = quote.record as Record<string, unknown>;
-  const author = record.author as Record<string, unknown> | undefined;
-  return (
-    validMetadata(record) &&
-    record.quote === undefined &&
-    record.tweetId === quote.tweetId &&
-    typeof record.tweetId === 'string' &&
-    typeof record.url === 'string' &&
-    typeof record.text === 'string' &&
-    !!author &&
-    ['id', 'handle', 'name'].every((key) => typeof author[key] === 'string') &&
-    Array.isArray(record.media) &&
-    record.media.every((item: unknown) => {
-      if (!item || typeof item !== 'object') return false;
-      const media = item as Record<string, unknown>;
-      return (
-        typeof media.index === 'number' &&
-        Number.isInteger(media.index) &&
-        media.index > 0 &&
-        ['photo', 'video', 'animated_gif'].includes(String(media.type))
-      );
-    })
-  );
+  return isTweetRecord(value) && 'savedAt' in value && isRecordTimestamp(value.savedAt);
 }
 
 function isOutputRecord(value: unknown): value is OutputRecord {
@@ -302,7 +238,7 @@ function isOutputRecord(value: unknown): value is OutputRecord {
     typeof output.tweetId === 'string' &&
     typeof output.outputType === 'string' &&
     OUTPUT_TYPES.includes(output.outputType as OutputType) &&
-    typeof output.createdAt === 'string'
+    isRecordTimestamp(output.createdAt)
   );
 }
 
@@ -312,7 +248,7 @@ export function validateStorageArchive(value: unknown): StorageArchive {
   const archive = value as Partial<StorageArchive>;
   if (archive.schemaVersion !== 1)
     throw new StorageError(t('core.storage.unsupportedArchiveVersion'));
-  if (typeof archive.exportedAt !== 'string')
+  if (!isRecordTimestamp(archive.exportedAt))
     throw new StorageError(t('core.storage.archiveMissingDate'));
   if (!Array.isArray(archive.tweetRecords) || !archive.tweetRecords.every(isStoredTweetRecord)) {
     throw new StorageError(t('core.storage.invalidTweetRecord'));

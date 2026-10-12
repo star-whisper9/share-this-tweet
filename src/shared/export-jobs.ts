@@ -5,7 +5,7 @@ import { isLanguagePreference, isLocale, type Locale } from './i18n.js';
 import type { ImageTheme } from '../core/image-theme.js';
 import type { OutputRecordInput } from './storage-model.js';
 import { isVideoLimits } from './video-experiment.js';
-import { validMetadata } from './metadata-validation.js';
+import { isTweetRecord } from './record-validation.js';
 
 export type ExportJobKind = 'media' | 'stitch' | 'card' | 'row-card';
 export interface ExportJobRequest {
@@ -74,7 +74,7 @@ function mediaURL(value: unknown): boolean {
 }
 function record(value: unknown, depth = 0): value is TweetRecord {
   if (
-    !object(value) ||
+    !isTweetRecord(value, depth === 0) ||
     !text(value.tweetId, 64) ||
     !/^\d+$/.test(value.tweetId) ||
     !text(value.url, 4096) ||
@@ -85,8 +85,7 @@ function record(value: unknown, depth = 0): value is TweetRecord {
     !text(value.author.handle, 1000) ||
     !mediaURL(value.author.avatarUrl) ||
     !Array.isArray(value.media) ||
-    value.media.length > 4 ||
-    !validMetadata(value)
+    value.media.length > 4
   )
     return false;
   if (
@@ -123,8 +122,7 @@ function record(value: unknown, depth = 0): value is TweetRecord {
 export function isExportJobRequest(value: unknown): value is ExportJobRequest {
   if (
     !object(value) ||
-    !text(value.id, 80) ||
-    !value.id ||
+    !isExportJobId(value.id) ||
     !['media', 'stitch', 'card', 'row-card'].includes(String(value.kind)) ||
     !record(value.record) ||
     !isLocale(value.locale) ||
@@ -166,4 +164,14 @@ export function isExportJobRequest(value: unknown): value is ExportJobRequest {
         ['top', 'bottom'].includes(String(m.orientation)),
     )
   );
+}
+
+/** File IDs include a renderer suffix after the bounded task ID. */
+export const MAX_EXPORT_JOB_ID_LENGTH = 80;
+const MAX_EXPORT_FILE_ID_LENGTH = MAX_EXPORT_JOB_ID_LENGTH + ':media:'.length + 16;
+export function isExportJobId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_EXPORT_JOB_ID_LENGTH;
+}
+export function isExportFileId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_EXPORT_FILE_ID_LENGTH;
 }

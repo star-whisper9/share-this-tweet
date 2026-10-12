@@ -1,3 +1,4 @@
+import { isTweetRecord } from '../shared/record-validation.js';
 import { handleExportJobMessage, initializeExportJobs } from './export-jobs.js';
 import type { DownloadMediaResponse, ExtensionMessage } from '../shared/protocol.js';
 import type { PrepareSourcedMediaResponse } from '../shared/protocol.js';
@@ -81,27 +82,6 @@ function isExtensionMessage(message: unknown): message is ExtensionMessage {
   if (candidate.type === 'list-storage-records' || candidate.type === 'export-storage-records')
     return true;
   return false;
-}
-
-function isTweetRecord(
-  value: unknown,
-): value is Extract<ExtensionMessage, { type: 'save-tweet-record' }>['record'] {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as {
-    tweetId?: unknown;
-    url?: unknown;
-    text?: unknown;
-    author?: unknown;
-    media?: unknown;
-  };
-  return (
-    typeof record.tweetId === 'string' &&
-    typeof record.url === 'string' &&
-    typeof record.text === 'string' &&
-    typeof record.author === 'object' &&
-    record.author !== null &&
-    Array.isArray(record.media)
-  );
 }
 
 function isOutputRecordInput(
