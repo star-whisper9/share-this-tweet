@@ -89,30 +89,3 @@ export function assertVideoLimits(
       throw new VideoLimitError(t(message, { limit }, locale));
   }
 }
-
-/** Empirical pixel-frame throughput, not a memory or completion guarantee. */
-export function estimateVideoProcessing(input: {
-  width: number;
-  height: number;
-  durationSeconds: number;
-  frameRate: number;
-  bitrateMbps: number;
-}): { minSeconds: number; maxSeconds: number; inputMiB: number } {
-  if (
-    !Object.values(input).every((n) => Number.isFinite(n) && n > 0) ||
-    !Number.isInteger(input.width) ||
-    !Number.isInteger(input.height)
-  )
-    throw new Error(t('experiment.invalidEstimate'));
-  // M4 Firefox samples: ~16.6–22.9 Mpixel-frames/s for single video frames,
-  // ~19.2 for mixed GIF; widen to 10–30 to reflect content and CPU variability.
-  const work = (input.width * input.height * input.frameRate * input.durationSeconds) / 1e6;
-  const result = {
-    minSeconds: 0.3 + work / 30,
-    maxSeconds: 0.3 + work / 10,
-    inputMiB: (input.bitrateMbps * 1e6 * input.durationSeconds) / 8 / 1048576,
-  };
-  if (!Object.values(result).every(Number.isFinite))
-    throw new Error(t('experiment.invalidEstimate'));
-  return result;
-}

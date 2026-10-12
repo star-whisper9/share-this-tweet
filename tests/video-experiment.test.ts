@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   assertVideoLimits,
   DEFAULT_VIDEO_LIMITS,
-  estimateVideoProcessing,
   normalizeVideoLimits,
   VIDEO_LIMIT_PRESETS,
 } from '../src/shared/video-experiment.js';
@@ -45,31 +44,5 @@ describe('experimental processing limits', () => {
       }),
     ).not.toThrow();
     expect(() => assertVideoLimits(DEFAULT_VIDEO_LIMITS, { frameRate: Infinity })).toThrow();
-  });
-});
-describe('processing estimate', () => {
-  const input = {
-    width: 720,
-    height: 1378,
-    durationSeconds: 135.666811,
-    frameRate: 27,
-    bitrateMbps: 1.5,
-  };
-  it('scales pixel-frame work and estimates input size from bitrate', () => {
-    const result = estimateVideoProcessing(input);
-    const bigger = estimateVideoProcessing({ ...input, width: input.width * 2 });
-    expect(bigger.minSeconds - 0.3).toBeCloseTo((result.minSeconds - 0.3) * 2);
-    const bitrate = estimateVideoProcessing({ ...input, bitrateMbps: 3 });
-    expect(bitrate.minSeconds).toBe(result.minSeconds);
-    expect(bitrate.inputMiB).toBeCloseTo(result.inputMiB * 2);
-  });
-  it('rejects nonpositive, fractional dimensions and nonfinite calculator inputs', () => {
-    for (const patch of [
-      { frameRate: 0 },
-      { width: 1.5 },
-      { durationSeconds: NaN },
-      { bitrateMbps: -1 },
-    ])
-      expect(() => estimateVideoProcessing({ ...input, ...patch })).toThrow();
   });
 });

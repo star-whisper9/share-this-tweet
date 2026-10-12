@@ -132,9 +132,6 @@
                 <span class="step-number">01</span>
                 <div>
                   <h2 data-i18n="options.frame.title">让照片自带出处</h2>
-                  <p data-i18n="options.frame.description">
-                    在照片顶部或底部加一行署名，发出去就不必另作说明。
-                  </p>
                 </div>
               </div>
               <p class="field-label" id="frame-presets-label" data-i18n="options.frame.presets">
@@ -273,9 +270,6 @@
                 <span class="step-number">02</span>
                 <div>
                   <h2 data-i18n="options.filename.title">日后也找得到来源</h2>
-                  <p data-i18n="options.filename.description">
-                    把推主与推文编号留在文件名里，归档时更好找。
-                  </p>
                 </div>
               </div>
               <p
@@ -375,9 +369,6 @@
                 <span class="step-number">03</span>
                 <div>
                   <h2 data-i18n="options.text.title">不只分享一个链接</h2>
-                  <p data-i18n="options.text.description">
-                    把文字和出处一起复制，直接粘贴到聊天中。
-                  </p>
                 </div>
               </div>
               <p class="field-label" id="text-presets-label" data-i18n="options.text.presets">
@@ -592,130 +583,6 @@
                     aria-live="polite"
                   ></p>
                 </div>
-                <div class="experiment-block experiment-calculator">
-                  <div class="experiment-block-heading">
-                    <div>
-                      <h3 data-i18n="experiment.calculator.title">处理时间参考</h3>
-                      <p data-i18n="experiment.calculator.description">
-                        仅用于判断是否适合在浏览器中处理；不同画面内容的差异会很大。
-                      </p>
-                    </div>
-                  </div>
-                  <div
-                    class="experiment-calculator-presets"
-                    role="group"
-                    data-i18n-aria-label="experiment.calculator.presets"
-                    aria-label="估算样例"
-                  >
-                    <button
-                      type="button"
-                      data-calculator-preset="480p"
-                      data-i18n="experiment.calculator.preset480p"
-                    >
-                      480p 短视频
-                    </button>
-                    <button
-                      type="button"
-                      data-calculator-preset="720p"
-                      data-i18n="experiment.calculator.preset720p"
-                    >
-                      720p 短视频
-                    </button>
-                    <button
-                      type="button"
-                      data-calculator-preset="1080p"
-                      data-i18n="experiment.calculator.preset1080p"
-                    >
-                      1080p 短视频
-                    </button>
-                    <button
-                      type="button"
-                      data-calculator-preset="long1080p"
-                      data-i18n="experiment.calculator.presetLong1080p"
-                    >
-                      1080p 长视频
-                    </button>
-                  </div>
-                  <div class="experiment-calculator-grid">
-                    <label>
-                      <span data-i18n="experiment.calculator.width">宽</span>
-                      <input
-                        data-calculator="width"
-                        type="number"
-                        min="1"
-                        step="1"
-                        inputmode="numeric"
-                        value="1280"
-                      />
-                      <small>px</small>
-                    </label>
-                    <label>
-                      <span data-i18n="experiment.calculator.height">高</span>
-                      <input
-                        data-calculator="height"
-                        type="number"
-                        min="1"
-                        step="1"
-                        inputmode="numeric"
-                        value="720"
-                      />
-                      <small>px</small>
-                    </label>
-                    <label>
-                      <span data-i18n="experiment.calculator.duration">时长</span>
-                      <input
-                        data-calculator="durationSeconds"
-                        type="number"
-                        min="1"
-                        step="1"
-                        inputmode="numeric"
-                        value="140"
-                      />
-                      <small data-i18n="experiment.unit.seconds.short">秒</small>
-                    </label>
-                    <label>
-                      <span data-i18n="experiment.calculator.frameRate">帧率</span>
-                      <input
-                        data-calculator="frameRate"
-                        type="number"
-                        min="1"
-                        step="1"
-                        inputmode="numeric"
-                        value="30"
-                      />
-                      <small>fps</small>
-                    </label>
-                    <label>
-                      <span data-i18n="experiment.calculator.bitrate">码率</span>
-                      <input
-                        data-calculator="bitrateMbps"
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        inputmode="decimal"
-                        value="2.5"
-                      />
-                      <small>Mbps</small>
-                    </label>
-                  </div>
-                  <output
-                    class="experiment-estimate"
-                    data-video-estimate
-                    aria-live="polite"
-                  ></output>
-                  <p class="experiment-environment" data-i18n="experiment.calculator.environment">
-                    参考环境：Apple M4 · Firefox Desktop。码率仅用于估算输入文件大小。
-                  </p>
-                  <p class="experiment-reference">
-                    <a
-                      href="https://blog.x.com/engineering/en_us/topics/infrastructure/2020/introducing-vmaf-percentiles-for-video-quality-measurements"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-i18n="experiment.calculator.reference"
-                      >示例码率来自 X Engineering 2020 的历史质量样例，并非当前上传规则。</a
-                    >
-                  </p>
-                </div>
               </div>
             </div>
           </section>
@@ -733,9 +600,6 @@
               <span class="step-number">05</span>
               <div>
                 <h2 data-i18n="options.records.title">查找你保存过的来源</h2>
-                <p data-i18n="options.records.description">
-                  推文来源只保存在本机。可以按 Tweet ID、作者或文件名查找。
-                </p>
               </div>
             </div>
             <div class="records-toolbar">

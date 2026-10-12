@@ -1,11 +1,7 @@
 import { isGifLimits, type GifLimits } from '../shared/gif-experiment.js';
-import {
-  estimateVideoProcessing,
-  VIDEO_LIMIT_PRESETS,
-  type VideoLimits,
-} from '../shared/video-experiment.js';
+import { VIDEO_LIMIT_PRESETS, type VideoLimits } from '../shared/video-experiment.js';
 import { DEFAULT_SETTINGS, type ExtensionSettings } from '../shared/settings.js';
-import { getLocale, t } from '../shared/i18n.js';
+import { t } from '../shared/i18n.js';
 
 const videoLimitKeys = [
   'maxInputMiB',
@@ -14,12 +10,6 @@ const videoLimitKeys = [
   'maxFrameRate',
 ] as const satisfies ReadonlyArray<keyof VideoLimits>;
 const gifLimitKeys = ['maxInputMiB', 'maxDurationSeconds', 'maxSourcePixels'] as const;
-const calculatorPresets = {
-  '480p': { width: 854, height: 480, durationSeconds: 140, frameRate: 30, bitrateMbps: 1.25 },
-  '720p': { width: 1280, height: 720, durationSeconds: 140, frameRate: 30, bitrateMbps: 2.5 },
-  '1080p': { width: 1920, height: 1080, durationSeconds: 140, frameRate: 30, bitrateMbps: 5 },
-  long1080p: { width: 1920, height: 1080, durationSeconds: 600, frameRate: 30, bitrateMbps: 5 },
-} as const;
 type ExperimentSettings = Pick<
   ExtensionSettings,
   'experimentalGif' | 'gifLimits' | 'experimentalVideo' | 'videoLimits'
@@ -61,16 +51,6 @@ export function mountExperimentControls({
     ),
     maxFrameRate: document.querySelector<HTMLInputElement>('[data-video-limit="maxFrameRate"]'),
   };
-  const calculatorInputs = {
-    width: document.querySelector<HTMLInputElement>('[data-calculator="width"]'),
-    height: document.querySelector<HTMLInputElement>('[data-calculator="height"]'),
-    durationSeconds: document.querySelector<HTMLInputElement>(
-      '[data-calculator="durationSeconds"]',
-    ),
-    frameRate: document.querySelector<HTMLInputElement>('[data-calculator="frameRate"]'),
-    bitrateMbps: document.querySelector<HTMLInputElement>('[data-calculator="bitrateMbps"]'),
-  };
-  const videoEstimate = document.querySelector<HTMLOutputElement>('[data-video-estimate]');
   function readVideoLimits(): VideoLimits {
     const read = (input: HTMLInputElement | null): number =>
       input?.value.trim() === '' ? Number.NaN : Number(input?.value);
@@ -174,47 +154,6 @@ export function mountExperimentControls({
     }
     updateVideoPresetSelection(readVideoLimits());
   }
-  function formatEstimateNumber(value: number): string {
-    return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(value);
-  }
-  function updateCalculatorPresetSelection(id?: keyof typeof calculatorPresets): void {
-    document
-      .querySelectorAll<HTMLButtonElement>('[data-calculator-preset]')
-      .forEach((button) =>
-        button.setAttribute('aria-pressed', String(button.dataset.calculatorPreset === id)),
-      );
-  }
-  function updateVideoEstimate(): void {
-    const input = {
-      width: Number(calculatorInputs.width?.value),
-      height: Number(calculatorInputs.height?.value),
-      durationSeconds: Number(calculatorInputs.durationSeconds?.value),
-      frameRate: Number(calculatorInputs.frameRate?.value),
-      bitrateMbps: Number(calculatorInputs.bitrateMbps?.value),
-    };
-    try {
-      const estimate = estimateVideoProcessing(input);
-      if (videoEstimate)
-        videoEstimate.textContent = t('experiment.calculator.result', {
-          min: formatEstimateNumber(Math.ceil(estimate.minSeconds)),
-          max: formatEstimateNumber(Math.ceil(estimate.maxSeconds)),
-          input: formatEstimateNumber(estimate.inputMiB),
-        });
-    } catch (error) {
-      if (videoEstimate)
-        videoEstimate.textContent =
-          error instanceof Error ? error.message : t('experiment.invalidEstimate');
-    }
-  }
-  function applyCalculatorPreset(id: keyof typeof calculatorPresets): void {
-    const preset = calculatorPresets[id];
-    for (const [key, value] of Object.entries(preset)) {
-      const input = calculatorInputs[key as keyof typeof calculatorInputs];
-      if (input) input.value = String(value);
-    }
-    updateCalculatorPresetSelection(id);
-    updateVideoEstimate();
-  }
   experimentalVideoInput?.addEventListener('change', () => {
     if (!editable()) return;
     if (!experimentalVideoInput.checked && !validVideoLimits(readVideoLimits()))
@@ -233,21 +172,6 @@ export function mountExperimentControls({
     input?.addEventListener('input', () => changed());
   for (const input of Object.values(videoLimitInputs))
     input?.addEventListener('input', () => changed());
-  for (const input of Object.values(calculatorInputs)) {
-    input?.addEventListener('input', () => {
-      updateCalculatorPresetSelection();
-      updateVideoEstimate();
-    });
-  }
-  for (const button of Array.from(
-    document.querySelectorAll<HTMLButtonElement>('[data-calculator-preset]'),
-  )) {
-    button.addEventListener('click', () => {
-      const id = button.dataset.calculatorPreset as keyof typeof calculatorPresets | undefined;
-      if (id && id in calculatorPresets) applyCalculatorPreset(id);
-    });
-  }
-
   return {
     read(): ExperimentSettings {
       return {
@@ -277,7 +201,6 @@ export function mountExperimentControls({
     },
     relocalize(): void {
       buildVideoControls();
-      updateVideoEstimate();
     },
     focusInvalid(settings: ExperimentSettings): void {
       (isGifLimits(settings.gifLimits)

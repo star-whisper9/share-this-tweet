@@ -22,21 +22,20 @@ export const zhCN = {
   'options.preferences': '分享偏好',
   'options.load.retry': '重新读取',
   'options.frame.title': '让照片自带出处',
-  'options.frame.description': '在照片顶部或底部加一行署名，发出去就不必另作说明。',
   'options.frame.presets': '画框左侧怎么写',
-  'options.frame.orientation': '默认画框方向',
+  'options.frame.orientation': '默认画框位置',
   'options.frame.top': '上',
   'options.frame.bottom': '下',
-  'options.stitch.style': '横向连接样式',
+  'options.stitch.style': '画廊媒体样式',
   'options.stitch.seamless': '无缝连接',
   'options.stitch.gallery': '画廊间隔',
-  'options.editor.frame': '自定义文字与变量',
+  'options.editor.frame': '自定义文字',
   'options.editor.filename': '自定义文件名',
-  'options.editor.text': '自定义文字排版',
+  'options.editor.text': '自定义文字',
   'options.editor.custom': '已自定义',
   'options.frame.template': '画框左侧模板',
   'options.frame.help':
-    '支持按 Enter 换行，长行会按图像宽度自动折行。这里只编辑画框左侧文字。右侧的纯数字 ID 和扩展标识固定显示，用于保留出处。',
+    '支持按 Enter 换行，长行会按图像宽度自动折行。这里只编辑画框左侧文字，右侧的纯数字 ID 和扩展标识固定显示，用于保留出处。',
   'options.frame.tokens': '插入来源栏变量',
   'options.frame.preview': '来源画框示意',
   'options.preview.shared': '分享出去的样子',
@@ -46,7 +45,6 @@ export const zhCN = {
   'options.preview.frameDescription':
     '左侧为模板预览；右侧纯数字 ID 和扩展标识为固定溯源信息，主题自动跟随当前页面或系统，排版仅供示意。',
   'options.filename.title': '日后也找得到来源',
-  'options.filename.description': '把推主与推文编号留在文件名里，归档时更好找。',
   'options.filename.presets': '选一种命名方式',
   'options.filename.template': '文件名模板',
   'options.filename.tokens': '插入文件名变量',
@@ -57,7 +55,6 @@ export const zhCN = {
   'options.preview.photoNumber': '第 1 张照片',
   'options.preview.filenameDescription': '上方文件名由你当前的模板实时生成。',
   'options.text.title': '不只分享一个链接',
-  'options.text.description': '把文字和出处一起复制，直接粘贴到聊天中。',
   'options.text.presets': '文字的分享方式',
   'options.text.template': '复制文本模板',
   'options.text.tokens': '插入文本变量',
@@ -66,7 +63,6 @@ export const zhCN = {
   'options.preview.you': '你',
   'options.preview.textDescription': '以上为示例内容，不会读取你的标签页和聊天。',
   'options.records.title': '查找你保存过的来源',
-  'options.records.description': '推文来源只保存在本机。可以按 Tweet ID、作者或文件名查找。',
   'options.records.search': '搜索 Tweet ID、作者或文件名',
   'options.records.refresh': '刷新',
   'options.records.export': '导出 JSON',
@@ -155,7 +151,7 @@ export const zhCN = {
   'options.guide.intro':
     '点击变量插入光标或替换选区。变量缺失时为空；0 和 false 是有效值。日期格式统一使用 UTC。',
   'options.guide.syntax':
-    '默认值：{tweet.language|未知}。可选区块：{?quote.tweet.id}引用：{quote.tweet.url}{/quote.tweet.id}。区块按有无值显示，不支持嵌套；字面花括号与默认值中的 | 不支持转义。',
+    '默认值：{tweet.language|未知}。可选区块：{?quote.tweet.id}。引用：{quote.tweet.url}{/quote.tweet.id}。区块按有无值显示，不支持嵌套；字面花括号与默认值中的 | 不支持转义。',
   'options.guide.quote':
     '复制模板未写引用变量时会自动追加一层引用；显式使用引用变量／区块后由模板控制。媒体变量只适用于命名和画框；引用媒体保存时，推文和作者变量指媒体所属推文。',
   'options.guide.search': '搜索变量、说明或语法',
@@ -227,18 +223,16 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.preferences': 'Sharing preferences',
   'options.load.retry': 'Try again',
   'options.frame.title': 'Give every photo its source',
-  'options.frame.description':
-    'Add a credit line above or below a photo, so its source travels with it.',
   'options.frame.presets': 'What appears on the left',
   'options.frame.orientation': 'Default frame position',
   'options.frame.top': 'Top',
   'options.frame.bottom': 'Bottom',
-  'options.stitch.style': 'Horizontal connection style',
+  'options.stitch.style': 'Gallery media style',
   'options.stitch.seamless': 'Seamless',
   'options.stitch.gallery': 'Gallery gap',
-  'options.editor.frame': 'Custom text and variables',
+  'options.editor.frame': 'Custom text',
   'options.editor.filename': 'Custom filename',
-  'options.editor.text': 'Custom text layout',
+  'options.editor.text': 'Custom text',
   'options.editor.custom': 'Custom',
   'options.frame.template': 'Left frame template',
   'options.frame.help':
@@ -252,8 +246,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.preview.frameDescription':
     'The left side previews your template. The numeric ID and extension on the right are fixed source details. Colors follow the page or system theme; layout is illustrative.',
   'options.filename.title': 'Find the source later',
-  'options.filename.description':
-    'Keep the author and post ID in filenames to make your archive easier to search.',
   'options.filename.presets': 'Choose a naming pattern',
   'options.filename.template': 'Filename template',
   'options.filename.tokens': 'Insert filename variable',
@@ -264,7 +256,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.preview.photoNumber': 'Photo 1',
   'options.preview.filenameDescription': 'The filename above updates from your current template.',
   'options.text.title': 'Share more than a link',
-  'options.text.description': 'Copy the text and its source together, then paste it into a chat.',
   'options.text.presets': 'How to share text',
   'options.text.template': 'Copied-text template',
   'options.text.tokens': 'Insert text variable',
@@ -273,8 +264,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.preview.you': 'You',
   'options.preview.textDescription': 'This is sample content. Your tabs and chats are never read.',
   'options.records.title': 'Find saved sources',
-  'options.records.description':
-    'Sources stay on this device. Search by Tweet ID, author, or filename.',
   'options.records.search': 'Search Tweet ID, author, or filename',
   'options.records.refresh': 'Refresh',
   'options.records.export': 'Export JSON',
@@ -369,7 +358,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'options.guide.intro':
     'Click a variable to insert it at the cursor or replace the selection. Missing values are empty; 0 and false are valid. Dates always use UTC.',
   'options.guide.syntax':
-    'Default value: {tweet.language|unknown}. Optional block: {?quote.tweet.id}Quoted: {quote.tweet.url}{/quote.tweet.id}. Blocks display only when their value exists and cannot nest. Literal braces and | in default values cannot be escaped.',
+    'Default value: {tweet.language|unknown}. Optional block: {?quote.tweet.id}. Quoted: {quote.tweet.url}{/quote.tweet.id}. Blocks display only when their value exists and cannot nest. Literal braces and | in default values cannot be escaped.',
   'options.guide.quote':
     'When a copied-text template has no quote variables, a quote is appended automatically. Once you use quote variables or blocks, the template controls it. Media variables work only for filenames and frames; for quoted media, post and author variables refer to the media’s own post.',
   'options.guide.search': 'Search variables, descriptions, or syntax',

@@ -1,9 +1,10 @@
 export const zhCN = {
   'gif.title': 'GIF 本地转码',
-  'gif.enable': '将单项 GIF 保存为 .gif',
-  'gif.enableDescription': '默认开启。关闭后保存 X 提供的原始 MP4；与动态拼图和视频画框独立。',
+  'gif.enable': '将 GIF 保存为 .gif',
+  'gif.enableDescription':
+    '将 GIF 图存储为 GIF 格式，关闭后将保存 X 提供的原始 MP4。与动态拼图和视频画框独立；输出最长边 960 px、最高 20 fps、256 色调色板。处理使用本机 CPU，可在导出任务页查看进度或取消。',
   'gif.limits.title': 'GIF 转码限制',
-  'gif.limits.description': '超过以下任一限制时保存原始 MP4，并在任务中说明原因。编码失败会报错。',
+  'gif.limits.description': '超过以下任一限制时保存原始 MP4。',
   'gif.limit.input': '输入 MP4 大小',
   'gif.limit.duration': '源动画时长',
   'gif.limit.pixels': '源画面像素数',
@@ -26,15 +27,15 @@ export const zhCN = {
 
   'experiment.tab': '实验功能',
   'experiment.title': '本地媒体处理（实验性）',
-  'experiment.enable': '启用动态拼图与视频画框',
-  'experiment.enableDescription': '它会使用本机 CPU，进度可在导出任务页查看。',
+  'experiment.enable': '动态拼图与视频画框',
+  'experiment.enableDescription':
+    '允许拼接动态画廊，为视频媒体添加画框，处理使用本机 CPU，可在导出任务页查看进度或取消。',
   'experiment.disabled': '动态拼图实验功能尚未启用。',
   'experiment.invalidLimits': '请填写有效的非负整数限制值。',
   'experiment.limitInput': '输入媒体总大小超过 {limit} MiB 的限制。',
   'experiment.limitDuration': '动态内容时长超过 {limit} 秒的限制。',
   'experiment.limitPixels': '画面像素数超过 {limit} 的限制。',
   'experiment.limitFrameRate': '帧率超过 {limit} fps 的限制。',
-  'experiment.invalidEstimate': '请填写有效的画面尺寸、时长、帧率和码率。',
   'experiment.outputWarnings': '已保存媒体，请注意：{warnings}',
   'experiment.fallbackFrame': '超过处理限制（{reason}），改为原媒体输出。',
   'experiment.fallbackStitch': '超过处理限制（{reason}），改为静态拼图。',
@@ -51,37 +52,17 @@ export const zhCN = {
   'experiment.limit.fps': '最高帧率',
   'experiment.unit.mib': 'MiB，0 为不限制',
   'experiment.unit.seconds': '秒，0 为不限制',
-  'experiment.unit.seconds.short': '秒',
   'experiment.unit.pixels': '像素，0 为不限制',
   'experiment.unit.fps': 'fps，0 为不限制',
-  'experiment.calculator.title': '处理时间参考',
-  'experiment.calculator.description':
-    '按最终画布尺寸估算；拼图请填合并后的宽高、最长时长与最高帧率。',
-  'experiment.calculator.presets': '估算样例',
-  'experiment.calculator.preset480p': '480p 短视频',
-  'experiment.calculator.preset720p': '720p 短视频',
-  'experiment.calculator.preset1080p': '1080p 短视频',
-  'experiment.calculator.presetLong1080p': '1080p 长视频',
-  'experiment.calculator.width': '宽',
-  'experiment.calculator.height': '高',
-  'experiment.calculator.duration': '时长',
-  'experiment.calculator.frameRate': '帧率',
-  'experiment.calculator.bitrate': '码率',
-  'experiment.calculator.result': '预计处理时间：{min}–{max} 秒；输入文件约 {input} MiB。',
-  'experiment.calculator.environment':
-    '参考环境：Apple M4 · Firefox Desktop。不含加载与下载；长视频可能超出此范围。码率仅用于估算输入文件大小。',
-  'experiment.calculator.reference':
-    '示例码率来自 X Engineering 2020 的历史质量样例，并非当前上传规则。',
 } as const;
 
 export const en: Record<keyof typeof zhCN, string> = {
   'gif.title': 'Local GIF conversion',
-  'gif.enable': 'Save individual GIFs as .gif',
+  'gif.enable': 'Save GIFs as .gif',
   'gif.enableDescription':
-    'Enabled by default. When disabled, saves the original MP4 provided by X. Independent of animated collages and video frames.',
+    'Save GIFs in GIF format. When disabled, saves the original MP4 provided by X. Independent of animated collages and video frames. Output: longest edge 960 px, up to 20 fps, 256-color palette. Processing uses your local CPU; track progress or cancel on the export tasks page.',
   'gif.limits.title': 'GIF conversion limits',
-  'gif.limits.description':
-    'Exceeding any limit saves the original MP4 with a reason in the task. Encoding failures are reported as errors.',
+  'gif.limits.description': 'Exceeding any of these limits saves the original MP4.',
   'gif.limit.input': 'Input MP4 size',
   'gif.limit.duration': 'Source animation duration',
   'gif.limit.pixels': 'Source frame pixels',
@@ -104,16 +85,15 @@ export const en: Record<keyof typeof zhCN, string> = {
 
   'experiment.tab': 'Experimental',
   'experiment.title': 'Local media processing (experimental)',
-  'experiment.enable': 'Enable animated collages and video frames',
+  'experiment.enable': 'Animated collages and video frames',
   'experiment.enableDescription':
-    'It uses your local CPU. Track progress on the export tasks page.',
+    'Create animated galleries and add source frames to videos. Processing uses your local CPU; track progress or cancel on the export tasks page.',
   'experiment.disabled': 'The animated-collage experiment is not enabled.',
   'experiment.invalidLimits': 'Enter valid non-negative integer limits.',
   'experiment.limitInput': 'Total input media exceeds the {limit} MiB limit.',
   'experiment.limitDuration': 'Animated content exceeds the {limit}-second limit.',
   'experiment.limitPixels': 'Frame pixels exceed the {limit} limit.',
   'experiment.limitFrameRate': 'Frame rate exceeds the {limit} fps limit.',
-  'experiment.invalidEstimate': 'Enter valid dimensions, duration, frame rate, and bitrate.',
   'experiment.outputWarnings': 'Media saved. Please note: {warnings}',
   'experiment.fallbackFrame':
     'The processing limit was exceeded ({reason}); using the original media output.',
@@ -133,26 +113,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'experiment.limit.fps': 'Maximum frame rate',
   'experiment.unit.mib': 'MiB; 0 means unlimited',
   'experiment.unit.seconds': 'seconds; 0 means unlimited',
-  'experiment.unit.seconds.short': 'seconds',
   'experiment.unit.pixels': 'pixels; 0 means unlimited',
   'experiment.unit.fps': 'fps; 0 means unlimited',
-  'experiment.calculator.title': 'Processing-time reference',
-  'experiment.calculator.description':
-    'Uses final canvas size. For collages, enter the combined dimensions, longest duration, and highest frame rate.',
-  'experiment.calculator.presets': 'Estimate examples',
-  'experiment.calculator.preset480p': 'Short 480p',
-  'experiment.calculator.preset720p': 'Short 720p',
-  'experiment.calculator.preset1080p': 'Short 1080p',
-  'experiment.calculator.presetLong1080p': 'Long 1080p',
-  'experiment.calculator.width': 'Width',
-  'experiment.calculator.height': 'Height',
-  'experiment.calculator.duration': 'Duration',
-  'experiment.calculator.frameRate': 'Frame rate',
-  'experiment.calculator.bitrate': 'Bitrate',
-  'experiment.calculator.result':
-    'Estimated processing time: {min}–{max} seconds; input file about {input} MiB.',
-  'experiment.calculator.environment':
-    'Reference environment: Apple M4 · Firefox Desktop. Excludes loading and downloading; long videos may fall outside this range. Bitrate only estimates input-file size.',
-  'experiment.calculator.reference':
-    'Example bitrates are from a historical X Engineering quality sample (2020), not current upload rules.',
 };

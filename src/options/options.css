@@ -404,28 +404,16 @@ h2 {
   font-size: 13px;
 }
 .experiment-toggle small,
-.experiment-block-heading p,
-.experiment-environment,
-.experiment-reference {
+.experiment-block-heading p {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.65;
 }
-.experiment-reference {
-  margin-top: 7px;
-}
-.experiment-reference a {
-  color: var(--accent);
-}
 .experiment-settings {
   display: grid;
   gap: 22px;
   margin-top: 22px;
-}
-.experiment-block {
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
 }
 .experiment-settings > .experiment-block:first-child {
   padding-top: 0;
@@ -436,20 +424,13 @@ h2 {
   font-size: 14px;
   letter-spacing: -0.2px;
 }
-.experiment-presets,
-.experiment-calculator-presets {
+.experiment-presets {
   display: grid;
   gap: 7px;
   margin-top: 14px;
-}
-.experiment-presets {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
-.experiment-calculator-presets {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.experiment-presets button,
-.experiment-calculator-presets button {
+.experiment-presets button {
   min-height: 38px;
   padding: 7px;
   border: 1px solid var(--border);
@@ -460,39 +441,29 @@ h2 {
   font-weight: 650;
   text-align: center;
 }
-.experiment-presets button[aria-pressed='true'],
-.experiment-calculator-presets button[aria-pressed='true'] {
+.experiment-presets button[aria-pressed='true'] {
   border-color: var(--accent);
   background: var(--tint);
   color: var(--accent);
   box-shadow: inset 0 0 0 0.5px var(--accent);
 }
-.experiment-limits-grid,
-.experiment-calculator-grid {
+.experiment-limits-grid {
   display: grid;
   gap: 10px;
   margin-top: 14px;
-}
-.experiment-limits-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.experiment-calculator-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-.experiment-limits-grid label,
-.experiment-calculator-grid label {
+.experiment-limits-grid label {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
-.experiment-limits-grid label > span,
-.experiment-calculator-grid label > span {
+.experiment-limits-grid label > span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
 }
-.experiment-limits-grid input,
-.experiment-calculator-grid input {
+.experiment-limits-grid input {
   min-width: 0;
   min-height: 38px;
   padding: 7px 8px;
@@ -502,8 +473,7 @@ h2 {
   color: var(--text);
   font-size: 12px;
 }
-.experiment-limits-grid small,
-.experiment-calculator-grid small {
+.experiment-limits-grid small {
   color: var(--faint);
   font-size: 10px;
   line-height: 1.35;
@@ -513,17 +483,6 @@ h2 {
   margin: 9px 0 0;
   color: var(--danger);
   font-size: 11px;
-}
-.experiment-estimate {
-  display: block;
-  margin-top: 15px;
-  padding: 12px;
-  border: 1px solid var(--tint-border);
-  border-radius: 10px;
-  background: var(--tint);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
 }
 form[data-active-tab='records'] .save-bar {
   display: none;
@@ -1260,11 +1219,7 @@ form[data-state='loading'] .state-dot {
     min-height: 76px;
     padding: 12px 9px 10px;
   }
-  .experiment-presets,
-  .experiment-calculator-presets {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .experiment-calculator-grid {
+  .experiment-presets {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .preview-heading {
@@ -1324,8 +1279,7 @@ form[data-state='loading'] .state-dot {
   h1 {
     font-size: 24px;
   }
-  .experiment-limits-grid,
-  .experiment-calculator-grid {
+  .experiment-limits-grid {
     grid-template-columns: 1fr;
   }
   .save-state {
