@@ -23,6 +23,13 @@ import {
 import { formatCardMediaDuration, getCardMediaPreview } from './card-media.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
 import { normalizeHandle } from '../shared/model.js';
+import {
+  pollFooter,
+  pollLabels,
+  pollPercentage,
+  pollResultsVisible,
+  type TweetPoll,
+} from '../shared/poll.js';
 
 const CARD_FONT_FAMILY = '"SF Pro Display", "Helvetica Neue", system-ui, sans-serif';
 const CARD_MAX_WIDTH = 1200;
@@ -51,6 +58,7 @@ export interface TweetCardLayoutInput extends CardTextMeasurement {
   images: CardImageDimension[];
   text: string;
   translation?: { text: string; sourceLanguage: string };
+  poll?: TweetPoll;
   measureLabelText?: CardTextMeasurement['measureText'];
   cardWidth?: number;
   mediaLayout?: 'grid' | 'row';
@@ -68,12 +76,39 @@ export interface TweetCardLayout {
   labelFontSize: number;
   labelLineHeight: number;
   textLines: string[];
-  bodyLines: Array<{ text: string; icon?: 'grok' | 'x'; label?: boolean; runs?: CardTextRun[] }>;
+  bodyLines: Array<{
+    text: string;
+    y: number;
+    icon?: 'grok' | 'x';
+    label?: boolean;
+    runs?: CardTextRun[];
+  }>;
+  pollBlocks: CardPollLayout[];
   textLineHeight: number;
   imageY: number;
   imageRects: CardImageRect[];
   imageAreaHeight: number;
   footerHeight: number;
+}
+
+export interface CardPollLayout {
+  y: number;
+  height: number;
+  heading: string;
+  translated: boolean;
+  optionPadding: number;
+  selectionWidth: number;
+  options: Array<{
+    index: number;
+    y: number;
+    height: number;
+    labelWidth: number;
+    lines: string[];
+    selected: boolean;
+    percentage?: number;
+  }>;
+  footerY: number;
+  footerLines: string[];
 }
 
 export interface TweetCardResult {
@@ -140,6 +175,7 @@ function validateImageDimensions(images: CardImageDimension[]): void {
 }
 
 export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCardLayout {
+  if (input.poll?.status === 'invalid') throw new Error(t('core.poll.invalid', {}, input.locale));
   validateImageDimensions(input.images);
   const naturalWidth = input.images.length
     ? Math.max(...input.images.map((image) => image.width))
@@ -155,22 +191,78 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
   const textLineHeight = Math.round(bodyFontSize * 1.42);
   const labelFontSize = Math.max(12, Math.round(bodyFontSize * 0.7));
   const labelLineHeight = Math.round(labelFontSize * 1.5);
+  const gap = Math.max(12, Math.round(width * 0.015));
+  const measureLabelText =
+    input.measureLabelText ??
+    ((value: string) => ({
+      width: (input.measureText(value).width * labelFontSize) / bodyFontSize,
+    }));
   const bodyLines: TweetCardLayout['bodyLines'] = [];
+  const pollBlocks: CardPollLayout[] = [];
+  let bodyY = padding + headerHeight + gap;
+  const appendLine = (line: Omit<TweetCardLayout['bodyLines'][number], 'y'>) => {
+    bodyLines.push({ ...line, y: bodyY });
+    bodyY += line.label ? labelLineHeight : textLineHeight;
+  };
   const appendText = (text: string) => {
     if (!text.trim()) return;
     const lines = wrapCardText(text, contentWidth, input.measureText);
     const runs = tagRunsForLines(text, lines);
-    bodyLines.push(...lines.map((text, index) => ({ text, runs: runs[index] })));
+    lines.forEach((text, index) => appendLine({ text, runs: runs[index] }));
   };
   const appendLabel = (text: string, icon: 'grok' | 'x') => {
-    bodyLines.push(
-      ...wrapCardText(
-        text,
-        contentWidth - labelFontSize * 1.4,
-        input.measureLabelText ??
-          ((value) => ({ width: (input.measureText(value).width * labelFontSize) / bodyFontSize })),
-      ).map((text, index) => ({ text, label: true, ...(index === 0 ? { icon } : {}) })),
+    wrapCardText(text, contentWidth - labelFontSize * 1.4, measureLabelText).forEach(
+      (text, index) => appendLine({ text, label: true, ...(index === 0 ? { icon } : {}) }),
     );
+  };
+  const appendPoll = (translated: boolean) => {
+    const poll = input.poll;
+    if (!poll || poll.status !== 'available') return;
+    if (bodyLines.length || pollBlocks.length) bodyY += gap;
+    const y = bodyY;
+    const optionPadding = Math.max(10, Math.round(bodyFontSize * 0.6));
+    const selectionWidth = Math.round(bodyFontSize * 1.4);
+    const resultsVisible =
+      pollResultsVisible(poll) && poll.options.every((option) => option.votes !== undefined);
+    const percentageWidth = resultsVisible
+      ? Math.max(bodyFontSize * 3.5, input.measureText('100.0%').width) + optionPadding
+      : 0;
+    const labelWidth = contentWidth - optionPadding * 2 - selectionWidth - percentageWidth;
+    const labels = pollLabels(poll, translated);
+    bodyY += labelLineHeight + optionPadding;
+    const options = poll.options.map((option, index) => {
+      const lines = wrapCardText(labels[index]!, labelWidth, input.measureText);
+      const height = Math.max(1, lines.length) * textLineHeight + optionPadding * 2;
+      const result = {
+        index: option.index,
+        y: bodyY,
+        height,
+        labelWidth,
+        lines,
+        selected: poll.selectedChoice === option.index,
+        ...(resultsVisible ? { percentage: pollPercentage(poll, option.index) } : {}),
+      };
+      bodyY += height + optionPadding;
+      return result;
+    });
+    const footerY = bodyY;
+    const footerLines = wrapCardText(
+      pollFooter(poll, input.locale),
+      contentWidth,
+      measureLabelText,
+    );
+    bodyY += footerLines.length * labelLineHeight;
+    pollBlocks.push({
+      y,
+      height: bodyY - y,
+      heading: t('core.poll.heading', {}, input.locale),
+      translated,
+      optionPadding,
+      selectionWidth,
+      options,
+      footerY,
+      footerLines,
+    });
   };
   if (input.translation) {
     appendLabel(
@@ -178,20 +270,15 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       'grok',
     );
     appendText(input.translation.text);
-    bodyLines.push({ text: '' });
+    if (input.poll?.status === 'available' && input.poll.translation?.status === 'available')
+      appendPoll(true);
+    appendLine({ text: '' });
     appendLabel(t('core.translation.original', {}, input.locale), 'x');
   }
   appendText(input.text);
+  appendPoll(false);
   const textLines = bodyLines.map((line) => line.text);
-  const gap = Math.max(12, Math.round(width * 0.015));
-  const textHeight =
-    textLines.length > 0
-      ? gap +
-        bodyLines.reduce(
-          (height, line) => height + (line.label ? labelLineHeight : textLineHeight),
-          0,
-        )
-      : 0;
+  const textHeight = bodyLines.length || pollBlocks.length ? bodyY - padding - headerHeight : 0;
   const imageRects: CardImageRect[] = [];
 
   if (input.images.length === 1) {
@@ -259,6 +346,7 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
     labelLineHeight,
     textLines,
     bodyLines,
+    pollBlocks,
     textLineHeight,
     imageY,
     imageRects,
@@ -290,6 +378,73 @@ function drawAvatar(
     context.fillText('X', x + size / 2, y + size / 2);
   }
   context.restore();
+}
+
+function drawPoll(
+  context: CanvasRenderingContext2D,
+  block: CardPollLayout,
+  layout: TweetCardLayout,
+  palette: CardPalette,
+  theme: CardTheme,
+  locale?: Locale,
+): void {
+  const accent = theme === 'dark' ? '#8cc8f5' : '#559bd2';
+  context.textAlign = 'left';
+  context.textBaseline = 'top';
+  context.fillStyle = palette.muted;
+  context.font = `600 ${layout.labelFontSize}px ${CARD_FONT_FAMILY}`;
+  context.fillText(block.heading, layout.padding, block.y);
+  for (const option of block.options) {
+    const x = layout.padding;
+    context.fillStyle = palette.imageBackground;
+    context.fillRect(x, option.y, layout.contentWidth, option.height);
+    if (option.percentage !== undefined) {
+      context.save();
+      context.globalAlpha = option.selected ? 0.3 : 0.18;
+      context.fillStyle = accent;
+      context.fillRect(x, option.y, (layout.contentWidth * option.percentage) / 100, option.height);
+      context.restore();
+    }
+    context.strokeStyle = option.selected ? accent : palette.border;
+    context.lineWidth = option.selected ? 2 : 1;
+    context.strokeRect(x + 0.5, option.y + 0.5, layout.contentWidth - 1, option.height - 1);
+    const textY = option.y + block.optionPadding;
+    if (option.selected) {
+      const checkX = x + block.optionPadding;
+      const checkY = textY + layout.bodyFontSize * 0.5;
+      context.strokeStyle = accent;
+      context.lineWidth = Math.max(2, layout.bodyFontSize * 0.12);
+      context.beginPath();
+      context.moveTo(checkX, checkY);
+      context.lineTo(checkX + layout.bodyFontSize * 0.25, checkY + layout.bodyFontSize * 0.25);
+      context.lineTo(checkX + layout.bodyFontSize * 0.65, checkY - layout.bodyFontSize * 0.25);
+      context.stroke();
+    }
+    context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
+    context.fillStyle = palette.text;
+    option.lines.forEach((line, index) =>
+      context.fillText(
+        line,
+        x + block.optionPadding + block.selectionWidth,
+        textY + index * layout.textLineHeight,
+      ),
+    );
+    if (option.percentage !== undefined) {
+      context.textAlign = 'right';
+      context.font = `600 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
+      context.fillText(
+        `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(option.percentage)}%`,
+        x + layout.contentWidth - block.optionPadding,
+        textY,
+      );
+      context.textAlign = 'left';
+    }
+  }
+  context.fillStyle = palette.muted;
+  context.font = `400 ${layout.labelFontSize}px ${CARD_FONT_FAMILY}`;
+  block.footerLines.forEach((line, index) =>
+    context.fillText(line, layout.padding, block.footerY + index * layout.labelLineHeight),
+  );
 }
 
 function drawContainedImage(
@@ -405,6 +560,8 @@ async function renderCardCanvas(
   mediaInput: MediaRecord | MediaRecord[],
   options: CardRenderOptions & { cardWidth?: number } = {},
 ): Promise<HTMLCanvasElement> {
+  if (record.poll?.status === 'invalid')
+    throw new Error(t('core.poll.invalid', {}, options.locale));
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
   if (media.length > 4) {
     throw new Error(t('core.card.maxMedia', {}, options.locale));
@@ -494,6 +651,7 @@ async function renderCardCanvas(
     const layout = calculateTweetCardLayout({
       images: cardMedia.map((item) => ({ width: item.preview.width, height: item.preview.height })),
       text: record.text,
+      poll: record.poll,
       translation: translation
         ? {
             text: translation.text,
@@ -571,13 +729,10 @@ async function renderCardCanvas(
     context.textAlign = 'left';
     context.fillStyle = palette.text;
     context.font = `400 ${layout.bodyFontSize}px ${CARD_FONT_FAMILY}`;
-    let textY =
-      layout.padding + layout.headerHeight + Math.max(12, Math.round(layout.width * 0.015));
     layout.bodyLines.forEach((line) => {
-      const y = textY;
+      const y = line.y;
       const fontSize = line.label ? layout.labelFontSize : layout.bodyFontSize;
       context.font = `400 ${fontSize}px ${CARD_FONT_FAMILY}`;
-      textY += line.label ? layout.labelLineHeight : layout.textLineHeight;
       const icon = line.icon === 'grok' ? grokIcon : line.icon === 'x' ? xIcon : undefined;
       context.fillStyle = line.label ? palette.muted : palette.text;
       if (icon) context.drawImage(icon, layout.padding, y, fontSize, fontSize);
@@ -594,6 +749,9 @@ async function renderCardCanvas(
         context.fillText(line.text, layout.padding + (line.icon ? fontSize * 1.4 : 0), y);
       }
     });
+    layout.pollBlocks.forEach((block) =>
+      drawPoll(context, block, layout, palette, theme, options.locale),
+    );
 
     cardMedia.forEach((item, index) => {
       const rect = layout.imageRects[index]!;

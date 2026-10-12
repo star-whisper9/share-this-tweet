@@ -1,3 +1,4 @@
+import { pollWarning } from '../shared/poll.js';
 import { translationWarning } from '../shared/translation.js';
 import { t } from '../shared/i18n.js';
 import type { ExportSession } from './export-session.js';
@@ -102,13 +103,12 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
     [t('content.mainTweet'), session.record],
     [t('content.quoteTweet'), session.quoted?.record],
   ] as const) {
-    const warning = translationWarning(record?.translation);
-    if (warning) {
-      const message = node(
-        'p',
-        'stt-translation-warning',
-        t('content.translationWarning', { label, warning }),
-      );
+    for (const [key, warning] of [
+      ['content.translationWarning', translationWarning(record?.translation)],
+      ['content.pollWarning', pollWarning(record?.poll)],
+    ] as const) {
+      if (!warning) continue;
+      const message = node('p', 'stt-translation-warning', t(key, { label, warning }));
       message.setAttribute('role', 'status');
       actions.append(message);
     }

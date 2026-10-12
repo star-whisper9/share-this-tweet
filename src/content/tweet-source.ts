@@ -1,3 +1,4 @@
+import { bindPollTranslation } from '../shared/poll.js';
 import {
   normalizeTranslation,
   mergeTranslation,
@@ -100,9 +101,11 @@ export class TweetSource {
       undefined,
       record.text,
     );
-    return JSON.stringify(translation) === JSON.stringify(record.translation)
+    const poll = bindPollTranslation(record.poll, translation);
+    return poll === record.poll &&
+      JSON.stringify(translation) === JSON.stringify(record.translation)
       ? record
-      : { ...record, translation };
+      : { ...record, translation, poll };
   }
 
   private readonly records = new Map<string, TweetRecord>();

@@ -1,3 +1,4 @@
+import { buildPollText } from '../shared/poll.js';
 import { languageName } from '../shared/translation.js';
 import { t, type Locale, type MessageKey } from '../shared/i18n.js';
 import type { MediaRecord, TweetRecord } from '../shared/model.js';
@@ -79,6 +80,12 @@ const base: TemplateField[] = [
   field('translation.originalText', '推文', 'Hello', ({ tweet }) => tweet.text),
   field('translation.text', '推文', { key: 'core.field.example.translation.text' }, ({ tweet }) =>
     tweet.translation?.status === 'available' ? tweet.translation.text : undefined,
+  ),
+  field('poll.originalText', '推文', '1. A\n2. B', ({ tweet, locale }) =>
+    buildPollText(tweet.poll, false, locale),
+  ),
+  field('poll.translatedText', '推文', '1. 甲\n2. 乙', ({ tweet, locale }) =>
+    tweet.translation?.status === 'available' ? buildPollText(tweet.poll, true, locale) : undefined,
   ),
   field('tweet.language', '推文', 'zh', ({ tweet }) => tweet.language),
   field('tweet.replyToTweetId', '推文', '123456789', ({ tweet }) => tweet.replyToTweetId),

@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderTweetCard } from '../src/core/card.js';
+import { calculateTweetCardLayout, renderTweetCard } from '../src/core/card.js';
 import type { ImageResources } from '../src/core/image-resources.js';
 import type { MediaRecord, TweetRecord } from '../src/shared/model.js';
 
 const drawCalls: string[] = [];
+const textCalls: Array<{ text: string; x: number; y: number }> = [];
+const fillCalls: Array<{ x: number; y: number; width: number; height: number }> = [];
 
 class FakeCanvas {
   width = 0;
   height = 0;
   readonly context = new FakeContext();
+  readonly remove = vi.fn();
+  readonly removeAttribute = vi.fn();
 
   getContext(): CanvasRenderingContext2D {
     return this.context as unknown as CanvasRenderingContext2D;
@@ -35,13 +39,17 @@ class FakeContext {
   clip(): void {}
   arc(): void {}
   fill(): void {}
-  fillRect(): void {}
+  fillRect(x: number, y: number, width: number, height: number): void {
+    fillCalls.push({ x, y, width, height });
+  }
   strokeRect(): void {}
   stroke(): void {}
   moveTo(): void {}
   lineTo(): void {}
   scale(): void {}
-  fillText(): void {}
+  fillText(text: string, x: number, y: number): void {
+    textCalls.push({ text, x, y });
+  }
   drawImage(image: { id?: string }): void {
     if (image.id) drawCalls.push(image.id);
   }
@@ -104,6 +112,8 @@ function installCanvas(): void {
 
 afterEach(() => {
   drawCalls.length = 0;
+  textCalls.length = 0;
+  fillCalls.length = 0;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -218,3 +228,86 @@ it.each([undefined, 'broken'])(
     ).rejects.toThrow();
   },
 );
+
+describe('renderTweetCard polls', () => {
+  it.each(['light', 'dark'] as const)(
+    'draws poll labels and proportional bars in a %s quoted card',
+    async (theme) => {
+      installCanvas();
+      const quoted = {
+        ...record([]),
+        tweetId: '2',
+        poll: {
+          status: 'available' as const,
+          options: [
+            { index: 1, label: 'Quoted option one', votes: 1 },
+            { index: 2, label: 'Quoted option two', votes: 3 },
+          ],
+          countsAreFinal: true,
+        },
+      };
+      const main = {
+        ...record([], quoted),
+        poll: {
+          status: 'available' as const,
+          options: [
+            { index: 1, label: 'Main option one', votes: 3 },
+            { index: 2, label: 'Main option two', votes: 1 },
+          ],
+          selectedChoice: 1,
+        },
+      };
+      const store = resources(
+        new Map([
+          ['avatar-main', new FakeImage('avatar')],
+          ['extension:/icons/icon-48.png', new FakeImage('brand')],
+        ]),
+      );
+      await expect(renderTweetCard(main, [], { theme, resources: store })).resolves.toMatchObject({
+        blob: expect.any(Blob),
+      });
+
+      const mainLayout = calculateTweetCardLayout({
+        images: [],
+        text: main.text,
+        poll: main.poll,
+        measureText: (text) => ({ width: Math.max(1, [...text].length * 10) }),
+      });
+      const quoteLayout = calculateTweetCardLayout({
+        images: [],
+        text: quoted.text,
+        poll: quoted.poll,
+        cardWidth: mainLayout.width - 48,
+        measureText: (text) => ({ width: Math.max(1, [...text].length * 10) }),
+      });
+      for (const layout of [mainLayout, quoteLayout]) {
+        const block = layout.pollBlocks[0]!;
+        for (const option of block.options) {
+          expect(textCalls.filter((call) => call.text === option.lines[0])).toEqual([
+            {
+              text: option.lines[0],
+              x: layout.padding + block.optionPadding + block.selectionWidth,
+              y: option.y + block.optionPadding,
+            },
+          ]);
+          expect(fillCalls).toContainEqual({
+            x: layout.padding,
+            y: option.y,
+            width: (layout.contentWidth * option.percentage!) / 100,
+            height: option.height,
+          });
+        }
+      }
+    },
+  );
+
+  it('fails malformed polls before loading resources', async () => {
+    installCanvas();
+    const main = { ...record([]), poll: { status: 'invalid' as const } };
+    const store = resources(new Map());
+    await expect(renderTweetCard(main, [], { theme: 'light', resources: store })).rejects.toThrow(
+      Error,
+    );
+    expect(store.load).not.toHaveBeenCalled();
+  });
+});

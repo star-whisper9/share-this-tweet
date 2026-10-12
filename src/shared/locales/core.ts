@@ -1,4 +1,18 @@
 export const zhCN = {
+  'core.poll.heading': '投票',
+  'core.poll.selected': '已选择',
+  'core.poll.votes': '{count} 次投票',
+  'core.poll.final': '最终结果',
+  'core.poll.endsAt': '结束于 {date}',
+  'core.poll.open': '投票进行中',
+  'core.poll.invalid': '投票数据格式异常，无法完整导出这条推文。',
+  'core.poll.translationInvalid': '投票选项译文不完整或与原选项不匹配，投票使用原文。',
+  'core.field.label.poll.originalText': '投票原文',
+  'core.field.description.poll.originalText': '投票选项、可见结果和状态。',
+  'core.field.label.poll.translatedText': '投票译文',
+  'core.field.description.poll.translatedText':
+    'X 提供的投票选项译文及可见结果；没有完整译文时为空。',
+
   'core.field.example.tweet.text': '今天的照片',
   'core.field.example.translation.sourceLanguage': '英语',
   'core.field.example.translation.targetLanguage': '中文',
@@ -14,7 +28,7 @@ export const zhCN = {
   'core.translation.warning.malformed': 'X 返回的翻译数据格式异常，已回退为原文。',
   'core.translation.warning.stale': '译文与当前原文不匹配，已回退为原文。',
   'core.text.defaultTemplate':
-    '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\nX · 原文：\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
+    '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · 原文：\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
   'core.text.quoteUnavailable': '引用内容不可用',
   'core.text.quotePending': '尚未获取引用内容',
   'core.text.quoteHeading': '── 引用推文 ──',
@@ -227,6 +241,20 @@ export const zhCN = {
 } as const;
 
 export const en: Record<keyof typeof zhCN, string> = {
+  'core.poll.heading': 'Poll',
+  'core.poll.selected': 'Selected',
+  'core.poll.votes': '{count} votes',
+  'core.poll.final': 'Final results',
+  'core.poll.endsAt': 'Ends at {date}',
+  'core.poll.open': 'Poll in progress',
+  'core.poll.invalid': 'The poll data is malformed. The post cannot be exported completely.',
+  'core.poll.translationInvalid':
+    'Poll translations are incomplete or do not match the choices. Original choices are used.',
+  'core.field.label.poll.originalText': 'Original poll',
+  'core.field.description.poll.originalText': 'Poll choices, visible results, and status.',
+  'core.field.label.poll.translatedText': 'Translated poll',
+  'core.field.description.poll.translatedText':
+    'Poll choice translations supplied by X with visible results; empty without complete translations.',
   'core.field.example.tweet.text': 'Today’s photo',
   'core.field.example.translation.sourceLanguage': 'English',
   'core.field.example.translation.targetLanguage': 'Chinese',
@@ -245,7 +273,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'core.translation.warning.stale':
     'The translation does not match the current original text. The original text is used instead.',
   'core.text.defaultTemplate':
-    '{?translation.text}Grok · Translated from {translation.sourceLanguage}\n{translation.text}\n\nX · Original:\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
+    '{?translation.text}Grok · Translated from {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · Original:\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}',
   'core.text.quoteUnavailable': 'Quoted post unavailable',
   'core.text.quotePending': 'Quoted post has not been fetched yet',
   'core.text.quoteHeading': '── Quoted post ──',

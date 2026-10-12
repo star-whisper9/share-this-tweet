@@ -1,3 +1,4 @@
+import { bindPollTranslation, mergePoll, type TweetPoll } from './poll.js';
 import { mergeTranslation, type TweetTranslation } from './translation.js';
 export type MediaType = 'photo' | 'video' | 'animated_gif';
 
@@ -50,6 +51,7 @@ export interface TweetRecord {
   author: TweetAuthor;
   publishedAt?: string;
   media: MediaRecord[];
+  poll?: TweetPoll;
   quote?: TweetQuote;
   language?: string;
   translation?: TweetTranslation;
@@ -121,6 +123,11 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
   const incomingRank = rank[incoming.textSource ?? 'partial'];
   const useIncomingText =
     incomingRank > currentRank || (incomingRank === currentRank && (newer || !current.text));
+  const translation = mergeTranslation(
+    preferred.translation,
+    fallback.translation,
+    useIncomingText ? incoming.text : current.text,
+  );
   return {
     tweetId: current.tweetId,
     url:
@@ -131,11 +138,8 @@ export function mergeTweetRecords(current: TweetRecord, incoming: TweetRecord): 
     textSource: useIncomingText ? incoming.textSource : current.textSource,
     observedAt: preferred.observedAt ?? fallback.observedAt,
     language: preferred.language ?? fallback.language,
-    translation: mergeTranslation(
-      preferred.translation,
-      fallback.translation,
-      useIncomingText ? incoming.text : current.text,
-    ),
+    translation,
+    poll: bindPollTranslation(mergePoll(preferred.poll, fallback.poll), translation),
     replyToTweetId: preferred.replyToTweetId ?? fallback.replyToTweetId,
     replyToUserId: preferred.replyToUserId ?? fallback.replyToUserId,
     sensitive: preferred.sensitive ?? fallback.sensitive,

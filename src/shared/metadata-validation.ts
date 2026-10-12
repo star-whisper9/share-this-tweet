@@ -1,6 +1,8 @@
+import { validPoll } from './poll.js';
 import { validTranslation } from './translation.js';
 /** Optional additions remain compatible with archives written before metadata support. */
 export function validMetadata(value: Record<string, unknown>): boolean {
+  if (!validPoll(value.poll)) return false;
   if (!validTranslation(value.translation)) return false;
   if (value.translation && typeof value.translation === 'object') {
     const translation = value.translation as Record<string, unknown>;

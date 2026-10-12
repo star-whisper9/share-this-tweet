@@ -1,3 +1,4 @@
+import { normalizePoll } from './poll.js';
 import { decodeHtmlEntities } from './html-entities.js';
 import { normalizeTranslation } from './translation.js';
 import type { MediaRecord, MediaVariant, TweetRecord, TweetQuote } from './model.js';
@@ -250,6 +251,10 @@ function normalizeCandidate(candidate: unknown, includeQuote: boolean): TweetRec
       : legacy.truncated === true || typeof legacy.full_text !== 'string'
         ? 'partial'
         : 'full',
+    poll: normalizePoll(
+      tweet.card ?? tweet.tweet_card ?? legacy.card ?? legacy.tweet_card,
+      tweet.grok_translated_post_with_availability,
+    ),
     language: getString(legacy, 'lang'),
     translation: normalizeTranslation(
       tweet.grok_translated_post_with_availability,

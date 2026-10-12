@@ -1,0 +1,103 @@
+{
+  "__typename": "Tweet",
+  "rest_id": "2109152716954222849",
+  "legacy": {
+    "full_text": "Pro users, would you rather have",
+    "lang": "en"
+  },
+  "card": {
+    "legacy": {
+      "name": "poll3choice_text_only",
+      "url": "card://2109152713607176192",
+      "binding_values": [
+        {
+          "key": "choice1_label",
+          "value": {
+            "string_value": "5h limits, 2X week usage",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "choice2_label",
+          "value": {
+            "string_value": "no 5h limits, same usage",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "selected_choice",
+          "value": {
+            "string_value": "2",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "end_datetime_utc",
+          "value": {
+            "string_value": "2026-10-11T17:22:47Z",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "counts_are_final",
+          "value": {
+            "boolean_value": true,
+            "type": "BOOLEAN"
+          }
+        },
+        {
+          "key": "choice2_count",
+          "value": {
+            "string_value": "91040",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "choice1_count",
+          "value": {
+            "string_value": "79775",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "last_updated_datetime_utc",
+          "value": {
+            "string_value": "2026-10-11T17:22:51Z",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "choice3_count",
+          "value": {
+            "string_value": "69828",
+            "type": "STRING"
+          }
+        },
+        {
+          "key": "choice3_label",
+          "value": {
+            "string_value": "show result",
+            "type": "STRING"
+          }
+        }
+      ]
+    }
+  },
+  "grok_translated_post_with_availability": {
+    "data": {
+      "associated_data": {
+        "poll_translations": ["5 小时限制，每周使用 2 次", "无 5 小时限制，相同使用量", "显示结果"]
+      },
+      "destination_language": "zh",
+      "entities": {
+        "hashtags": [],
+        "symbols": [],
+        "urls": [],
+        "user_mentions": []
+      },
+      "source_language": "en",
+      "translation": "专业用户，你们更愿意拥有"
+    },
+    "is_available": true
+  }
+}

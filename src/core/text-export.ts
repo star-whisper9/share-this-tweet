@@ -1,9 +1,13 @@
+import { buildPollText } from '../shared/poll.js';
 import type { TweetRecord } from '../shared/model.js';
 import { catalogs, getLocale, t, type Locale } from '../shared/i18n.js';
 import { renderTemplate } from './template.js';
 
-export const DEFAULT_TEXT_TEMPLATE =
+export const LEGACY_TEXT_TEMPLATE =
   '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\nX · 原文：\n{/translation.text}{translation.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
+
+export const DEFAULT_TEXT_TEMPLATE =
+  '{?translation.text}Grok · 翻译自 {translation.sourceLanguage}\n{translation.text}\n\n{/translation.text}{?poll.translatedText}{poll.translatedText}\n\n{/poll.translatedText}{?translation.text}X · 原文：\n{/translation.text}{translation.originalText}{?poll.originalText}\n\n{poll.originalText}{/poll.originalText}\n\n{author.name} (@{author.handle})\n{tweet.url}';
 
 export function getDefaultTextTemplate(locale: Locale = getLocale()): string {
   return t('core.text.defaultTemplate', {}, locale);
@@ -12,6 +16,9 @@ export function getDefaultTextTemplate(locale: Locale = getLocale()): string {
 export function isDefaultTextTemplate(value: string): boolean {
   return (
     value === DEFAULT_TEXT_TEMPLATE ||
+    value === LEGACY_TEXT_TEMPLATE ||
+    value ===
+      LEGACY_TEXT_TEMPLATE.replace('翻译自', 'Translated from').replace('原文：', 'Original:') ||
     (Object.keys(catalogs) as Locale[]).some((locale) => value === getDefaultTextTemplate(locale))
   );
 }
@@ -21,12 +28,17 @@ export function buildTweetText(
   template = getDefaultTextTemplate(),
   locale: Locale = getLocale(),
 ): string {
-  const main = renderTemplate(template, { tweet: record, locale });
+  // Validate poll data even when a custom template intentionally omits poll fields.
+  const poll = buildPollText(record.poll, false, locale);
+  const resolved = isDefaultTextTemplate(template) ? getDefaultTextTemplate(locale) : template;
+  let main = renderTemplate(resolved, { tweet: record, locale });
+  if (poll && !/\{(?:\?)?poll\./.test(resolved))
+    main += `\n\n${t('core.poll.heading', {}, locale)}\n${poll}`;
   const quote = record.quote;
   if (!quote || template.includes('{quote.') || template.includes('{?quote.')) return main;
   const quoted = quote.record;
   const content = quoted
-    ? renderTemplate(getDefaultTextTemplate(locale), { tweet: quoted, locale })
+    ? buildTweetText(quoted, getDefaultTextTemplate(locale), locale)
     : [
         quote.status === 'unavailable'
           ? t('core.text.quoteUnavailable', {}, locale)
