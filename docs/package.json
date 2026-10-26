@@ -1,0 +1,20 @@
+{
+  "name": "share-this-tweet-docs",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vitepress dev .",
+    "typecheck": "tsc --noEmit",
+    "build": "vitepress build .",
+    "preview": "vitepress preview ."
+  },
+  "devDependencies": {
+    "@types/node": "22.10.0",
+    "typescript": "5.8.3",
+    "vitepress": "1.6.4"
+  }
+}
