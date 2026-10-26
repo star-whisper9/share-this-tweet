@@ -16,7 +16,7 @@
 
 分享有据是一个 Firefox 扩展，用于保存 X 推文中的图片、视频与 GIF，生成推文卡片，复制文字，并保留作者和原推文的来源信息。支持桌面 Firefox 与 Firefox Android。
 
-[用户指南](docs/guide/getting-started.md) · [开发指南](docs/development/getting-started.md) · [更新记录](CHANGELOG.md)
+[用户指南](https://star-whisper9.github.io/share-this-tweet/guide/getting-started) · [开发指南](https://star-whisper9.github.io/share-this-tweet/development/getting-started) · [更新记录](https://star-whisper9.github.io/share-this-tweet/changelog)
 
 ## 快速上手
 
@@ -25,7 +25,7 @@
 3. 选择媒体并保存，或保存整条推文卡片、复制推文文字。
 4. 保存操作显示「已加入队列」后，可以离开原推文，在「查看导出任务」中查看进度。桌面自动保存；Android 需要保留任务页并手动保存文件。
 
-其他安装方式、更新说明和详细操作见[用户指南](docs/guide/installation.md)。
+其他安装方式、更新说明和详细操作见[用户指南](https://star-whisper9.github.io/share-this-tweet/guide/installation)。
 
 ## 功能概览
 
@@ -35,7 +35,7 @@
 - **媒体下载**：保存原图、MP4 与 GIF，可为视频和 GIF 写入来源；GIF 默认在本机转码为 `.gif`。
 - **复制与命名**：通过预设和模板调整复制文字、画框内容与文件名。
 - **任务与来源记录**：查看进度、取消和重试导出，查找、备份来源记录，或从本地 MP4／GIF 读取已写入的来源。
-- **实验性动态处理**：开启后可生成动态拼图或为普通视频添加画框，默认关闭；规则与限制见[实验性功能](docs/guide/experimental.md)。
+- **实验性动态处理**：开启后可生成动态拼图或为普通视频添加画框，默认关闭；规则与限制见[实验性功能](https://star-whisper9.github.io/share-this-tweet/guide/experimental)。
 
 保留出处不代表获得转载授权，分享时仍需尊重原作者的权益。
 
