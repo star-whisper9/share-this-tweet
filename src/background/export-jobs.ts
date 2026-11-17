@@ -1,3 +1,4 @@
+import { ProcessingLimitError, ExportItemsError } from '../shared/processing-limit.js';
 import { DownloadTimeoutError, waitForBrowserDownload } from '../core/download-monitor.js';
 import { JobUpdateBuffer } from './job-updates.js';
 import { newestJobsFirst } from '../shared/job-list.js';
@@ -33,6 +34,7 @@ type ExportJobMessage =
   | { type: 'export-job-clear-history' }
   | { type: 'export-job-cancel'; id: unknown }
   | { type: 'export-job-retry'; id: unknown }
+  | { type: 'export-job-force-retry'; id: unknown }
   | { type: 'export-job-remove'; id: unknown }
   | { type: 'export-job-file'; id: unknown; fileId: unknown }
   | { type: 'export-job-diagnostics'; id: unknown }
@@ -71,6 +73,7 @@ function parseMessage(value: unknown): ExportJobMessage | undefined {
     [
       'export-job-cancel',
       'export-job-retry',
+      'export-job-force-retry',
       'export-job-remove',
       'export-job-diagnostics',
     ].includes(value.type)
@@ -312,6 +315,7 @@ const callbackUpdates = new JobUpdateBuffer(
   async (id, latest) => {
     await mutateJob(id, (job) => {
       if (job.summary.status === 'running') {
+        if (latest.canForceRetry) job.summary.canForceRetry = true;
         if (latest.progress !== undefined) job.summary.progress = latest.progress;
         for (const warning of latest.warnings) {
           if (!job.summary.warnings.includes(warning)) job.summary.warnings.push(warning);
@@ -329,18 +333,22 @@ const callbackUpdates = new JobUpdateBuffer(
     controllers.get(id)?.abort();
     const job = jobs.get(id);
     if (!job || job.summary.status !== 'running') return;
+    const markFailure = (current: StoredExportJob) => {
+      current.summary.progress = undefined;
+      current.summary.status = current.files.length ? 'partial' : 'failed';
+      if (current.files.length) {
+        current.summary.error = undefined;
+        if (!current.summary.warnings.includes(messageError(error)))
+          current.summary.warnings.push(messageError(error));
+      } else current.summary.error = messageError(error);
+    };
     try {
       await mutateJob(id, (current) => {
-        if (current.summary.status !== 'running') return;
-        current.summary.status = 'failed';
-        current.summary.progress = undefined;
-        current.summary.error = messageError(error);
+        if (current.summary.status === 'running') markFailure(current);
       });
     } catch {
       // Storage failure still remains visible in this session.
-      job.summary.status = 'failed';
-      job.summary.progress = undefined;
-      job.summary.error = messageError(error);
+      markFailure(job);
     }
   },
 );
@@ -463,7 +471,8 @@ async function processJob(job: StoredExportJob): Promise<void> {
     await renderExportJob(job.request, {
       signal: controller.signal,
       onProgress: (progress: string) => callbackUpdates.receive(job.id, { progress }),
-      onWarning: (warning: string) => callbackUpdates.receive(job.id, { warning }),
+      onWarning: (warning: string, canForceRetry?: boolean) =>
+        callbackUpdates.receive(job.id, { warning, canForceRetry }),
       onDiagnostics: (diagnostics: VideoDiagnosticsReport) =>
         callbackUpdates.receive(job.id, { diagnostics }),
       onFile: async (file: ExportJobFile) => acceptFile(job.id, file),
@@ -488,22 +497,40 @@ async function processJob(job: StoredExportJob): Promise<void> {
     // A failed callback write already marks a task failed and aborts its
     // renderer. Do not re-label that storage failure as user cancellation.
     if (current?.summary.status === 'cancelled' || current?.summary.status === 'failed') return;
-    const status = callbackWriteFailed || !controller.signal.aborted ? 'failed' : 'cancelled';
+    const canForceRetry =
+      !job.request.force &&
+      !callbackWriteFailed &&
+      (error instanceof ProcessingLimitError ||
+        (error instanceof ExportItemsError && error.canForceRetry));
+    const status =
+      controller.signal.aborted && !callbackWriteFailed
+        ? 'cancelled'
+        : current?.files.length
+          ? 'partial'
+          : canForceRetry
+            ? 'limited'
+            : 'failed';
+    const failure = (updated: StoredExportJob) => {
+      updated.summary.status = status;
+      updated.summary.progress = undefined;
+      updated.summary.canForceRetry ||= canForceRetry;
+      if (status === 'partial' || status === 'limited') {
+        updated.summary.error = undefined;
+        if (!updated.summary.warnings.includes(messageError(error)))
+          updated.summary.warnings.push(messageError(error));
+      } else updated.summary.error = messageError(error);
+    };
     try {
       await mutateJob(job.id, (updated) => {
         if (updated.summary.status === 'cancelled' || updated.summary.status === 'failed') return;
-        updated.summary.status = status;
-        updated.summary.progress = undefined;
-        updated.summary.error = messageError(error);
+        failure(updated);
       });
     } catch {
       // Continue with later queued work even when the task store itself has
       // failed. The active in-memory task remains inspectable in this session.
       const active = jobs.get(job.id);
       if (active && active.summary.status !== 'cancelled' && active.summary.status !== 'failed') {
-        active.summary.status = status;
-        active.summary.progress = undefined;
-        active.summary.error = messageError(error);
+        failure(active);
       }
     }
   } finally {
@@ -598,19 +625,27 @@ async function retry(id: string): Promise<JobResponse> {
   const job = jobs.get(id);
   if (!job) return { ok: false, error: t('jobs.notFound', {}, getLocale()) };
   if (controllers.has(id)) return { ok: false, error: t('jobs.busy', {}, job.request.locale) };
-  if (!['failed', 'cancelled', 'interrupted', 'expired'].includes(job.summary.status)) {
+  if (
+    !['failed', 'limited', 'partial', 'cancelled', 'interrupted', 'expired'].includes(
+      job.summary.status,
+    )
+  ) {
     return { ok: false, error: t('jobs.retryUnavailable', {}, job.request.locale) };
   }
   const updated = await mutateJob(id, (current) => {
     if (
       controllers.has(id) ||
-      !['failed', 'cancelled', 'interrupted', 'expired'].includes(current.summary.status)
+      !['failed', 'limited', 'partial', 'cancelled', 'interrupted', 'expired'].includes(
+        current.summary.status,
+      )
     )
       throw new Error(t('jobs.busy', {}, current.request.locale));
     current.files = current.files.filter((file) => file.saved);
     current.diagnosticsExpiresAt = undefined;
     current.summary.hasDiagnostics = false;
     current.summary.status = 'queued';
+    current.summary.canForceRetry = false;
+    current.summary.warnings = [];
     current.summary.progress = undefined;
     current.summary.error = undefined;
     return { diagnostics: null };
@@ -618,6 +653,17 @@ async function retry(id: string): Promise<JobResponse> {
   if (!updated) return { ok: false, error: t('jobs.notFound', {}, job.request.locale) };
   scheduleProcessing();
   return { ok: true };
+}
+
+async function forceRetry(id: string): Promise<JobResponse> {
+  await initializeExportJobs();
+  const job = jobs.get(id);
+  if (!job) return { ok: false, error: t('jobs.notFound') };
+  if (controllers.has(id) || ['queued', 'running'].includes(job.summary.status))
+    return { ok: false, error: t('jobs.busy', {}, job.request.locale) };
+  if (!job.summary.canForceRetry || job.request.force)
+    return { ok: false, error: t('jobs.forceUnavailable', {}, job.request.locale) };
+  return enqueue({ ...structuredClone(job.request), id: crypto.randomUUID(), force: true });
 }
 
 async function remove(id: string): Promise<JobResponse> {
@@ -764,6 +810,8 @@ export function handleExportJobMessage(message: unknown): Promise<unknown> | und
     return Promise.resolve({ ok: false, error: t('jobs.invalidTaskId') });
   if (parsed.type === 'export-job-cancel')
     return cancel(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
+  if (parsed.type === 'export-job-force-retry')
+    return forceRetry(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-retry')
     return retry(parsed.id).catch((error) => ({ ok: false, error: messageError(error) }));
   if (parsed.type === 'export-job-remove')

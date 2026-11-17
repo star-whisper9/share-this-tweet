@@ -1,7 +1,9 @@
+import { ProcessingLimitError } from '../shared/processing-limit.js';
 import { parseMediaSourceMetadata, type MediaSourceMetadata } from '../shared/media-source.js';
 import { getLocale, t, type Locale } from '../shared/i18n.js';
 
 export interface MediaSourceWorkerOptions {
+  force?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
   locale?: Locale;
@@ -58,10 +60,15 @@ function runWorker(
         finish(new Error(t('core.worker.invalidResponse', {}, locale)));
         return;
       }
-      const response = message as { ok?: unknown; result?: unknown; error?: unknown };
+      const response = message as {
+        ok?: unknown;
+        result?: unknown;
+        error?: unknown;
+        limitExceeded?: unknown;
+      };
       if (response.ok === false) {
         finish(
-          new Error(
+          new (response.limitExceeded === true ? ProcessingLimitError : Error)(
             typeof response.error === 'string'
               ? response.error
               : t('core.worker.failed', {}, locale),
@@ -99,7 +106,11 @@ function runWorker(
     worker.onmessageerror = () =>
       finish(new Error(t('core.worker.communicationFailed', {}, locale)));
     options.signal?.addEventListener('abort', abort, { once: true });
-    timer = setTimeout(() => finish(new Error(t('core.worker.timeout', {}, locale))), timeoutMs);
+    if (!options.force)
+      timer = setTimeout(
+        () => finish(new ProcessingLimitError(t('core.worker.timeout', {}, locale))),
+        timeoutMs,
+      );
     try {
       worker.postMessage({
         id,
@@ -107,6 +118,7 @@ function runWorker(
         blob: input,
         locale,
         format,
+        force: options.force === true,
         ...(source ? { source } : {}),
       });
     } catch (error) {

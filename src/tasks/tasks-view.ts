@@ -13,12 +13,16 @@ const terminalStatuses = new Set<JobSummary['status']>([
   'ready',
   'completed',
   'failed',
+  'limited',
+  'partial',
   'cancelled',
   'interrupted',
   'expired',
 ]);
 const retryableStatuses = new Set<JobSummary['status']>([
   'failed',
+  'limited',
+  'partial',
   'cancelled',
   'interrupted',
   'expired',
@@ -195,6 +199,8 @@ export function createTaskView({ isAndroid, expanded, busyJobs, batchRunning }: 
       actions.append(button(t('jobs.cancel'), 'cancel', job.id));
     }
     if (retryableStatuses.has(job.status)) actions.append(button(t('jobs.retry'), 'retry', job.id));
+    if (job.canForceRetry && !isProcessing(job))
+      actions.append(button(t('jobs.forceRetry'), 'force-retry', job.id));
     if (job.hasDiagnostics)
       actions.append(button(t('jobs.downloadDiagnostics'), 'diagnostics', job.id));
     if (terminalStatuses.has(job.status)) {

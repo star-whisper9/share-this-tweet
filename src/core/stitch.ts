@@ -1,3 +1,8 @@
+import {
+  ProcessingLimitError,
+  exceedsImageBudget,
+  STITCH_BUDGET,
+} from '../shared/processing-limit.js';
 import type { TweetRecord } from '../shared/model.js';
 import { getLocale, t, type Locale } from '../shared/i18n.js';
 import type { ExtensionSettings } from '../shared/settings.js';
@@ -16,9 +21,9 @@ interface Size {
 export function calculateStitchLayout(
   images: Size[],
   style: StitchStyle,
-  maxWidth = 24000,
-  maxHeight = 24000,
-  maxPixels = 64000000,
+  maxWidth: number = STITCH_BUDGET.side,
+  maxHeight: number = STITCH_BUDGET.side,
+  maxPixels: number = STITCH_BUDGET.pixels,
 ) {
   if (
     !images.length ||
@@ -55,6 +60,7 @@ export async function renderStitchedMedia(
   resources: ImageResources,
   frame: 'original' | FrameOrientation,
   locale: Locale = getLocale(),
+  force = false,
 ): Promise<Blob> {
   if (record.media.length < 2) throw new Error(t('core.stitch.atLeastTwoMedia', {}, locale));
   const images: HTMLImageElement[] = [];
@@ -70,7 +76,12 @@ export async function renderStitchedMedia(
     const layout = calculateStitchLayout(
       images.map((image) => ({ width: image.naturalWidth, height: image.naturalHeight })),
       settings.stitchStyle,
+      Infinity,
+      Infinity,
+      Infinity,
     );
+    if (!force && exceedsImageBudget(layout.width, layout.height, STITCH_BUDGET))
+      throw new ProcessingLimitError(t('core.stitch.tooLarge', {}, locale));
     canvas.width = Math.max(1, Math.round(layout.width));
     canvas.height = Math.max(1, Math.round(layout.height));
     const context = canvas.getContext('2d');
@@ -101,6 +112,7 @@ export async function renderStitchedMedia(
         theme,
         canvas,
         locale,
+        force,
       );
     return await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob((blob) => {

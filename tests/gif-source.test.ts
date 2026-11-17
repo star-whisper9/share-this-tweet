@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../src/shared/processing-limit.js';
 import { describe, expect, it } from 'vitest';
 import { embedGifSource, GIF_SOURCE_APPLICATION, readGifSource } from '../src/core/gif-source.js';
 import { MAX_MEDIA_SOURCE_BYTES, type MediaSourceMetadata } from '../src/shared/media-source.js';
@@ -121,6 +122,6 @@ describe('GIF provenance', () => {
       await expect(readGifSource(invalid)).rejects.toMatchObject({ code: 'invalid-gif' });
     const oversized = input();
     Object.defineProperty(oversized, 'size', { value: MAX_MP4_SOURCE_FILE_BYTES + 1 });
-    await expect(readGifSource(oversized)).rejects.toMatchObject({ code: 'unsupported-gif' });
+    await expect(readGifSource(oversized)).rejects.toBeInstanceOf(ProcessingLimitError);
   });
 });

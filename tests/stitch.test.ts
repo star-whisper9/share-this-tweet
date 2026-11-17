@@ -149,3 +149,36 @@ it('preserves a twenty-image strip at natural resolution within the expanded bud
   expect(layout).toMatchObject({ width: 20000, height: 1500 });
   expect(layout.rects).toHaveLength(20);
 });
+
+it('keeps natural collage dimensions on an explicit forced retry', async () => {
+  vi.stubGlobal('HTMLCanvasElement', Canvas);
+  vi.stubGlobal('document', { createElement: () => new Canvas() });
+  const resources = new ImageResources();
+  vi.spyOn(resources, 'load').mockImplementation(
+    async (id) =>
+      ({
+        id,
+        naturalWidth: 14000,
+        naturalHeight: 1000,
+        remove: vi.fn(),
+        removeAttribute: vi.fn(),
+      }) as unknown as HTMLImageElement,
+  );
+  const { ProcessingLimitError } = await import('../src/shared/processing-limit.js');
+  await expect(
+    renderStitchedMedia(record, DEFAULT_SETTINGS, 'light', resources, 'original'),
+  ).rejects.toBeInstanceOf(ProcessingLimitError);
+  expect(draws).not.toHaveBeenCalled();
+  const blob = await renderStitchedMedia(
+    record,
+    DEFAULT_SETTINGS,
+    'light',
+    resources,
+    'original',
+    'en',
+    true,
+  );
+  expect(blob.type).toBe('image/png');
+  expect(draws).toHaveBeenCalledTimes(2);
+  expect(draws.mock.calls[0]!.slice(1)).toEqual([0, 0, 14000, 1000]);
+});

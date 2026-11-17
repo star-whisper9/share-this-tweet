@@ -63,6 +63,7 @@ interface FetchedInput {
 }
 
 export interface BackgroundVideoRenderOptions {
+  force?: boolean;
   signal: AbortSignal;
   /** A queued job captures its guard values at submission time. The current
    * experimental switch is still checked before this value is accepted. */
@@ -163,14 +164,16 @@ export async function renderVideoInBackground(
   if (gif ? settings.experimentalGif === false : !settings.experimentalVideo)
     throw new Error(t(gif ? 'gif.disabled' : 'experiment.disabled', {}, locale));
   const gifLimits = gif ? normalizeGifLimits(options.gifLimits ?? settings.gifLimits) : undefined;
-  const limits: VideoLimits = gifLimits
-    ? {
-        maxInputMiB: gifLimits.maxInputMiB,
-        maxDurationSeconds: gifLimits.maxDurationSeconds,
-        maxOutputPixels: gifLimits.maxSourcePixels,
-        maxFrameRate: 0,
-      }
-    : (options.limits ?? settings.videoLimits);
+  const limits: VideoLimits = options.force
+    ? { maxInputMiB: 0, maxDurationSeconds: 0, maxOutputPixels: 0, maxFrameRate: 0 }
+    : gifLimits
+      ? {
+          maxInputMiB: gifLimits.maxInputMiB,
+          maxDurationSeconds: gifLimits.maxDurationSeconds,
+          maxOutputPixels: gifLimits.maxSourcePixels,
+          maxFrameRate: 0,
+        }
+      : (options.limits ?? settings.videoLimits);
   if (activeRender) throw new Error(t('dynamic.busy', {}, locale));
   activeRender = true;
   const resources = new ImageResources();

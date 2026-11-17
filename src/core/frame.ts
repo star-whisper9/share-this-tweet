@@ -1,3 +1,4 @@
+import { ProcessingLimitError, exceedsImageBudget } from '../shared/processing-limit.js';
 import { IMAGE_PALETTES, detectImageTheme, type ImageTheme } from './image-theme.js';
 import { ImageResources, loadAvatar, releaseImage, type LoadedAvatar } from './image-resources.js';
 import { getLocale, t, type Locale } from '../shared/i18n.js';
@@ -253,14 +254,15 @@ function encodeCanvas(
 export function frameOutputSize(
   width: number,
   height: number,
+  force = false,
 ): { width: number; height: number; scale: number } {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
     throw new Error(t('core.frame.invalidDimensions'));
   const scale = Math.max(1, 640 / width);
   const outputWidth = Math.ceil(width * scale);
   const outputHeight = Math.ceil(height * scale);
-  if (outputWidth > 16384 || outputHeight > 16384 || outputWidth * outputHeight > 32000000)
-    throw new Error(t('core.frame.imageTooLarge'));
+  if (!force && exceedsImageBudget(outputWidth, outputHeight))
+    throw new ProcessingLimitError(t('core.frame.imageTooLarge'));
   return { width: outputWidth, height: outputHeight, scale };
 }
 
@@ -393,6 +395,7 @@ export async function renderImageFrame(
   theme: ImageTheme = detectImageTheme(),
   source?: HTMLCanvasElement,
   locale: Locale = getLocale(),
+  force = false,
 ): Promise<Blob> {
   const palette = IMAGE_PALETTES[theme];
   if (!source && media.type !== 'photo') throw new Error(t('core.frame.photoOnly', {}, locale));
@@ -417,8 +420,8 @@ export async function renderImageFrame(
     const context = canvas.getContext('2d');
     if (!context) throw new Error(t('core.frame.canvasUnavailable', {}, locale));
 
-    if (imageWidth > 16384 || imageHeight > 16384 || imageWidth * imageHeight > 32000000) {
-      throw new Error(t('core.frame.imageTooLarge', {}, locale));
+    if (!force && exceedsImageBudget(imageWidth, imageHeight)) {
+      throw new ProcessingLimitError(t('core.frame.imageTooLarge', {}, locale));
     }
     canvas.width = imageWidth;
     canvas.height = imageHeight;
@@ -439,7 +442,7 @@ export async function renderImageFrame(
     });
 
     const logicalWidth = imageWidth;
-    const output = frameOutputSize(logicalWidth, imageHeight + layout.barHeight);
+    const output = frameOutputSize(logicalWidth, imageHeight + layout.barHeight, force);
     canvas.width = output.width;
     canvas.height = output.height;
     context.scale(output.scale, output.scale);

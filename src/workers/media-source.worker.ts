@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../shared/processing-limit.js';
 import { embedMp4Source, readMp4Source } from '../core/mp4-source.js';
 import { embedGifSource, readGifSource } from '../core/gif-source.js';
 import { parseMediaSourceMetadata } from '../shared/media-source.js';
@@ -24,12 +25,15 @@ async function respond(value: unknown): Promise<void> {
           source?: unknown;
           locale?: unknown;
           format?: unknown;
+          force?: unknown;
         })
       : {};
   const id = typeof request.id === 'string' ? request.id : '';
   const locale: Locale = isLocale(request.locale) ? request.locale : 'zh-CN';
   try {
     if (!id || id.length > 100 || !(request.blob instanceof Blob))
+      throw new Error(t('core.worker.invalidRequest', {}, locale));
+    if (request.force !== undefined && typeof request.force !== 'boolean')
       throw new Error(t('core.worker.invalidRequest', {}, locale));
     let result: unknown;
     if (
@@ -42,6 +46,7 @@ async function respond(value: unknown): Promise<void> {
       result = await (request.format === 'gif' ? embedGifSource : embedMp4Source)(
         request.blob,
         parseMediaSourceMetadata(request.source),
+        request.force === true,
       );
     } else if (request.type === 'read') {
       let format = request.format;
@@ -53,13 +58,17 @@ async function respond(value: unknown): Promise<void> {
           format = 'mp4';
         else throw new Error(t('core.worker.unsupportedMedia', {}, locale));
       }
-      result = await (format === 'gif' ? readGifSource : readMp4Source)(request.blob);
+      result = await (format === 'gif' ? readGifSource : readMp4Source)(
+        request.blob,
+        request.force === true,
+      );
     } else throw new Error(t('core.worker.invalidRequestType', {}, locale));
     scope.postMessage({ id, ok: true, result });
   } catch (error) {
     scope.postMessage({
       id,
       ok: false,
+      limitExceeded: error instanceof ProcessingLimitError,
       error: error instanceof Error ? error.message : String(error),
     });
   }

@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../src/shared/processing-limit.js';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -275,7 +276,7 @@ describe('MP4 file provenance', () => {
     await expect(readMp4Source(input(indexed))).rejects.toMatchObject({ code: 'unsupported-mp4' });
     const oversized = input();
     Object.defineProperty(oversized, 'size', { value: MAX_MP4_SOURCE_FILE_BYTES + 1 });
-    await expect(readMp4Source(oversized)).rejects.toMatchObject({ code: 'unsupported-mp4' });
+    await expect(readMp4Source(oversized)).rejects.toBeInstanceOf(ProcessingLimitError);
   });
 
   it('rejects duplicate or invalid embedded records instead of choosing one', async () => {

@@ -1,3 +1,4 @@
+import { ProcessingLimitError, exceedsImageBudget } from '../shared/processing-limit.js';
 import { MAX_TWEET_MEDIA } from '../shared/media-limits.js';
 import { calculateStitchLayout, type StitchStyle } from './stitch.js';
 import { tagRunsForLines, type CardTextRun } from './card-tags.js';
@@ -120,6 +121,7 @@ export interface TweetCardResult {
 }
 
 interface CardRenderOptions {
+  force?: boolean;
   theme?: CardTheme;
   resources?: ImageResources;
   mediaLayout?: 'grid' | 'row';
@@ -736,14 +738,10 @@ async function renderCardCanvas(
     });
     const pixelWidth = layout.width * CARD_RENDER_SCALE;
     const pixelHeight = layout.height * CARD_RENDER_SCALE;
-    if (
-      !Number.isFinite(pixelWidth) ||
-      !Number.isFinite(pixelHeight) ||
-      pixelWidth > 16384 ||
-      pixelHeight > 16384 ||
-      pixelWidth * pixelHeight > 32000000
-    ) {
-      throw new Error(t('core.card.contentTooLarge', {}, options.locale));
+    if (!Number.isFinite(pixelWidth) || !Number.isFinite(pixelHeight))
+      throw new Error(t('core.card.invalidImageDimensions', {}, options.locale));
+    if (!options.force && exceedsImageBudget(pixelWidth, pixelHeight)) {
+      throw new ProcessingLimitError(t('core.card.contentTooLarge', {}, options.locale));
     }
     canvas.width = pixelWidth;
     canvas.height = layout.height * CARD_RENDER_SCALE;
@@ -859,8 +857,8 @@ export async function renderTweetCard(
         ? Math.ceil((quoted.height * quoteWidth) / quoted.width)
         : 100 * CARD_RENDER_SCALE;
       const height = main.height + heading + quoteHeight + inset;
-      if (height > 16384 || main.width * height > 32000000)
-        throw new Error(t('core.card.quoteTooLarge', {}, locale));
+      if (!options.force && exceedsImageBudget(main.width, height))
+        throw new ProcessingLimitError(t('core.card.quoteTooLarge', {}, locale));
       output = document.createElement('canvas');
       canvases.push(output);
       output.width = main.width;
@@ -926,8 +924,8 @@ export async function renderTweetCard(
     const lineHeight = 16 * scale;
     const footHeight = padding + lines.length * lineHeight + 26 * scale;
     const height = output.height + footHeight;
-    if (height > 16384 || output.width * height > 32000000)
-      throw new Error(t('core.card.footnoteTooLarge', {}, locale));
+    if (!options.force && exceedsImageBudget(output.width, height))
+      throw new ProcessingLimitError(t('core.card.footnoteTooLarge', {}, locale));
     footer.width = output.width;
     footer.height = height;
     const palette = CARD_PALETTES[theme];

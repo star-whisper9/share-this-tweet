@@ -133,3 +133,19 @@ describe('source Worker lifetime', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+it('passes the force flag and keeps cancellation available without the default timeout', async () => {
+  vi.useFakeTimers();
+  const controller = new AbortController();
+  const pending = readMediaSourceInWorker(new Blob(['input']), {
+    force: true,
+    signal: controller.signal,
+  });
+  const rejected = expect(pending).rejects.toThrow();
+  expect(workers[0].postMessage.mock.calls[0][0]).toMatchObject({ force: true });
+  await vi.advanceTimersByTimeAsync(120001);
+  expect(workers[0].terminate).not.toHaveBeenCalled();
+  controller.abort();
+  await rejected;
+  expect(workers[0].terminate).toHaveBeenCalledOnce();
+});

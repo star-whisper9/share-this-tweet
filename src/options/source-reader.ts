@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../shared/processing-limit.js';
 import { readMediaSourceInWorker } from '../core/media-source-client.js';
 import type { MediaSourceMetadata } from '../shared/media-source.js';
 import { getLocale, t } from '../shared/i18n.js';
@@ -7,6 +8,7 @@ export function mountSourceReader() {
   const sourceMediaDrop = document.querySelector<HTMLElement>('[data-source-media-drop]');
   const sourceMediaStatus = document.querySelector<HTMLOutputElement>('[data-source-media-status]');
   const sourceMediaResult = document.querySelector<HTMLElement>('[data-source-media-result]');
+  let forceButton: HTMLButtonElement | undefined;
   let sourceReadController: AbortController | undefined;
   let displayedSource: { source: MediaSourceMetadata; filename: string } | undefined;
   // The reader only inspects bounded metadata in its Worker, so it can accept
@@ -62,20 +64,19 @@ export function mountSourceReader() {
     if (sourceMediaResult) sourceMediaResult.hidden = false;
   }
 
-  async function readSourceMedia(file: File): Promise<void> {
+  async function readSourceMedia(file: File, force = false): Promise<void> {
+    forceButton?.remove();
+    forceButton = undefined;
     displayedSource = undefined;
     sourceReadController?.abort(new Error(t('options.source.cancelled')));
     const controller = new AbortController();
     sourceReadController = controller;
     if (sourceMediaResult) sourceMediaResult.hidden = true;
-    if (file.size > MAX_LOCAL_SOURCE_FILE_SIZE) {
-      setSourceMediaStatus(t('options.records.source.failedLarge'));
-      if (sourceReadController === controller) sourceReadController = undefined;
-      return;
-    }
     setSourceMediaStatus(t('options.records.source.reading', { filename: file.name }));
     try {
-      const source = await readMediaSourceInWorker(file, { signal: controller.signal });
+      if (!force && file.size > MAX_LOCAL_SOURCE_FILE_SIZE)
+        throw new ProcessingLimitError(t('options.records.source.failedLarge'));
+      const source = await readMediaSourceInWorker(file, { signal: controller.signal, force });
       if (sourceReadController !== controller) return;
       if (!source) {
         setSourceMediaStatus(t('gif.reader.none'));
@@ -86,10 +87,21 @@ export function mountSourceReader() {
     } catch (error) {
       if (sourceReadController !== controller) return;
       setSourceMediaStatus(
-        t('options.records.source.failed', {
-          message: error instanceof Error ? error.message : String(error),
-        }),
+        error instanceof ProcessingLimitError && !force
+          ? error.message
+          : t('options.records.source.failed', {
+              message: error instanceof Error ? error.message : String(error),
+            }),
       );
+      if (!force && error instanceof ProcessingLimitError && sourceMediaStatus) {
+        forceButton = document.createElement('button');
+        forceButton.type = 'button';
+        forceButton.textContent = t('jobs.forceRetry');
+        forceButton.addEventListener('click', () => {
+          void readSourceMedia(file, true);
+        });
+        sourceMediaStatus.after(forceButton);
+      }
     } finally {
       if (sourceReadController === controller) sourceReadController = undefined;
     }
@@ -123,10 +135,13 @@ export function mountSourceReader() {
 
   return {
     relocalize(): void {
+      if (forceButton) forceButton.textContent = t('jobs.forceRetry');
       if (displayedSource && !sourceMediaResult?.hidden)
         renderSourceMedia(displayedSource.source, displayedSource.filename);
     },
     dispose(): void {
+      forceButton?.remove();
+      forceButton = undefined;
       sourceReadController?.abort(new Error(t('options.source.cancelled')));
       sourceReadController = undefined;
     },

@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../shared/processing-limit.js';
 import {
   MAX_MEDIA_SOURCE_BYTES,
   parseMediaSourceMetadata,
@@ -93,11 +94,13 @@ function colorCount(packed: number): number {
   return packed & 0x80 ? 2 ** ((packed & 7) + 1) : 0;
 }
 
-async function parse(input: Blob): Promise<{ trailer: number; source?: MediaSourceMetadata }> {
+async function parse(
+  input: Blob,
+  force = false,
+): Promise<{ trailer: number; source?: MediaSourceMetadata }> {
   if (!Number.isSafeInteger(input.size) || input.size < 14) invalid();
-  // Keep the existing source-file processing boundary for both supported formats.
-  if (input.size > MAX_MP4_SOURCE_FILE_BYTES)
-    throw new GifSourceError('unsupported-gif', t('core.gif.sizeLimit'));
+  if (!force && input.size > MAX_MP4_SOURCE_FILE_BYTES)
+    throw new ProcessingLimitError(t('core.gif.sizeLimit'));
   const reader = new Reader(input);
   const header = await reader.read(13);
   const signature = String.fromCharCode(...header.subarray(0, 6));
@@ -200,12 +203,19 @@ async function parse(input: Blob): Promise<{ trailer: number; source?: MediaSour
   }
 }
 
-export async function readGifSource(input: Blob): Promise<MediaSourceMetadata | undefined> {
-  return (await parse(input)).source;
+export async function readGifSource(
+  input: Blob,
+  force = false,
+): Promise<MediaSourceMetadata | undefined> {
+  return (await parse(input, force)).source;
 }
 
 /** Preserve image, timing, loop, and existing extension blocks byte-for-byte. */
-export async function embedGifSource(input: Blob, value: MediaSourceMetadata): Promise<Blob> {
+export async function embedGifSource(
+  input: Blob,
+  value: MediaSourceMetadata,
+  force = false,
+): Promise<Blob> {
   let source: MediaSourceMetadata;
   try {
     source = parseMediaSourceMetadata(value);
@@ -215,7 +225,7 @@ export async function embedGifSource(input: Blob, value: MediaSourceMetadata): P
       error instanceof Error ? error.message : String(error),
     );
   }
-  const parsed = await parse(input);
+  const parsed = await parse(input, force);
   if (parsed.source) {
     if (JSON.stringify(parsed.source) === JSON.stringify(source))
       return input.type === 'image/gif' ? input : new Blob([input], { type: 'image/gif' });
@@ -236,9 +246,9 @@ export async function embedGifSource(input: Blob, value: MediaSourceMetadata): P
     ['GIF89a', input.slice(6, parsed.trailer), extension, input.slice(parsed.trailer)],
     { type: 'image/gif' },
   );
-  if (output.size > MAX_MP4_SOURCE_FILE_BYTES)
-    throw new GifSourceError('unsupported-gif', t('core.mp4.outputSizeLimit'));
-  if (JSON.stringify(await readGifSource(output)) !== JSON.stringify(source))
+  if (!force && output.size > MAX_MP4_SOURCE_FILE_BYTES)
+    throw new ProcessingLimitError(t('core.mp4.outputSizeLimit'));
+  if (JSON.stringify(await readGifSource(output, force)) !== JSON.stringify(source))
     throw new GifSourceError('invalid-gif', t('core.gif.verificationFailed'));
   return output;
 }

@@ -11,6 +11,7 @@ import {
   markExportJobFileSaved,
   removeExportJob,
   retryExportJob,
+  forceRetryExportJob,
   type ExportJobCleanupResult,
 } from '../core/job-client.js';
 import { filterJobs, pendingFiles, type StorageFilter } from '../shared/job-list.js';
@@ -191,6 +192,7 @@ async function performAction(action: string, jobId: string, fileId?: string): Pr
   render();
   try {
     if (action === 'cancel') await cancelExportJob(jobId);
+    else if (action === 'force-retry') await forceRetryExportJob(jobId);
     else if (action === 'retry') await retryExportJob(jobId);
     else if (action === 'remove') await removeExportJob(jobId);
     else if (action === 'download' && fileId) await saveFile(jobId, fileId);

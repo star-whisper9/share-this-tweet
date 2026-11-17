@@ -1,3 +1,4 @@
+import { ProcessingLimitError, ExportItemsError } from '../shared/processing-limit.js';
 import { renderVideoInBackground } from '../background/video-render.js';
 import { renderTweetCard } from './card.js';
 import {
@@ -29,7 +30,7 @@ export interface ExportJobRendererCallbacks {
   onProgress: (message: string) => void;
   onDiagnostics: (report: VideoDiagnosticsReport) => void;
   onFile: (file: ExportJobFile) => Promise<void>;
-  onWarning: (message: string) => void;
+  onWarning: (message: string, canForceRetry?: boolean) => void;
 }
 
 function outputType(
@@ -78,7 +79,7 @@ async function fetchMedia(
   if (!response.ok) throw new Error(t('dynamic.fetchFailed', { status: response.status }, locale));
   const expected = Number(response.headers.get('content-length'));
   if (maximumBytes && Number.isFinite(expected) && expected > maximumBytes)
-    throw new Error(t('core.background.mediaTooLarge', {}, locale));
+    throw new ProcessingLimitError(t('core.background.mediaTooLarge', {}, locale));
   if (!response.body) throw new Error(t('dynamic.emptyInput', {}, locale));
   const reader = response.body.getReader();
   const chunks: Uint8Array<ArrayBuffer>[] = [];
@@ -91,7 +92,7 @@ async function fetchMedia(
       size += value.byteLength;
       if (maximumBytes && size > maximumBytes) {
         await reader.cancel();
-        throw new Error(t('core.background.mediaTooLarge', {}, locale));
+        throw new ProcessingLimitError(t('core.background.mediaTooLarge', {}, locale));
       }
       chunks.push(new Uint8Array(value));
     }
@@ -165,6 +166,7 @@ async function renderDynamic(
   try {
     const result = await renderVideoInBackground(workerRequest, {
       signal: callbacks.signal,
+      force: request.force,
       limits: request.settings.videoLimits,
       gifLimits: request.settings.gifLimits,
       onProgress: ({ phase, progress }) => {
@@ -184,6 +186,7 @@ async function renderDynamic(
       },
     });
     if (result.type === 'fallback') {
+      if (request.force) throw new Error(result.reason);
       finish(new Error(result.reason));
       return { fallback: { reason: result.reason, ...(result.blob ? { blob: result.blob } : {}) } };
     }
@@ -223,6 +226,7 @@ export async function renderExportJob(
       const row = request.kind === 'row-card';
       const result = await renderTweetCard(record, record.media, {
         theme: request.theme,
+        force: request.force,
         resources,
         locale,
         ...(row ? { mediaLayout: 'row' as const, stitchStyle: settings.stitchStyle } : {}),
@@ -278,6 +282,7 @@ export async function renderExportJob(
         resources,
         frame,
         locale,
+        request.force,
       );
       const filename = buildStitchFilename(
         record,
@@ -291,12 +296,13 @@ export async function renderExportJob(
         blob,
         output: { tweetId: record.tweetId, outputType: 'stitched-image', filename },
       });
-      if (fallbackWarning) callbacks.onWarning(fallbackWarning);
+      if (fallbackWarning) callbacks.onWarning(fallbackWarning, !request.force);
       return;
     }
 
     const selections = request.media ?? [];
     const failures: string[] = [];
+    let canForceRetry = false;
     for (const selection of selections) {
       try {
         callbacks.signal.throwIfAborted();
@@ -319,7 +325,7 @@ export async function renderExportJob(
               blob = await embedGifSourceInWorker(
                 blob,
                 createMediaSourceMetadata(record, media, browser.runtime.getManifest().version),
-                { signal: callbacks.signal, locale },
+                { signal: callbacks.signal, locale, force: request.force },
               );
               filename = buildSourcedMediaFilename(record, media, settings.filenameTemplate, 'gif');
             } else filename = buildMediaFilename(record, media, settings.filenameTemplate, 'gif');
@@ -358,6 +364,7 @@ export async function renderExportJob(
             request.theme,
             undefined,
             locale,
+            request.force,
           );
           filename = buildFrameFilename(
             record,
@@ -371,13 +378,13 @@ export async function renderExportJob(
             media,
             callbacks.signal,
             locale,
-            mode === 'sourced' && media.type !== 'photo' ? 512 * 1024 * 1024 : 0,
+            !request.force && mode === 'sourced' && media.type !== 'photo' ? 512 * 1024 * 1024 : 0,
           );
           if (mode === 'sourced' && media.type !== 'photo') {
             blob = await embedMp4SourceInWorker(
               blob,
               createMediaSourceMetadata(record, media, browser.runtime.getManifest().version),
-              { signal: callbacks.signal, locale },
+              { signal: callbacks.signal, locale, force: request.force },
             );
             filename = buildSourcedMediaFilename(record, media, settings.filenameTemplate);
           } else {
@@ -396,9 +403,10 @@ export async function renderExportJob(
             mediaIndex: media.index,
           },
         });
-        if (fallbackWarning) callbacks.onWarning(fallbackWarning);
+        if (fallbackWarning) callbacks.onWarning(fallbackWarning, !request.force);
       } catch (error) {
         if (callbacks.signal.aborted) throw error;
+        canForceRetry ||= error instanceof ProcessingLimitError;
         failures.push(
           t(
             'content.itemFailure',
@@ -411,7 +419,7 @@ export async function renderExportJob(
         );
       }
     }
-    if (failures.length) throw new Error(failures.join('; '));
+    if (failures.length) throw new ExportItemsError(failures.join('; '), canForceRetry);
   } finally {
     callbacks.signal.removeEventListener('abort', dispose);
     resources.dispose();

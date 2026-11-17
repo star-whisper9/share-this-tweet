@@ -11,6 +11,7 @@ import { isTweetRecord } from './record-validation.js';
 export type ExportJobKind = 'media' | 'stitch' | 'card' | 'row-card';
 export interface ExportJobRequest {
   id: string;
+  force?: boolean;
   kind: ExportJobKind;
   record: TweetRecord;
   settings: ExtensionSettings;
@@ -30,7 +31,16 @@ export interface ExportJobFile {
   output: OutputRecordInput;
 }
 export type ExportJobStatus =
-  'queued' | 'running' | 'ready' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'expired';
+  | 'queued'
+  | 'running'
+  | 'ready'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+  | 'expired'
+  | 'limited'
+  | 'partial';
 export interface JobSummary {
   id: string;
   kind: ExportJobKind;
@@ -50,6 +60,7 @@ export interface JobSummary {
     cacheExpiresAt: number;
   }>;
   hasDiagnostics: boolean;
+  canForceRetry?: boolean;
 }
 function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -125,6 +136,7 @@ export function isExportJobRequest(value: unknown): value is ExportJobRequest {
   if (
     !object(value) ||
     !isExportJobId(value.id) ||
+    (value.force !== undefined && typeof value.force !== 'boolean') ||
     !['media', 'stitch', 'card', 'row-card'].includes(String(value.kind)) ||
     !record(value.record) ||
     !isLocale(value.locale) ||

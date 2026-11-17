@@ -427,3 +427,22 @@ it('uses the already downloaded dynamic source when a frame crosses a limit', as
   );
   expect(events).toEqual(['file', 'warning']);
 });
+
+it('propagates force to dynamic rendering and never substitutes a fallback on that attempt', async () => {
+  vi.stubGlobal('browser', { runtime: { getManifest: () => ({ version: '0.6.0' }) } });
+  const callbacks = {
+    signal: new AbortController().signal,
+    onProgress: vi.fn(),
+    onDiagnostics: vi.fn(),
+    onFile: vi.fn(),
+    onWarning: vi.fn(),
+  };
+  vi.mocked(renderVideoInBackground).mockResolvedValueOnce({
+    type: 'fallback',
+    reason: 'limit',
+    blob: new Blob(['mp4'], { type: 'video/mp4' }),
+  });
+  await expect(renderExportJob({ ...gifRequest(), force: true }, callbacks)).rejects.toThrow();
+  expect(vi.mocked(renderVideoInBackground).mock.calls.at(-1)![1].force).toBe(true);
+  expect(callbacks.onFile).not.toHaveBeenCalled();
+});

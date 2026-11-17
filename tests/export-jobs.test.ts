@@ -435,7 +435,7 @@ describe('durable export queue', () => {
     search.mockResolvedValueOnce([{ id: 9, state: 'interrupted' }]);
     const queue = await import('../src/background/export-jobs.js');
     await queue.handleExportJobMessage({ type: 'export-job-enqueue', request: request('one') });
-    await vi.waitFor(() => expect(mocks.jobs.get('one')?.summary.status).toBe('failed'));
+    await vi.waitFor(() => expect(mocks.jobs.get('one')?.summary.status).toBe('partial'));
     expect(mocks.jobs.get('one')?.files[0]).toMatchObject({ saved: false, cached: true });
     search.mockResolvedValue([{ id: 9, state: 'in_progress' }]);
     const saving = queue.handleExportJobMessage({
@@ -534,13 +534,13 @@ describe('durable export queue', () => {
         await vi.waitFor(() => expect(search).toHaveBeenCalledOnce());
         await vi.advanceTimersByTimeAsync(30 * 60_000);
         await vi.waitFor(() => {
-          expect(mocks.jobs.get('stalled')?.summary.status).toBe('failed');
+          expect(mocks.jobs.get('stalled')?.summary.status).toBe('partial');
           expect(mocks.jobs.get('next')?.summary.status).toBe('completed');
         });
         expect(cancel).toHaveBeenCalledExactlyOnceWith(9);
         expect(mocks.jobs.get('stalled')?.files[0]?.saved).toBe(false);
-        expect(mocks.jobs.get('stalled')?.summary.error).toEqual(expect.any(String));
-        expect(mocks.jobs.get('stalled')?.summary.warnings).toHaveLength(cancelFails ? 1 : 0);
+        expect(mocks.jobs.get('stalled')?.summary.error).toBeUndefined();
+        expect(mocks.jobs.get('stalled')?.summary.warnings).toHaveLength(cancelFails ? 2 : 1);
       } finally {
         vi.useRealTimers();
       }
@@ -680,7 +680,7 @@ describe('durable export queue', () => {
     await handleExportJobMessage({ type: 'export-job-enqueue', request: request('one') });
     await vi.waitFor(async () => {
       const listed = await summaries();
-      expect(listed.jobs[0]?.status).toBe('failed');
+      expect(listed.jobs[0]?.status).toBe('partial');
     });
     await expect(handleExportJobMessage({ type: 'export-job-retry', id: 'one' })).resolves.toEqual({
       ok: true,
@@ -820,4 +820,49 @@ describe('durable export queue', () => {
     expect(mocks.jobs.get('one')?.summary.hasDiagnostics).toBe(false);
     expect(mocks.jobs.get('one')?.summary.status).toBe('completed');
   });
+});
+
+it('offers force retry only for a protection limit and preserves the original task', async () => {
+  const { ProcessingLimitError } = await import('../src/shared/processing-limit.js');
+  mocks.render.mockRejectedValueOnce(new ProcessingLimitError('budget'));
+  const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+  await handleExportJobMessage({ type: 'export-job-enqueue', request: request('limited') });
+  await vi.waitFor(() => expect(mocks.jobs.get('limited')?.summary.status).toBe('limited'));
+  expect(mocks.jobs.get('limited')?.summary).toMatchObject({
+    canForceRetry: true,
+    warnings: ['budget'],
+    error: undefined,
+  });
+  const result = (await handleExportJobMessage({
+    type: 'export-job-force-retry',
+    id: 'limited',
+  })) as { ok: boolean; id: string };
+  expect(result.ok).toBe(true);
+  expect(result.id).not.toBe('limited');
+  await vi.waitFor(() => expect(mocks.jobs.get(result.id)?.summary.status).toBe('completed'));
+  expect(mocks.jobs.get(result.id)?.request.force).toBe(true);
+  expect(mocks.jobs.get('limited')?.request.force).toBeUndefined();
+  expect(mocks.jobs.get('limited')?.summary.status).toBe('limited');
+  await expect(
+    handleExportJobMessage({ type: 'export-job-force-retry', id: result.id }),
+  ).resolves.toMatchObject({ ok: false });
+});
+it('allows a forced version of a completed fallback without losing the fallback file', async () => {
+  mocks.render.mockImplementationOnce(async (job, callbacks) => {
+    await callbacks.onFile(file(job.id));
+    callbacks.onWarning('fallback', true);
+  });
+  const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+  await handleExportJobMessage({ type: 'export-job-enqueue', request: request('fallback') });
+  await vi.waitFor(() => expect(mocks.jobs.get('fallback')?.summary.status).toBe('completed'));
+  expect(mocks.jobs.get('fallback')?.summary.canForceRetry).toBe(true);
+  mocks.render.mockRejectedValueOnce(new Error('encoder failed'));
+  const result = (await handleExportJobMessage({
+    type: 'export-job-force-retry',
+    id: 'fallback',
+  })) as { id: string };
+  await vi.waitFor(() => expect(mocks.jobs.get(result.id)?.summary.status).toBe('failed'));
+  expect(mocks.jobs.get(result.id)?.summary.error).toBe('encoder failed');
+  expect(mocks.jobs.get(result.id)?.summary.canForceRetry).not.toBe(true);
+  expect(mocks.jobs.get('fallback')?.files).toHaveLength(1);
 });

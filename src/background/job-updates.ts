@@ -1,11 +1,13 @@
 import type { VideoDiagnosticsReport } from '../core/video-report.js';
 
 export interface JobCallbackUpdate {
+  canForceRetry?: boolean;
   progress?: string;
   warning?: string;
   diagnostics?: VideoDiagnosticsReport;
 }
 export interface BufferedJobUpdate {
+  canForceRetry?: boolean;
   progress?: string;
   warnings: string[];
   diagnostics?: VideoDiagnosticsReport;
@@ -26,6 +28,7 @@ export class JobUpdateBuffer {
 
   receive(id: string, update: JobCallbackUpdate): void {
     const pending = this.pending.get(id) ?? { warnings: [], scheduled: false };
+    if (update.canForceRetry) pending.canForceRetry = true;
     if (update.progress !== undefined) pending.progress = update.progress;
     if (update.warning !== undefined) pending.warnings.push(update.warning);
     if (update.diagnostics !== undefined) pending.diagnostics = update.diagnostics;

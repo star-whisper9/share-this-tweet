@@ -36,6 +36,9 @@ export async function cancelExportJob(id: string): Promise<void> {
 export async function retryExportJob(id: string): Promise<void> {
   await request({ type: 'export-job-retry', id });
 }
+export async function forceRetryExportJob(id: string): Promise<void> {
+  await request({ type: 'export-job-force-retry', id });
+}
 export async function removeExportJob(id: string): Promise<void> {
   await request({ type: 'export-job-remove', id });
 }

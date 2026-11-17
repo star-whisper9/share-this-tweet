@@ -1,3 +1,4 @@
+import { ProcessingLimitError } from '../shared/processing-limit.js';
 import {
   MAX_MEDIA_SOURCE_BYTES,
   parseMediaSourceMetadata,
@@ -240,9 +241,10 @@ function sourceFromUserData(bytes: Uint8Array, boxes: Box[]): MediaSourceMetadat
   return source;
 }
 
-async function parse(input: Blob): Promise<ParsedMp4> {
+async function parse(input: Blob, force = false): Promise<ParsedMp4> {
   if (!Number.isSafeInteger(input.size) || input.size < 8) invalid();
-  if (input.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported(t('core.mp4.sizeLimit'));
+  if (!force && input.size > MAX_MP4_SOURCE_FILE_BYTES)
+    throw new ProcessingLimitError(t('core.mp4.sizeLimit'));
   const top: Box[] = [];
   let position = 0;
   while (position < input.size) {
@@ -367,12 +369,19 @@ function addUserData(parsed: ParsedMp4, source: MediaSourceMetadata): Uint8Array
 }
 
 /** Read this extension's provenance. Valid supported MP4 without provenance returns undefined. */
-export async function readMp4Source(input: Blob): Promise<MediaSourceMetadata | undefined> {
-  return (await parse(input)).source;
+export async function readMp4Source(
+  input: Blob,
+  force = false,
+): Promise<MediaSourceMetadata | undefined> {
+  return (await parse(input, force)).source;
 }
 
 /** Keep all media bytes at their existing file offsets; move only the movie index. */
-export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): Promise<Blob> {
+export async function embedMp4Source(
+  input: Blob,
+  value: MediaSourceMetadata,
+  force = false,
+): Promise<Blob> {
   let source: MediaSourceMetadata;
   try {
     source = parseMediaSourceMetadata(value);
@@ -382,7 +391,7 @@ export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): P
       error instanceof Error ? error.message : String(error),
     );
   }
-  const parsed = await parse(input);
+  const parsed = await parse(input, force);
   if (parsed.source) {
     if (JSON.stringify(parsed.source) === JSON.stringify(source))
       return input.type === 'video/mp4' ? input : new Blob([input], { type: 'video/mp4' });
@@ -406,6 +415,7 @@ export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): P
       replacement.set(encoder.encode('free'), 4);
       parts.push(replacement, input.slice(item.start + item.header, item.end));
     } else if (item.toEnd) {
+      if (item.size > 0xffffffff) unsupported(t('core.mp4.offsetTooLarge'));
       const replacement = new Uint8Array(8);
       new DataView(replacement.buffer).setUint32(0, item.size);
       replacement.set(encoder.encode(item.type), 4);
@@ -414,9 +424,10 @@ export async function embedMp4Source(input: Blob, value: MediaSourceMetadata): P
   }
   if (parsed.moov.end !== input.size) parts.push(movie);
   const output = new Blob(parts, { type: 'video/mp4' });
-  if (output.size > MAX_MP4_SOURCE_FILE_BYTES) unsupported(t('core.mp4.outputSizeLimit'));
+  if (!force && output.size > MAX_MP4_SOURCE_FILE_BYTES)
+    throw new ProcessingLimitError(t('core.mp4.outputSizeLimit'));
   // Re-read the output's structure and provenance before handing it to downloads.
-  const verified = await readMp4Source(output);
+  const verified = await readMp4Source(output, force);
   if (JSON.stringify(verified) !== JSON.stringify(source))
     invalid(t('core.mp4.verificationFailed'));
   return output;

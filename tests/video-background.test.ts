@@ -303,3 +303,23 @@ it('passes twenty selected inputs to the worker', async () => {
   worker.emit({ type: 'done', id: 'one', blob, width: 6400, height: 180, duration: 1 });
   await expect(job.promise).resolves.toEqual({ type: 'done', blob });
 });
+
+it('disables configured budgets for an explicit forced attempt', async () => {
+  const controller = new AbortController();
+  const promise = renderVideoInBackground(request, {
+    signal: controller.signal,
+    force: true,
+    limits: { maxInputMiB: 0.000001, maxDurationSeconds: 1, maxOutputPixels: 1, maxFrameRate: 1 },
+  });
+  jobs.push({ controller, promise });
+  await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+  const worker = FakeWorker.instances[0]!;
+  expect(worker.postMessage.mock.calls[0]![0].limits).toEqual({
+    maxInputMiB: 0,
+    maxDurationSeconds: 0,
+    maxOutputPixels: 0,
+    maxFrameRate: 0,
+  });
+  worker.emit({ type: 'error', id: 'one', error: 'encoder failed' });
+  await expect(promise).rejects.toThrow();
+});

@@ -200,3 +200,9 @@ it.each(['photo', 'strip'] as const)(
     }
   },
 );
+
+it('bypasses only image budgets for a forced frame', () => {
+  expect(() => frameOutputSize(20000, 2000)).toThrow();
+  expect(frameOutputSize(20000, 2000, true)).toMatchObject({ width: 20000, height: 2000 });
+  expect(() => frameOutputSize(NaN, 2000, true)).toThrow();
+});

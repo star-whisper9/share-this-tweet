@@ -336,3 +336,25 @@ it.each(['grid', 'row'] as const)(
     for (const item of media) expect(images.get(item.originalUrl)!.remove).toHaveBeenCalled();
   },
 );
+
+it('can explicitly render a long card beyond the default canvas budget', async () => {
+  installCanvas();
+  const tweet = { ...record([]), text: 'line\n'.repeat(300) };
+  const store = resources(
+    new Map([
+      ['avatar-main', new FakeImage('avatar')],
+      ['extension:/icons/icon-48.png', new FakeImage('brand')],
+    ]),
+  );
+  const { ProcessingLimitError } = await import('../src/shared/processing-limit.js');
+  await expect(
+    renderTweetCard(tweet, [], { resources: store, theme: 'light' }),
+  ).rejects.toBeInstanceOf(ProcessingLimitError);
+  const result = await renderTweetCard(tweet, [], {
+    resources: store,
+    theme: 'light',
+    force: true,
+  });
+  expect(result.height).toBeGreaterThan(16384);
+  expect(result.blob.type).toBe('image/png');
+});
