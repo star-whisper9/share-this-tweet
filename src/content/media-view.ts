@@ -117,23 +117,51 @@ function mediaSelectionControls(session: ExportSession): HTMLElement {
   };
   const start = input('start', first);
   const end = input('end', last);
-  const apply = () => {
-    start.setCustomValidity('');
-    end.setCustomValidity('');
-    if (!start.value || !end.value) return;
-    for (const field of [start, end]) {
-      if (!record.media.some((item) => item.index === field.valueAsNumber))
-        field.setCustomValidity(t('content.unavailableRangeIndex'));
+  const available = (value: number) => record.media.some((item) => item.index === value);
+  const previous = new Map([
+    [start, contiguous ? first : undefined],
+    [end, contiguous ? last : undefined],
+  ]);
+  const commit = (field: HTMLInputElement) => {
+    const isStart = field === start;
+    const other = isStart ? end : start;
+    const valid = (value: number) =>
+      available(value) &&
+      (!other.value ||
+        !available(other.valueAsNumber) ||
+        (isStart ? value <= other.valueAsNumber : value >= other.valueAsNumber));
+    let value = field.value ? field.valueAsNumber : NaN;
+    if (!valid(value)) {
+      const saved = previous.get(field);
+      value = saved !== undefined && valid(saved) ? saved : Number(isStart ? field.min : field.max);
     }
-    if (start.valueAsNumber > end.valueAsNumber) end.setCustomValidity(t('content.invalidRange'));
-    if (start.checkValidity() && end.checkValidity())
-      session.selectMediaRange(start.valueAsNumber, end.valueAsNumber);
+    field.value = String(value);
+    previous.set(field, value);
+    apply();
+  };
+  const apply = () => {
+    if (
+      start.value &&
+      end.value &&
+      available(start.valueAsNumber) &&
+      available(end.valueAsNumber) &&
+      start.valueAsNumber <= end.valueAsNumber
+    ) {
+      const indexes = record.media.filter(
+        (item) => item.index >= start.valueAsNumber && item.index <= end.valueAsNumber,
+      );
+      if (indexes.length !== selection.size || indexes.some((item) => !selection.has(item.index)))
+        session.selectMediaRange(start.valueAsNumber, end.valueAsNumber);
+    }
   };
   for (const field of [start, end]) {
     field.addEventListener('input', apply);
-    field.addEventListener('change', () => {
-      start.reportValidity();
-      end.reportValidity();
+    field.addEventListener('blur', () => commit(field));
+    field.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit(field);
+      }
     });
   }
   const toggle = node(

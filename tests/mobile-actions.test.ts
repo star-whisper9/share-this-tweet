@@ -16,18 +16,10 @@ class Element extends EventTarget {
   scrollLeft = 0;
   scrollTop = 0;
   value = '';
-  private validationMessage = '';
+  min = '';
+  max = '';
   get valueAsNumber() {
-    return Number(this.value);
-  }
-  setCustomValidity(message: string) {
-    this.validationMessage = message;
-  }
-  checkValidity() {
-    return !this.validationMessage;
-  }
-  reportValidity() {
-    return this.checkValidity();
+    return this.value ? Number(this.value) : NaN;
   }
   constructor(
     readonly tag: string,
@@ -290,17 +282,17 @@ it.each([false, true])(
       input.focus();
       input.value = value;
       input.dispatchEvent(new Event('input'));
+      input.dispatchEvent(new Event('blur'));
     };
-    enter('start', '4');
-    expect(session.selection.size).toBe(1);
     enter('end', '8');
+    enter('start', '4');
     expect(session.selection.selected(record.media).map((item) => item.index)).toEqual([
       4, 5, 6, 7, 8,
     ]);
-    expect(documentState.activeElement).toBe(ui.button('range-1-end'));
+    expect(documentState.activeElement).toBe(ui.button('range-1-start'));
     enter('end', '21');
     expect(session.selection.size).toBe(5);
-    expect(ui.button('range-1-end').checkValidity()).toBe(false);
+    expect(ui.button('range-1-end').value).toBe('8');
     ui.button('select-all-1').click();
     expect(session.selection.size).toBe(20);
     ui.button('select-all-1').click();
@@ -310,3 +302,46 @@ it.each([false, true])(
     expect(session.selection.selected(record.media).map((item) => item.index)).toEqual([20]);
   },
 );
+
+it('keeps empty drafts while editing and restores the last committed value or tweet bounds', () => {
+  const ui = setup();
+  const record = tweet('1');
+  record.media = Array.from({ length: 20 }, (_, index) => ({
+    ...record.media[0]!,
+    index: index + 1,
+  }));
+  const session = new ExportSession(record, DEFAULT_SETTINGS, () => ui.render(session));
+  session.selectMediaRange(12, 20);
+  const edit = (side: string, value: string) => {
+    const field = ui.button(`range-1-${side}`);
+    field.focus();
+    field.value = value;
+    field.dispatchEvent(new Event('input'));
+    return field;
+  };
+  const empty = edit('end', '');
+  expect(empty.value).toBe('');
+  expect(session.selection.size).toBe(9);
+  empty.dispatchEvent(new Event('blur'));
+  expect(ui.button('range-1-end').value).toBe('20');
+  for (const value of ['21', '4', '1.5']) {
+    edit('end', value).dispatchEvent(new Event('blur'));
+    expect(ui.button('range-1-end').value).toBe('20');
+    expect(session.selection.size).toBe(9);
+  }
+  edit('start', '0').dispatchEvent(new Event('blur'));
+  expect(ui.button('range-1-start').value).toBe('12');
+  const field = edit('end', '18');
+  const enter = new Event('keydown', { cancelable: true });
+  Object.defineProperty(enter, 'key', { value: 'Enter' });
+  field.dispatchEvent(enter);
+  expect(session.selection.size).toBe(7);
+  expect(enter.defaultPrevented).toBe(true);
+  session.toggleAllMedia();
+  session.toggleAllMedia();
+  edit('start', '').dispatchEvent(new Event('blur'));
+  expect(ui.button('range-1-start').value).toBe('1');
+  edit('end', '99').dispatchEvent(new Event('blur'));
+  expect(ui.button('range-1-end').value).toBe('20');
+  expect(session.selection.size).toBe(20);
+});
