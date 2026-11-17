@@ -60,7 +60,13 @@ MP4 使用专用 UUID box 保存来源 JSON，并维护封装结构与相关偏�
 
 来源读写通过 `core/media-source-client.ts` 启动 `workers/media-source.worker.ts`，只能从扩展页面或后台调用，不在 X 的内容脚本环境中直接创建 Worker。客户端检查响应 ID、Blob 格式或来源结构，并在成功、失败、取消和超时后回收 Worker。
 
-普通视频写入来源的下载上限为 512 MiB；读取器支持的文件上限为 2 GiB，来源 JSON 另有 16 KiB 限制。这些限制不同于 FFmpeg 实验选项。合法但没有来源的文件可以返回 `undefined`，损坏文件、不支持的封装或冲突来源应保留明确错误，不能都当作「没有来源」。
+普通视频写入来源的默认下载保护上限为 512 MiB；来源文件默认限制为 2 GiB，Worker 默认超时为 120 秒。显式强制任务可跳过这三项保护；来源 JSON 的 16 KiB 契约和格式验证仍然执行。这些限制不同于 FFmpeg 实验选项。合法但没有来源的文件可以返回 `undefined`，损坏文件、不支持的封装或冲突来源应保留明确错误，不能都当作「没有来源」。
+
+## 保护限制与强制执行
+
+`core/export-preflight.ts` 用已有媒体元数据估算输出，导出面板确认后把 `force: true` 写入不可变任务快照。图像预算集中在 `shared/processing-limit.ts`；实际处理触发可放宽的保护时抛出 `ProcessingLimitError`，批量处理通过 `ExportItemsError` 保留是否可强制重试。
+
+队列将保护阻断标为 `limited`，保留有效文件的未完成任务标为 `partial`。动态处理的默认回退输出带有可强制重试标记。`export-job-force-retry` 创建新的强制任务，保留旧任务和文件，避免已保存文件的去重逻辑阻止重新生成目标格式。普通重试继续复用任务 ID。
 
 ## 动态处理链路
 

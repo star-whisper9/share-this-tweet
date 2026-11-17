@@ -1141,3 +1141,18 @@
     margin-top: 6px;
   }
 }
+
+.stt-limit-confirmation {
+  padding: 10px;
+  border: 1px solid var(--stt-tint-border);
+  border-radius: 8px;
+  background: var(--stt-tint);
+  color: var(--stt-text);
+  font-size: 12px;
+}
+.stt-limit-confirmation p {
+  margin: 0 0 8px;
+}
+.stt-limit-confirmation button + button {
+  margin-left: 8px;
+}

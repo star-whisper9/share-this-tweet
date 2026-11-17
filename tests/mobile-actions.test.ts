@@ -4,6 +4,11 @@ import { renderActions } from '../src/content/actions-view.js';
 import { DEFAULT_SETTINGS } from '../src/shared/settings.js';
 import type { TweetRecord } from '../src/shared/model.js';
 
+vi.mock('../src/core/image-theme.js', async (original) => ({
+  ...(await original<typeof import('../src/core/image-theme.js')>()),
+  detectImageTheme: () => 'light',
+}));
+
 // Minimal DOM surface for exercising event routing, not CSS or product copy.
 class Element extends EventTarget {
   children: Element[] = [];
@@ -345,3 +350,34 @@ it('keeps empty drafts while editing and restores the last committed value or tw
   expect(ui.button('range-1-end').value).toBe('20');
   expect(session.selection.size).toBe(20);
 });
+
+it.each([false, true])(
+  'offers force confirmation in the current export panel, mobile=%s',
+  async (mobile) => {
+    const ui = setup();
+    const record = tweet('1');
+    record.media = [
+      {
+        index: 1,
+        type: 'video',
+        durationMs: 600000,
+        variants: [{ url: 'https://video.twimg.com/a.mp4', mime: 'video/mp4' }],
+      },
+    ];
+    const session = new ExportSession(
+      record,
+      { ...DEFAULT_SETTINGS, experimentalVideo: true },
+      () => ui.render(session, mobile),
+    );
+    session.configureMedia({ video: 'bottom' });
+    await session.saveSelected();
+    expect(session.limitWarnings.length).toBeGreaterThan(0);
+    const confirm = vi.spyOn(session, 'confirmForcedExport').mockResolvedValue();
+    const button = ui.button('force-export-1');
+    expect((mobile ? ui.dock : ui.actions).contains(button)).toBe(true);
+    button.click();
+    expect(confirm).toHaveBeenCalledOnce();
+    ui.button('cancel-export-1').click();
+    expect(session.limitWarnings).toEqual([]);
+  },
+);

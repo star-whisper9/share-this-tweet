@@ -5,6 +5,33 @@ import type { ExportSession } from './export-session.js';
 import { appendMediaActions } from './media-view.js';
 import { actionButton, actionLabel, errorDetails, node } from './ui-components.js';
 
+function limitConfirmation(session: ExportSession): HTMLElement | undefined {
+  if (!session.limitWarnings.length) return;
+  const panel = node('div', 'stt-limit-confirmation');
+  panel.setAttribute('role', 'alert');
+  panel.append(
+    node('p', '', t('content.limitPrompt')),
+    node('p', '', session.limitWarnings.join('；')),
+  );
+  for (const [key, label, action] of [
+    [
+      'force-export',
+      t('content.forceExport'),
+      () => {
+        void session.confirmForcedExport();
+      },
+    ],
+    ['cancel-export', t('content.cancelExport'), () => session.cancelPendingExport()],
+  ] as const) {
+    const button = node('button', 'stt-media-select-all', label);
+    button.type = 'button';
+    button.dataset.sttFocusKey = `${key}-${session.record.tweetId}`;
+    button.addEventListener('click', action);
+    panel.append(button);
+  }
+  return panel;
+}
+
 function cardSaveButton(session: ExportSession, row = false, mobile = false): HTMLButtonElement {
   const key = row ? 'save-row-card' : 'save-card';
   const state = session.action(key);
@@ -99,6 +126,11 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   actions.replaceChildren();
   dock.replaceChildren();
   dock.hidden = !mobile;
+  for (const target of [session, session.quoted]) {
+    if (!target) continue;
+    const confirmation = limitConfirmation(target);
+    if (confirmation) (mobile ? dock : actions).append(confirmation);
+  }
   for (const [label, record] of [
     [t('content.mainTweet'), session.record],
     [t('content.quoteTweet'), session.quoted?.record],
@@ -201,6 +233,9 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
     strip.scrollLeft = state.stripPositions.get(strip.dataset.tweetId ?? '') ?? 0;
   }
   if (scroll) scroll.scrollTop = scrollTop;
+  sheet
+    .querySelector<HTMLElement>('.stt-limit-confirmation')
+    ?.scrollIntoView?.({ block: 'nearest' });
   if (!focusKey) return;
   const target = Array.from(sheet.querySelectorAll<HTMLElement>('[data-stt-focus-key]')).find(
     (item) => item.dataset.sttFocusKey === focusKey,

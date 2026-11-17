@@ -241,3 +241,27 @@ it('replaces selection with an inclusive range and toggles partial selections to
   session.selectMediaRange(1, 20);
   expect(session.selection.size).toBe(1);
 });
+
+it('waits for an in-place confirmation and forces only the captured export', async () => {
+  const longVideo = { ...record, media: [{ ...record.media[1]!, durationMs: 600000 }] };
+  const session = new ExportSession(longVideo, settings);
+  session.configureMedia({ video: 'bottom' });
+  await session.saveSelected();
+  expect(session.limitWarnings.length).toBeGreaterThan(0);
+  expect(enqueueExportJob).not.toHaveBeenCalled();
+  session.cancelPendingExport();
+  await session.confirmForcedExport();
+  expect(enqueueExportJob).not.toHaveBeenCalled();
+  await session.saveSelected();
+  await session.confirmForcedExport();
+  expect(enqueueExportJob).toHaveBeenCalledOnce();
+  expect(vi.mocked(enqueueExportJob).mock.calls[0]![0].force).toBe(true);
+  expect(session.limitWarnings).toEqual([]);
+  await session.saveSelected();
+  expect(enqueueExportJob).toHaveBeenCalledOnce();
+  expect(session.limitWarnings.length).toBeGreaterThan(0);
+  session.configureMedia({ video: 'original' });
+  expect(session.limitWarnings).toEqual([]);
+  await session.saveSelected();
+  expect(vi.mocked(enqueueExportJob).mock.calls[1]![0].force).toBeUndefined();
+});

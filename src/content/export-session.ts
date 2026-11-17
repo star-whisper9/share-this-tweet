@@ -1,3 +1,4 @@
+import { exportLimitWarnings } from '../core/export-preflight.js';
 import { enqueueExportJob, openExportJobs } from '../core/job-client.js';
 import { detectCardTheme } from '../core/card.js';
 import { copyTweetText } from '../core/text-export.js';
@@ -46,6 +47,20 @@ export class ExportSession {
   private actions = new Map<string, ActionState>();
   private active = true;
   private submitting = false;
+  private pending?: { key: string; job: ExportJobRequest; count: number; warnings: string[] };
+  get limitWarnings(): readonly string[] {
+    return this.pending?.warnings ?? [];
+  }
+  cancelPendingExport(): void {
+    this.pending = undefined;
+    this.changed();
+  }
+  async confirmForcedExport(): Promise<void> {
+    const pending = this.pending;
+    if (!pending || !this.active || this.submitting) return;
+    this.pending = undefined;
+    await this.submit(pending.key, { ...pending.job, force: true }, pending.count);
+  }
   private tweet: TweetRecord;
   private preferences: ExtensionSettings;
   private mediaPreferences: MediaSaveOptions;
@@ -115,32 +130,38 @@ export class ExportSession {
   }
   toggleMedia(index: number): void {
     if (!this.active || this.submitting) return;
+    this.pending = undefined;
     this.selection.toggle(index, this.record.media);
     this.changed();
   }
   selectMediaRange(start: number, end: number): void {
     if (!this.active || this.submitting) return;
+    this.pending = undefined;
     this.selection.selectRange(start, end, this.record.media);
     this.changed();
   }
   toggleAllMedia(): void {
     if (!this.active || this.submitting) return;
+    this.pending = undefined;
     this.selection.toggleAll(this.record.media);
     this.changed();
   }
   configureMedia(options: Partial<MediaSaveOptions>): void {
     if (!this.active || this.submitting) return;
+    this.pending = undefined;
     this.mediaPreferences = { ...this.mediaPreferences, ...options };
     if (options.photo !== undefined) this.actions.delete('stitch-media');
     this.changed();
   }
   updateRecord(record: TweetRecord): void {
     if (record.tweetId !== this.tweet.tweetId) throw new Error('A session cannot change its tweet');
+    this.pending = undefined;
     this.tweet = record;
     this.selection.reconcile(record.media);
     this.syncQuote();
   }
   updateSettings(settings: ExtensionSettings): void {
+    this.pending = undefined;
     this.preferences = settings;
     if (!settings.experimentalVideo && ['top', 'bottom'].includes(this.mediaPreferences.video))
       this.mediaPreferences = { ...this.mediaPreferences, video: 'sourced' };
@@ -152,6 +173,7 @@ export class ExportSession {
   }
   dispose(): void {
     this.active = false;
+    this.pending = undefined;
     this.quoted?.dispose();
   }
   private changed(): void {
@@ -171,6 +193,21 @@ export class ExportSession {
   }
   private async submit(key: string, job: ExportJobRequest, count: number): Promise<void> {
     if (!this.active || this.submitting) return;
+    this.pending = undefined;
+    try {
+      const warnings = exportLimitWarnings(job);
+      if (warnings.length) {
+        this.pending = { key, job: structuredClone(job), count, warnings };
+        this.currentStatus = { state: 'ready', message: '' };
+        this.messageFactory = undefined;
+        this.changed();
+        return;
+      }
+    } catch (error) {
+      this.actions.set(key, { status: 'error', error: errorMessage(error) });
+      this.setStatus('error', errorMessage(error));
+      return;
+    }
     this.submitting = true;
     this.actions.set(key, { status: 'loading' });
     this.setStatus('loading', t('jobs.submitting'), () => t('jobs.submitting'));
