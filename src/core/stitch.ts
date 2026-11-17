@@ -16,9 +16,9 @@ interface Size {
 export function calculateStitchLayout(
   images: Size[],
   style: StitchStyle,
-  maxWidth = 12000,
-  maxHeight = 12000,
-  maxPixels = 24000000,
+  maxWidth = 24000,
+  maxHeight = 24000,
+  maxPixels = 64000000,
 ) {
   if (
     !images.length ||

@@ -1,3 +1,4 @@
+import { MAX_TWEET_MEDIA } from '../shared/media-limits.js';
 import type { BackgroundVideoRenderRequest } from '../shared/video-job.js';
 import { getMediaDownloadTarget } from '../core/media.js';
 import { ImageResources } from '../core/image-resources.js';
@@ -36,10 +37,10 @@ function validateRequest(value: unknown): value is BackgroundVideoRenderRequest 
     typeof r.record.author.name === 'string' &&
     typeof r.record.author.handle === 'string' &&
     Array.isArray(r.record.media) &&
-    r.record.media.length <= 4 &&
+    r.record.media.length <= MAX_TWEET_MEDIA &&
     Array.isArray(r.indexes) &&
     r.indexes.length > 0 &&
-    r.indexes.length <= 4 &&
+    r.indexes.length <= MAX_TWEET_MEDIA &&
     new Set(r.indexes).size === r.indexes.length &&
     r.indexes.every((index) => Number.isInteger(index))
   );

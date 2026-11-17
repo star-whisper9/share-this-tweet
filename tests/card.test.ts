@@ -34,7 +34,7 @@ describe('tweet card layout', () => {
     );
   });
 
-  it('creates a two-column grid for multiple photos', () => {
+  it('creates a complete three-column row for three photos', () => {
     const layout = calculateTweetCardLayout({
       images: [
         { width: 800, height: 600 },
@@ -47,7 +47,7 @@ describe('tweet card layout', () => {
 
     expect(layout.imageRects).toHaveLength(3);
     expect(layout.imageRects[0]?.y).toBe(layout.imageRects[1]?.y);
-    expect(layout.imageRects[2]?.y).toBeGreaterThan(layout.imageRects[0]?.y ?? 0);
+    expect(layout.imageRects[2]?.y).toBe(layout.imageRects[0]?.y);
     expect(layout.height).toBeGreaterThan(layout.imageY + layout.imageAreaHeight);
   });
 });
@@ -216,4 +216,45 @@ describe('poll card layout', () => {
       }),
     ).toThrow(Error);
   });
+});
+
+it.each([
+  [4, 1000, 1000, 2],
+  [8, 600, 1200, 4],
+  [8, 1200, 600, 2],
+  [9, 1000, 1000, 3],
+  [12, 1000, 1000, 3],
+  [20, 1000, 1000, 4],
+])('lays out %i images sized %ix%i in %i columns', (count, width, height, columns) => {
+  const layout = calculateTweetCardLayout({
+    images: Array.from({ length: count }, () => ({ width, height })),
+    text: '',
+    measureText,
+  });
+  expect(layout.imageRects).toHaveLength(count);
+  expect(layout.imageRects.filter((rect) => rect.y === 0)).toHaveLength(columns);
+  expect(new Set(layout.imageRects.map((rect) => rect.y)).size).toBe(count / columns);
+  expect(layout.width).toBeLessThanOrEqual(1200);
+  for (const rect of layout.imageRects) {
+    expect(rect.width / rect.height).toBeCloseTo(width / height);
+    expect(rect.x).toBeGreaterThanOrEqual(0);
+    expect(rect.x + rect.width).toBeLessThanOrEqual(layout.width);
+  }
+});
+it.each([5, 7, 11, 13, 17, 19])('keeps every image for an incomplete %i-image matrix', (count) => {
+  const layout = calculateTweetCardLayout({
+    images: Array.from({ length: count }, (_, index) => ({
+      width: 600 + index * 100,
+      height: 800,
+    })),
+    text: '',
+    measureText,
+  });
+  expect(layout.imageRects).toHaveLength(count);
+  for (const y of new Set(layout.imageRects.map((rect) => rect.y))) {
+    const row = layout.imageRects.filter((rect) => rect.y === y);
+    expect(row.length).toBeLessThanOrEqual(4);
+    for (let index = 1; index < row.length; index++)
+      expect(row[index]!.x).toBeGreaterThan(row[index - 1]!.x + row[index - 1]!.width);
+  }
 });

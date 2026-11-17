@@ -271,3 +271,22 @@ it('applies the output-pixel limit again after a source frame is added', async (
   expect(encoded).toBe(false);
   expect(files.size).toBe(0);
 });
+
+it('plans all twenty inputs and rejects a twenty-first', () => {
+  const inputs = Array.from({ length: 20 }, () => ({
+    type: 'video' as const,
+    probe: { width: 320, height: 180, duration: 2, hasAudio: false },
+  }));
+  const plan = createVideoRenderPlan(inputs, 'seamless');
+  expect(plan.tiles).toHaveLength(20);
+  expect(plan.width).toBe(6400);
+  const args = createVideoFfmpegArgs(
+    inputs.map((input, index) => ({ path: `${index}.mp4`, type: input.type })),
+    plan,
+    'seamless',
+    '#ffffff',
+    'original',
+  );
+  expect(args.join(' ')).toContain('xstack=inputs=20');
+  expect(() => createVideoRenderPlan([...inputs, inputs[0]!], 'seamless')).toThrow(VideoPlanError);
+});

@@ -1,3 +1,4 @@
+import { MAX_TWEET_MEDIA } from './media-limits.js';
 import type { MediaRecord, TweetRecord } from './model.js';
 import { t } from './i18n.js';
 
@@ -71,7 +72,7 @@ export function parseMediaSourceMetadata(value: unknown): MediaSourceMetadata {
   if (
     !Number.isInteger(media.index) ||
     (media.index as number) < 1 ||
-    (media.index as number) > 4 ||
+    (media.index as number) > MAX_TWEET_MEDIA ||
     (media.type !== 'video' && media.type !== 'animated_gif')
   )
     throw new Error(t('core.source.invalidMedia'));

@@ -309,3 +309,30 @@ describe('renderTweetCard polls', () => {
     expect(store.load).not.toHaveBeenCalled();
   });
 });
+
+it.each(['grid', 'row'] as const)(
+  'renders all twenty previews in a %s card',
+  async (mediaLayout) => {
+    installCanvas();
+    const media = Array.from({ length: 20 }, (_, index) => ({
+      index: index + 1,
+      type: 'photo' as const,
+      originalUrl: `photo-${index}`,
+    }));
+    const images = new Map(
+      media.map((item) => [item.originalUrl, new FakeImage(item.originalUrl)]),
+    );
+    images.set('avatar-main', new FakeImage('avatar'));
+    images.set('extension:/icons/icon-48.png', new FakeImage('brand'));
+    const { blob } = await renderTweetCard(record(media), media, {
+      resources: resources(images),
+      theme: 'light',
+      mediaLayout,
+    });
+    expect(blob.type).toBe('image/png');
+    expect(drawCalls.filter((id) => id.startsWith('photo-'))).toEqual(
+      media.map((item) => item.originalUrl),
+    );
+    for (const item of media) expect(images.get(item.originalUrl)!.remove).toHaveBeenCalled();
+  },
+);

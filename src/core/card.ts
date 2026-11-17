@@ -1,3 +1,4 @@
+import { MAX_TWEET_MEDIA } from '../shared/media-limits.js';
 import { calculateStitchLayout, type StitchStyle } from './stitch.js';
 import { tagRunsForLines, type CardTextRun } from './card-tags.js';
 import { wrapText } from './text-wrap.js';
@@ -141,8 +142,8 @@ export function wrapCardText(
 }
 
 function validateImageDimensions(images: CardImageDimension[]): void {
-  if (images.length > 4) {
-    throw new Error(t('core.card.maxPhotos'));
+  if (images.length > MAX_TWEET_MEDIA) {
+    throw new Error(t('core.card.maxMedia', { count: MAX_TWEET_MEDIA }));
   }
   if (
     images.some(
@@ -162,6 +163,25 @@ function cardWidthForImages(images: CardImageDimension[], requestedWidth?: numbe
     ? Math.max(...images.map((image) => image.width))
     : CARD_TEXT_WIDTH;
   return Math.max(CARD_MIN_WIDTH, Math.min(CARD_MAX_WIDTH, requestedWidth ?? naturalWidth));
+}
+
+/** Prefer complete matrices, then balance their aspect ratio toward a portrait card. */
+function gridColumns(images: CardImageDimension[]): number {
+  const count = images.length;
+  if (count === 4) return 2;
+  if (count === 20) return 4;
+  const candidates = [2, 3, 4].filter((columns) => columns <= count);
+  const complete = candidates.filter((columns) => count % columns === 0);
+  const ratios = images.map((image) => Math.log(image.width / image.height));
+  const meanRatio = Math.exp(ratios.reduce((sum, ratio) => sum + ratio, 0) / count);
+  const score = (columns: number) => {
+    const rows = Math.ceil(count / columns);
+    const empty = rows * columns - count;
+    return Math.abs(Math.log((columns * meanRatio) / rows / 0.8)) + (empty / columns) * 0.35;
+  };
+  return (complete.length ? complete : candidates).reduce((best, columns) =>
+    score(columns) < score(best) ? columns : best,
+  );
 }
 
 function cardTextSizes(width: number) {
@@ -301,9 +321,10 @@ export function calculateTweetCardLayout(input: TweetCardLayoutInput): TweetCard
       );
     } else {
       const gridGap = Math.max(10, Math.round(width * 0.012));
+      const columns = gridColumns(input.images);
       let y = 0;
-      for (let index = 0; index < input.images.length; index += 2) {
-        const row = input.images.slice(index, index + 2);
+      for (let index = 0; index < input.images.length; index += columns) {
+        const row = input.images.slice(index, index + columns);
         const ratios = row.map((image) => image.width / image.height);
         const available = contentWidth - gridGap * (row.length - 1);
         const rowHeight = Math.min(480, available / ratios.reduce((sum, ratio) => sum + ratio, 0));
@@ -635,8 +656,8 @@ async function renderCardCanvas(
   if (record.poll?.status === 'invalid')
     throw new Error(t('core.poll.invalid', {}, options.locale));
   const media = Array.isArray(mediaInput) ? mediaInput : [mediaInput];
-  if (media.length > 4) {
-    throw new Error(t('core.card.maxMedia', {}, options.locale));
+  if (media.length > MAX_TWEET_MEDIA) {
+    throw new Error(t('core.card.maxMedia', { count: MAX_TWEET_MEDIA }, options.locale));
   }
 
   const resources = options.resources ?? new ImageResources();

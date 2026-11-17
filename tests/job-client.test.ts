@@ -92,3 +92,60 @@ it('accepts older queued settings and rejects malformed explicit GIF preferences
   ])
     expect(isExportJobRequest({ ...job, settings: { ...DEFAULT_SETTINGS, ...patch } })).toBe(false);
 });
+
+it.each([5, 20])(
+  'accepts %i media, single-item exports and quoted media without relaxing URL validation',
+  (count) => {
+    const media = Array.from({ length: count }, (_, index) => ({
+      ...job.record.media[0]!,
+      index: index + 1,
+    }));
+    const record = { ...job.record, media };
+    const request = { ...job, record };
+    expect(isExportJobRequest(request)).toBe(true);
+    expect(isExportJobRequest({ ...request, media: [{ ...job.media![0], index: count }] })).toBe(
+      true,
+    );
+    expect(
+      isExportJobRequest({
+        ...request,
+        media: media.map(({ index }) => ({ ...job.media![0], index })),
+      }),
+    ).toBe(true);
+    for (const kind of ['card', 'row-card', 'stitch'])
+      expect(isExportJobRequest({ ...request, kind, frame: 'original' })).toBe(true);
+    expect(
+      isExportJobRequest({
+        ...job,
+        record: {
+          ...job.record,
+          quote: {
+            status: 'available',
+            tweetId: '43',
+            record: { ...record, tweetId: '43' },
+          },
+        },
+      }),
+    ).toBe(true);
+    const unsafe = { ...media.at(-1)!, originalUrl: 'https://example.com/private' };
+    expect(
+      isExportJobRequest({
+        ...request,
+        record: { ...record, media: [...media.slice(0, -1), unsafe] },
+      }),
+    ).toBe(false);
+  },
+);
+it('rejects excess, out-of-range and duplicate media', () => {
+  for (const indexes of [Array.from({ length: 21 }, (_, index) => index + 1), [21], [1, 1]]) {
+    expect(
+      isExportJobRequest({
+        ...job,
+        record: {
+          ...job.record,
+          media: indexes.map((index) => ({ ...job.record.media[0], index })),
+        },
+      }),
+    ).toBe(false);
+  }
+});

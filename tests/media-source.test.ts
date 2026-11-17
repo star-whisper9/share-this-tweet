@@ -53,7 +53,7 @@ describe('file source metadata contract', () => {
       { ...source, publisher: { ...source.publisher, name: 'x'.repeat(257) } },
       { ...source, publisher: { ...source.publisher, handle: '@invalid space' } },
       { ...source, publisher: { ...source.publisher, id: '1.5' } },
-      { ...source, media: { index: 5, type: 'video' } },
+      { ...source, media: { index: 21, type: 'video' } },
       { ...source, media: { index: 1, type: 'photo' } },
       { ...source, publishedAt: 'invalid date' },
       { ...source, publisher: null },
@@ -63,5 +63,13 @@ describe('file source metadata contract', () => {
     expect(() => createMediaSourceMetadata(record, { index: 1, type: 'photo' }, '0.4.0')).toThrow();
     const iStatus: MediaSourceMetadata = { ...source, tweetUrl: 'https://x.com/i/status/12345' };
     expect(parseMediaSourceMetadata(iStatus)).toEqual(iStatus);
+  });
+});
+
+it.each([5, 20])('round-trips source identity for media %i', (index) => {
+  const metadata = createMediaSourceMetadata(record, { index, type: 'video' }, '0.6.0');
+  expect(parseMediaSourceMetadata(JSON.parse(JSON.stringify(metadata))).media).toEqual({
+    index,
+    type: 'video',
   });
 });

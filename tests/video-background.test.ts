@@ -284,3 +284,22 @@ it.each([true, false])(
     expect(FakeWorker.instances).toHaveLength(0);
   },
 );
+
+it('passes twenty selected inputs to the worker', async () => {
+  const media = Array.from({ length: 20 }, (_, index) => ({
+    ...request.record.media[0]!,
+    index: index + 1,
+  }));
+  const job = start({
+    ...request,
+    frame: 'original',
+    record: { ...request.record, media },
+    indexes: media.map((item) => item.index),
+  });
+  await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+  const worker = FakeWorker.instances[0]!;
+  expect(worker.postMessage.mock.calls[0]![0].inputs).toHaveLength(20);
+  const blob = new Blob(['mp4'], { type: 'video/mp4' });
+  worker.emit({ type: 'done', id: 'one', blob, width: 6400, height: 180, duration: 1 });
+  await expect(job.promise).resolves.toEqual({ type: 'done', blob });
+});

@@ -1,6 +1,7 @@
+import { MAX_TWEET_MEDIA } from '../shared/media-limits.js';
 import type { VideoFrame, VideoMediaType, VideoStitchStyle } from '../shared/video-render.js';
 
-export const MAX_VIDEO_INPUTS = 4;
+export const MAX_VIDEO_INPUTS = MAX_TWEET_MEDIA;
 export const DEFAULT_VIDEO_FRAME_RATE = 24;
 
 export type VideoPlanErrorCode =

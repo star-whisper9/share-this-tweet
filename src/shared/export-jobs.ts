@@ -1,3 +1,4 @@
+import { MAX_TWEET_MEDIA } from './media-limits.js';
 import { isGifLimits } from './gif-experiment.js';
 import type { TweetRecord } from './model.js';
 import type { ExtensionSettings } from './settings.js';
@@ -85,7 +86,7 @@ function record(value: unknown, depth = 0): value is TweetRecord {
     !text(value.author.handle, 1000) ||
     !mediaURL(value.author.avatarUrl) ||
     !Array.isArray(value.media) ||
-    value.media.length > 4
+    value.media.length > MAX_TWEET_MEDIA
   )
     return false;
   if (
@@ -94,6 +95,7 @@ function record(value: unknown, depth = 0): value is TweetRecord {
         object(item) &&
         Number.isInteger(item.index) &&
         Number(item.index) > 0 &&
+        Number(item.index) <= MAX_TWEET_MEDIA &&
         ['photo', 'video', 'animated_gif'].includes(String(item.type)) &&
         mediaURL(item.originalUrl) &&
         mediaURL(item.previewUrl) &&
@@ -153,7 +155,7 @@ export function isExportJobRequest(value: unknown): value is ExportJobRequest {
   return (
     Array.isArray(value.media) &&
     value.media.length > 0 &&
-    value.media.length <= 4 &&
+    value.media.length <= MAX_TWEET_MEDIA &&
     new Set(value.media.map((m) => (object(m) ? m.index : undefined))).size ===
       value.media.length &&
     value.media.every(

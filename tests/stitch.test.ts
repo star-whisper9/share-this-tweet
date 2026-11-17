@@ -25,9 +25,9 @@ it('preserves complete aspect ratios at the smallest height, with optional propo
     ],
     'gallery',
   );
-  expect(huge.width).toBeLessThanOrEqual(12000);
-  expect(huge.height).toBeLessThanOrEqual(12000);
-  expect(huge.width * huge.height).toBeLessThanOrEqual(24000000.01);
+  expect(huge.width).toBeLessThanOrEqual(24000);
+  expect(huge.height).toBeLessThanOrEqual(24000);
+  expect(huge.width * huge.height).toBeLessThanOrEqual(64000000.01);
   expect(() => calculateStitchLayout([{ width: 0, height: 10 }], 'seamless')).toThrow();
 });
 
@@ -139,4 +139,13 @@ it('fails instead of omitting a missing dynamic preview, releasing decoded photo
   ).rejects.toThrow();
   expect(image.remove).toHaveBeenCalledOnce();
   expect(draws).not.toHaveBeenCalled();
+});
+
+it('preserves a twenty-image strip at natural resolution within the expanded budget', () => {
+  const layout = calculateStitchLayout(
+    Array.from({ length: 20 }, () => ({ width: 1000, height: 1500 })),
+    'seamless',
+  );
+  expect(layout).toMatchObject({ width: 20000, height: 1500 });
+  expect(layout.rects).toHaveLength(20);
 });
