@@ -205,7 +205,10 @@ export function renderActions(sheet: HTMLElement, session: ExportSession, mobile
   const target = Array.from(sheet.querySelectorAll<HTMLElement>('[data-stt-focus-key]')).find(
     (item) => item.dataset.sttFocusKey === focusKey,
   );
-  if (target instanceof HTMLButtonElement && !target.disabled)
+  if (
+    (target instanceof HTMLButtonElement || target instanceof HTMLInputElement) &&
+    !target.disabled
+  )
     target.focus({ preventScroll: true });
   else if (target?.parentElement) {
     target.parentElement.dataset.sttFocusKey = focusKey;

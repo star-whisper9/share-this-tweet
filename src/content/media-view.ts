@@ -23,9 +23,10 @@ export function appendMediaActions(
 ): void {
   const { record, selection } = session;
   if (record.media.length === 0) return;
-  const heading = node('div', 'stt-section-label');
+  const heading = node('div', 'stt-section-label stt-media-heading');
   heading.append(node('span', '', headingLabel));
-  if (record.media.length > 1)
+  if (record.media.length > 1) {
+    heading.append(mediaSelectionControls(session));
     heading.append(
       node(
         'span',
@@ -33,6 +34,7 @@ export function appendMediaActions(
         t('content.selectedCount', { selected: selection.size, total: record.media.length }),
       ),
     );
+  }
   const strip = node('div', 'stt-media-strip');
   strip.dataset.tweetId = record.tweetId;
   strip.setAttribute('role', 'group');
@@ -83,6 +85,74 @@ export function appendMediaActions(
     strip.append(choice);
   }
   actions.append(heading, strip, mediaActions(session, dock));
+}
+
+function mediaSelectionControls(session: ExportSession): HTMLElement {
+  const { record, selection } = session;
+  const controls = node('div', 'stt-media-selection-controls');
+  const selected = selection.selected(record.media);
+  const first = selected[0]?.index;
+  const last = selected.at(-1)?.index;
+  const contiguous =
+    first !== undefined &&
+    last !== undefined &&
+    record.media.filter((item) => item.index >= first && item.index <= last).length ===
+      selected.length;
+  const input = (side: 'start' | 'end', value: number | undefined): HTMLInputElement => {
+    const field = node('input', 'stt-media-range');
+    field.type = 'number';
+    field.min = String(Math.min(...record.media.map((item) => item.index)));
+    field.max = String(Math.max(...record.media.map((item) => item.index)));
+    field.step = '1';
+    field.inputMode = 'numeric';
+    field.value = contiguous ? String(value) : '';
+    field.placeholder = side === 'start' ? field.min : field.max;
+    field.disabled = session.isSavingBatch;
+    field.setAttribute(
+      'aria-label',
+      t(side === 'start' ? 'content.rangeStart' : 'content.rangeEnd'),
+    );
+    field.dataset.sttFocusKey = `range-${record.tweetId}-${side}`;
+    return field;
+  };
+  const start = input('start', first);
+  const end = input('end', last);
+  const apply = () => {
+    start.setCustomValidity('');
+    end.setCustomValidity('');
+    if (!start.value || !end.value) return;
+    for (const field of [start, end]) {
+      if (!record.media.some((item) => item.index === field.valueAsNumber))
+        field.setCustomValidity(t('content.unavailableRangeIndex'));
+    }
+    if (start.valueAsNumber > end.valueAsNumber) end.setCustomValidity(t('content.invalidRange'));
+    if (start.checkValidity() && end.checkValidity())
+      session.selectMediaRange(start.valueAsNumber, end.valueAsNumber);
+  };
+  for (const field of [start, end]) {
+    field.addEventListener('input', apply);
+    field.addEventListener('change', () => {
+      start.reportValidity();
+      end.reportValidity();
+    });
+  }
+  const toggle = node(
+    'button',
+    'stt-media-select-all',
+    t(selected.length === record.media.length ? 'content.deselectAll' : 'content.selectAll'),
+  );
+  toggle.type = 'button';
+  toggle.disabled = session.isSavingBatch;
+  toggle.dataset.sttFocusKey = `select-all-${record.tweetId}`;
+  toggle.addEventListener('click', () => session.toggleAllMedia());
+  controls.append(
+    start,
+    node('span', '', '–'),
+    end,
+    node('span', '', t('content.rangeUnit')),
+    toggle,
+  );
+  return controls;
 }
 
 interface SaveChoice<T extends string> {

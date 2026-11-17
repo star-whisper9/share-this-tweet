@@ -206,3 +206,38 @@ it('selects the first arriving media once and preserves choices across media upd
   session.updateRecord(record);
   expect(session.selection.size).toBe(0);
 });
+
+it('replaces selection with an inclusive range and toggles partial selections to all', async () => {
+  const media = Array.from({ length: 20 }, (_, index) => ({
+    ...record.media[0]!,
+    index: index + 1,
+  }));
+  const session = new ExportSession({ ...record, media }, settings);
+  session.selectMediaRange(4, 8);
+  expect(session.selection.selected(media).map((item) => item.index)).toEqual([4, 5, 6, 7, 8]);
+  await session.saveSelected();
+  expect(vi.mocked(enqueueExportJob).mock.calls[0]![0].media!.map((item) => item.index)).toEqual([
+    4, 5, 6, 7, 8,
+  ]);
+  for (const range of [
+    [8, 4],
+    [0, 4],
+    [1, 21],
+    [1.5, 8],
+  ]) {
+    expect(() => session.selectMediaRange(range[0]!, range[1]!)).toThrow(RangeError);
+    expect(session.selection.size).toBe(5);
+  }
+  session.toggleAllMedia();
+  expect(session.selection.size).toBe(20);
+  session.toggleAllMedia();
+  expect(session.selection.size).toBe(0);
+  session.toggleAllMedia();
+  expect(session.selection.size).toBe(20);
+  session.selectMediaRange(20, 20);
+  expect(session.selection.selected(media).map((item) => item.index)).toEqual([20]);
+  session.dispose();
+  session.toggleAllMedia();
+  session.selectMediaRange(1, 20);
+  expect(session.selection.size).toBe(1);
+});

@@ -15,6 +15,20 @@ class Element extends EventTarget {
   open = false;
   scrollLeft = 0;
   scrollTop = 0;
+  value = '';
+  private validationMessage = '';
+  get valueAsNumber() {
+    return Number(this.value);
+  }
+  setCustomValidity(message: string) {
+    this.validationMessage = message;
+  }
+  checkValidity() {
+    return !this.validationMessage;
+  }
+  reportValidity() {
+    return this.checkValidity();
+  }
   constructor(
     readonly tag: string,
     readonly className = '',
@@ -88,6 +102,7 @@ vi.mock('../src/content/ui-components.js', () => ({
 function setup() {
   vi.stubGlobal('HTMLElement', Element);
   vi.stubGlobal('HTMLButtonElement', Element);
+  vi.stubGlobal('HTMLInputElement', Element);
   vi.stubGlobal('document', documentState);
   const sheet = new Element('section');
   const scroll = new Element('div', 'stt-sheet-scroll');
@@ -256,5 +271,42 @@ it.each([true, false])(
     ui.button('save-choice-1-video-top').click();
     ui.button('save-choice-1-gif-sourced').click();
     expect(session.mediaOptions).toMatchObject({ video: 'top', gif: 'sourced' });
+  },
+);
+
+it.each([false, true])(
+  'routes range inputs and select-all through the %s mobile layout while retaining focus',
+  (mobile) => {
+    const ui = setup();
+    const record = tweet('1');
+    record.media = Array.from({ length: 20 }, (_, index) => ({
+      ...record.media[0]!,
+      index: index + 1,
+    }));
+    const session = new ExportSession(record, DEFAULT_SETTINGS, () => ui.render(session, mobile));
+    ui.render(session, mobile);
+    const enter = (side: string, value: string) => {
+      const input = ui.button(`range-1-${side}`);
+      input.focus();
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    };
+    enter('start', '4');
+    expect(session.selection.size).toBe(1);
+    enter('end', '8');
+    expect(session.selection.selected(record.media).map((item) => item.index)).toEqual([
+      4, 5, 6, 7, 8,
+    ]);
+    expect(documentState.activeElement).toBe(ui.button('range-1-end'));
+    enter('end', '21');
+    expect(session.selection.size).toBe(5);
+    expect(ui.button('range-1-end').checkValidity()).toBe(false);
+    ui.button('select-all-1').click();
+    expect(session.selection.size).toBe(20);
+    ui.button('select-all-1').click();
+    expect(session.selection.size).toBe(0);
+    enter('start', '20');
+    enter('end', '20');
+    expect(session.selection.selected(record.media).map((item) => item.index)).toEqual([20]);
   },
 );

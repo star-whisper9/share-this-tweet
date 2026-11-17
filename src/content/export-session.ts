@@ -118,6 +118,16 @@ export class ExportSession {
     this.selection.toggle(index, this.record.media);
     this.changed();
   }
+  selectMediaRange(start: number, end: number): void {
+    if (!this.active || this.submitting) return;
+    this.selection.selectRange(start, end, this.record.media);
+    this.changed();
+  }
+  toggleAllMedia(): void {
+    if (!this.active || this.submitting) return;
+    this.selection.toggleAll(this.record.media);
+    this.changed();
+  }
   configureMedia(options: Partial<MediaSaveOptions>): void {
     if (!this.active || this.submitting) return;
     this.mediaPreferences = { ...this.mediaPreferences, ...options };

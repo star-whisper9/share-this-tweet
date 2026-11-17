@@ -32,6 +32,27 @@ export class MediaSelection {
     }
   }
 
+  selectRange(start: number, end: number, media: MediaRecord[]): void {
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start > end ||
+      !media.some((item) => item.index === start) ||
+      !media.some((item) => item.index === end)
+    )
+      throw new RangeError('Invalid media range');
+    this.indexes.clear();
+    for (const item of media) {
+      if (item.index >= start && item.index <= end) this.indexes.add(item.index);
+    }
+  }
+
+  toggleAll(media: MediaRecord[]): void {
+    const allSelected = media.every((item) => this.indexes.has(item.index));
+    this.indexes.clear();
+    if (!allSelected) for (const item of media) this.indexes.add(item.index);
+  }
+
   selected(media: MediaRecord[]): MediaRecord[] {
     return media.filter((item) => this.indexes.has(item.index));
   }
