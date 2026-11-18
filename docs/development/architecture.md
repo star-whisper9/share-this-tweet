@@ -40,6 +40,8 @@ X 的 fetch / XMLHttpRequest 响应
 
 `shared/model.ts` 定义 `TweetRecord`、`MediaRecord`、作者和引用信息。媒体序号从 `1` 开始，是后续选择、文件 ID、命名和输出记录关联同一项媒体的依据，不要把数组下标当作媒体序号。
 
+`shared/media-limits.ts` 中的 `MAX_TWEET_MEDIA` 统一定义单条推文的 20 项媒体上限。卡片渲染、视频计划、后台任务校验和文件来源元数据都使用这个值。
+
 归一化发生在 `shared/tweet-normalizer.ts`。它负责适配 X 的响应形状；渲染器和界面应使用归一化后的模型，避免在多个地方重复解析 X 的原始字段。
 
 同一条推文可能陆续收到摘要、完整正文、长文、媒体信息或译文。`mergeTweetRecords` 根据正文来源和观测时间合并数据，并保留已知的媒体与作者信息。新增字段时需要同时考虑归一化、合并规则、记录校验和实际使用方，不能只给 TypeScript 接口加一个可选字段。
@@ -52,6 +54,8 @@ X 的 fetch / XMLHttpRequest 响应
 
 ```text
 ExportSession：推文、选择项、设置、主题、语言
+  → core/export-preflight.ts：用已有媒体信息估算是否超限
+  → 导出面板：预计超限时等待确认，继续则提交带 force 的快照
   → core/job-client.ts：发送 export-job-enqueue
   → background/export-jobs.ts：校验并持久化请求，返回入队确认
   → core/job-renderer.ts：按快照生成文件
@@ -59,7 +63,9 @@ ExportSession：推文、选择项、设置、主题、语言
   → tasks：读取摘要、保存状态和诊断，执行取消或重试
 ```
 
-`content/export-session.ts` 管理一次面板会话。提交时复制推文和配置，固定主题与语言，生成 `ExportJobRequest`。后台确认入队后，任务不再依赖原面板；关闭面板或原推文只销毁界面会话，不能连带取消已接受的任务。
+`content/export-session.ts` 管理一次面板会话。保存所选媒体时，`content/media-selection.ts` 按媒体序号保存单项选择，也支持替换为包含首尾的范围或切换全选。拼图和卡片按各自范围读取完整记录。
+
+会话在提交前生成 `ExportJobRequest` 并检查保护限制。预计超限时，确认按钮提交此前复制的快照，改变媒体选择或设置会清除待确认请求。后台确认入队后，即使关闭原推文，任务也能继续执行。保护检查与实际输出规则详见[导出与媒体处理](media-processing.md#保护限制与强制执行)。
 
 复制文字是例外：它在用户点击时直接操作当前页面的剪贴板，随后尝试写入来源记录，不进入导出队列。将复制操作改成后台异步任务会影响浏览器对用户手势的判断。
 
@@ -80,12 +86,13 @@ TypeScript 类型只约束编译时的调用，不会验证页面、消息或文
 
 ## 按问题寻找修改位置
 
-| 改动                   | 起点                                              | 常用验证                                                            |
-| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
-| X 响应字段变化         | `tweet-normalizer.ts`、`model.ts`、`TweetSource`  | `tweet-normalizer`、`model`、`capture`、`translation`、`quote` 测试 |
-| 媒体选择或主／引用切换 | `content/export-session.ts`、`media-selection.ts` | `export-session`、`mobile-actions` 测试                             |
-| 输出样式或编码结果     | `core/job-renderer.ts` 与具体渲染模块             | [导出与媒体处理](media-processing.md)                               |
-| 下载、重试或历史数据   | 队列、任务存储和任务页                            | [后台任务与存储](jobs-and-storage.md)                               |
-| 新增选项、变量或语言   | 设置、模板字段注册表和词典                        | [设置与本地化](settings-and-localization.md)                        |
+| 改动                   | 起点                                                               | 常用验证                                                            |
+| ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| X 响应字段变化         | `tweet-normalizer.ts`、`model.ts`、`TweetSource`                   | `tweet-normalizer`、`model`、`capture`、`translation`、`quote` 测试 |
+| 媒体选择或主／引用切换 | `content/export-session.ts`、`media-selection.ts`、`media-view.ts` | `export-session`、`mobile-actions` 测试                             |
+| 入队前的保护检查与确认 | `core/export-preflight.ts`、`content/export-session.ts`            | `export-preflight`、`export-session`、`mobile-actions` 测试         |
+| 输出样式或编码结果     | `core/job-renderer.ts` 与具体渲染模块                              | [导出与媒体处理](media-processing.md)                               |
+| 下载、重试或历史数据   | 队列、任务存储和任务页                                             | [后台任务与存储](jobs-and-storage.md)                               |
+| 新增选项、变量或语言   | 设置、模板字段注册表和词典                                         | [设置与本地化](settings-and-localization.md)                        |
 
 表中的测试名对应 `tests/<名称>.test.ts`。只运行与本次行为有关的测试，必要时再补充完整检查与实机回归。
