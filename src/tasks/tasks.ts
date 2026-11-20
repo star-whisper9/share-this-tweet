@@ -1,14 +1,13 @@
+import { isAndroidPlatform } from '../shared/platform.js';
+import { saveExportJobFile } from '../core/job-download.js';
 import { createTaskView } from './tasks-view.js';
 import { downloadBlob } from '../core/download.js';
 import {
   cancelExportJob,
   clearExportJobCache,
   clearExportJobHistory,
-  downloadExportJobFile,
   getExportJobDiagnostics,
-  getExportJobFile,
   listExportJobs,
-  markExportJobFileSaved,
   removeExportJob,
   retryExportJob,
   forceRetryExportJob,
@@ -44,7 +43,7 @@ let batchStatus:
       total: number;
     }
   | undefined;
-const isAndroid = /\bAndroid\b/i.test(navigator.userAgent);
+let isAndroid = false;
 let jobs: JobSummary[] = [];
 let refreshing = false;
 let refreshRevision = 0;
@@ -56,6 +55,12 @@ function failureMessage(reason: unknown): string {
 }
 
 function render(): void {
+  for (const note of Array.from(document.querySelectorAll<HTMLElement>('[data-android-note]')))
+    note.hidden = !isAndroid;
+  const savedFilter = document.querySelector<HTMLElement>('[data-saved-filter]')!;
+  savedFilter.dataset.i18n = isAndroid ? 'jobs.filterRequested' : 'jobs.filterSaved';
+  savedFilter.textContent = t(isAndroid ? 'jobs.filterRequested' : 'jobs.filterSaved');
+
   if (!list) return;
   const focused = document.activeElement;
   const focusedButton =
@@ -144,6 +149,7 @@ async function refresh(clearError = false): Promise<void> {
   refreshing = true;
   const revision = ++refreshRevision;
   try {
+    isAndroid = await isAndroidPlatform();
     const nextJobs = await listExportJobs();
     if (revision !== refreshRevision) return;
     const changed = !summariesMatch(jobs, nextJobs);
@@ -170,12 +176,7 @@ async function saveFile(jobId: string, fileId: string): Promise<void> {
   const job = jobs.find((item) => item.id === jobId);
   const file = job?.files.find((item) => item.id === fileId);
   if (!job || !file) throw new Error(t('jobs.notFound'));
-  if (isAndroid) {
-    const blob = await getExportJobFile(jobId, fileId);
-    downloadBlob(blob, file.filename);
-    // Anchor activation is only a request; Android provides no download result.
-    await markExportJobFileSaved(jobId, fileId);
-  } else await downloadExportJobFile(jobId, fileId);
+  await saveExportJobFile(jobId, fileId, file.filename);
 }
 
 async function saveDiagnostics(jobId: string): Promise<void> {
@@ -311,10 +312,6 @@ stopBatch.addEventListener('click', () => {
   batchStopRequested = true;
   render();
 });
-for (const note of Array.from(document.querySelectorAll<HTMLElement>('[data-android-note]')))
-  note.hidden = !isAndroid;
-if (isAndroid)
-  document.querySelector<HTMLElement>('[data-saved-filter]')!.dataset.i18n = 'jobs.filterRequested';
 
 const stopWatchingLanguage = watchLanguage(() => {
   localizeDocument();
@@ -333,6 +330,7 @@ window.addEventListener(
 async function initialize(): Promise<void> {
   try {
     await loadSettings();
+    isAndroid = await isAndroidPlatform();
     localizeDocument();
     render();
   } catch (reason) {

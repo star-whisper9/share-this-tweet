@@ -156,7 +156,12 @@ beforeEach(() => {
   search.mockReset().mockResolvedValue([{ id: 9, state: 'complete' }]);
   cancel.mockClear();
   vi.stubGlobal('browser', {
-    runtime: { getURL: (path: string) => `moz-extension://test/${path}` },
+    runtime: {
+      getURL: (path: string) => `moz-extension://test/${path}`,
+      getPlatformInfo: async () => ({
+        os: /Android/i.test(navigator.userAgent) ? 'android' : 'linux',
+      }),
+    },
     downloads: {
       download,
       search,
@@ -187,6 +192,31 @@ afterEach(() => {
 });
 
 describe('durable export queue', () => {
+  it('keeps Android outputs available when the page advertises a desktop user agent', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Firefox/160.0' });
+    vi.spyOn(browser.runtime, 'getPlatformInfo').mockResolvedValue({ os: 'android' });
+    const { handleExportJobMessage } = await import('../src/background/export-jobs.js');
+    await handleExportJobMessage({ type: 'export-job-enqueue', request: request('tablet') });
+    await vi.waitFor(() => expect(mocks.jobs.get('tablet')?.summary.status).toBe('ready'));
+    expect(download).not.toHaveBeenCalled();
+    expect(
+      await handleExportJobMessage({
+        type: 'export-job-file',
+        id: 'tablet',
+        fileId: 'tablet:media:1',
+      }),
+    ).toMatchObject({ ok: true, blob: expect.any(Blob) });
+    expect(
+      await handleExportJobMessage({
+        type: 'export-job-file-saved',
+        id: 'tablet',
+        fileId: 'tablet:media:1',
+      }),
+    ).toMatchObject({ ok: true });
+    expect(mocks.jobs.get('tablet')?.summary.status).toBe('completed');
+    expect(mocks.blobs.has('tablet:media:1')).toBe(true);
+  });
+
   it('explicitly clears settled caches or history while preserving queued and active outputs', async () => {
     vi.stubGlobal('navigator', { userAgent: 'Firefox Android' });
     const unsaved = seedFinishedJob('unsaved');
@@ -631,7 +661,12 @@ describe('durable export queue', () => {
     vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Android 15)' });
     const create = vi.fn(async () => ({}));
     vi.stubGlobal('browser', {
-      runtime: { getURL: (path: string) => `moz-extension://test/${path}` },
+      runtime: {
+        getURL: (path: string) => `moz-extension://test/${path}`,
+        getPlatformInfo: async () => ({
+          os: /Android/i.test(navigator.userAgent) ? 'android' : 'linux',
+        }),
+      },
       tabs: {
         query: vi.fn(async () => []),
         create,

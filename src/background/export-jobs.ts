@@ -1,3 +1,4 @@
+import { isAndroidPlatform } from '../shared/platform.js';
 import { ProcessingLimitError, ExportItemsError } from '../shared/processing-limit.js';
 import { DownloadTimeoutError, waitForBrowserDownload } from '../core/download-monitor.js';
 import { JobUpdateBuffer } from './job-updates.js';
@@ -122,8 +123,9 @@ function summaryFor(request: ExportJobRequest): JobSummary {
   };
 }
 
+let androidPlatform = false;
 function isAndroid(): boolean {
-  return typeof navigator !== 'undefined' && /\bAndroid\b/i.test(navigator.userAgent);
+  return androidPlatform;
 }
 
 /** Serialize durable changes so progress, files, and cancellation never overwrite each other. */
@@ -176,6 +178,7 @@ function scheduleProcessing(): void {
 export async function initializeExportJobs(): Promise<void> {
   if (!initialization) {
     initialization = (async () => {
+      androidPlatform = await isAndroidPlatform();
       const stored = await listExportJobs();
       for (const job of stored) jobs.set(job.id, job);
       for (const job of stored) {

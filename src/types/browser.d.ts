@@ -6,6 +6,7 @@ interface BrowserStorageArea {
 }
 
 interface BrowserRuntime {
+  getPlatformInfo(): Promise<{ os: string }>;
   getURL(path: string): string;
   getManifest(): { version: string };
   sendMessage(message: unknown): Promise<unknown>;
