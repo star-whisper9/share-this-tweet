@@ -155,6 +155,24 @@ function input(bytes: Uint8Array = fixture): Blob {
 }
 
 describe('MP4 file provenance', () => {
+  it('round-trips provenance on the caption worker output without changing tracks or media', async () => {
+    const original = new Uint8Array(
+      readFileSync(new URL('./fixtures/captioned-media.mp4', import.meta.url)),
+    );
+    const output = await embedMp4Source(input(original), source);
+    expect(await readMp4Source(output)).toEqual(source);
+    const bytes = await outputBytes(output);
+    const tracks = (data: Uint8Array) => {
+      const movie = find(data, ['moov']);
+      return atoms(data, movie.start + movie.header, movie.end)
+        .filter((box) => box.type === 'trak')
+        .map((box) => data.slice(box.start, box.end));
+    };
+    expect(tracks(original)).toHaveLength(3);
+    expect(tracks(bytes)).toEqual(tracks(original));
+    expect(raw(bytes, ['mdat'])).toEqual(raw(original, ['mdat']));
+  });
+
   it.each(['iso5', 'iso6'])(
     'accepts compatible MP4 brands when the major brand is %s',
     async (major) => {

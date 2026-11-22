@@ -138,6 +138,12 @@ function validateSampleDescription(bytes: Uint8Array, box: Box, kind: string): v
       const extensions = children(bytes, entry, 28);
       allow(extensions, ['esds', 'btrt']);
       only(extensions, 'esds');
+    } else if (kind === 'sbtl' && entry.type === 'tx3g') {
+      // Timed text has a 38-byte fixed description followed by font/bitrate boxes.
+      payload(bytes, entry, 38);
+      const extensions = children(bytes, entry, 38);
+      allow(extensions, ['ftab', 'btrt']);
+      only(extensions, 'ftab');
     } else unsupported(t('core.mp4.unsupportedCodec', { type: entry.type }));
   }
 }
@@ -157,10 +163,12 @@ function validateTrack(bytes: Uint8Array, track: Box, mediaData: Box[]): void {
   only(mdia, 'mdhd');
   const handler = only(mdia, 'hdlr')!;
   const kind = typeAt(bytes, payload(bytes, handler, 12) + 8);
-  if (kind !== 'vide' && kind !== 'soun') unsupported(t('core.mp4.unsupportedTrackType'));
+  const mediaHeader = { vide: 'vmhd', soun: 'smhd', sbtl: 'nmhd' } as const;
+  if (kind !== 'vide' && kind !== 'soun' && kind !== 'sbtl')
+    unsupported(t('core.mp4.unsupportedTrackType'));
   const minf = children(bytes, only(mdia, 'minf')!);
-  allow(minf, ['vmhd', 'smhd', 'dinf', 'stbl']);
-  only(minf, kind === 'vide' ? 'vmhd' : 'smhd');
+  allow(minf, [mediaHeader[kind], 'dinf', 'stbl']);
+  only(minf, mediaHeader[kind]);
   const dinf = children(bytes, only(minf, 'dinf')!);
   allow(dinf, ['dref']);
   const dref = only(dinf, 'dref')!;
