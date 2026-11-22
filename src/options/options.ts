@@ -147,6 +147,8 @@ let dirty = false;
 let invalidFields: SettingKey[] = [];
 const recordBrowser = mountRecordBrowser();
 const sourceReader = mountSourceReader();
+const externalCaptions = document.querySelector<HTMLInputElement>('[data-external-captions]')!;
+externalCaptions.addEventListener('change', () => updateDraft());
 const experiments = mountExperimentControls({
   editable: () => ready && !saving,
   changed: updateDraft,
@@ -164,6 +166,7 @@ function readSettings(): ExtensionSettings {
   return {
     language: (languageSelect?.value as LanguagePreference) ?? baseline.language,
     ...experiments.read(),
+    saveExternalCaptions: externalCaptions.checked,
     filenameTemplate: inputs.filenameTemplate?.value ?? DEFAULT_SETTINGS.filenameTemplate,
     frameTemplate: inputs.frameTemplate?.value ?? DEFAULT_SETTINGS.frameTemplate,
     frameOrientation: frameOrientations.includes(selectedOrientation as FrameOrientation)
@@ -263,6 +266,7 @@ function updateDraft(announce = true): void {
     keys.some((key) => settings[key] !== baseline[key]) ||
     settings.frameOrientation !== baseline.frameOrientation ||
     settings.stitchStyle !== baseline.stitchStyle ||
+    !!settings.saveExternalCaptions !== !!baseline.saveExternalCaptions ||
     experiments.differs(settings, baseline);
   updatePresetSelection(settings);
   experiments.updateSelection(settings);
@@ -278,6 +282,7 @@ function updateDraft(announce = true): void {
 function writeSettings(settings: ExtensionSettings): void {
   for (const key of keys) if (inputs[key]) inputs[key]!.value = settings[key];
   setFrameOrientation(settings.frameOrientation);
+  externalCaptions.checked = !!settings.saveExternalCaptions;
   experiments.write(settings);
   if (languageSelect) languageSelect.value = settings.language;
   for (const [attribute, value] of [['data-stitch-style', settings.stitchStyle]]) {

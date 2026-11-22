@@ -27,6 +27,10 @@ function finishFilename(filename: string, extension: string, modifier = ''): str
   return `${base}${suffix}`;
 }
 
+export function buildCaptionFilename(videoFilename: string, index: number): string {
+  return finishFilename(videoFilename, 'vtt', index === 0 ? '' : '.' + (index + 1));
+}
+
 export function buildMediaFilename(
   record: TweetRecord,
   media: MediaRecord,

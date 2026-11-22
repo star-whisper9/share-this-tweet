@@ -1,4 +1,7 @@
 export const zhCN = {
+  'video.externalCaptions': '保存视频时同时保存外置字幕（.vtt）',
+  'video.captionFile': '外置字幕',
+  'video.captionReadWarning': '第 {index} 项无法读取 CC 字幕（{reason}）。',
   'video.captionEnable': '保存视频时嵌入 CC 字幕',
   'video.captionWarning': '第 {index} 项视频已保留，未能嵌入 CC 字幕（{reason}）。',
   'diagnostics.title': '处理诊断',
@@ -66,6 +69,9 @@ export const zhCN = {
   'popup.loadError': '无法读取设置：{error}',
 } as const;
 export const en: Record<keyof typeof zhCN, string> = {
+  'video.externalCaptions': 'Save external subtitles (.vtt) alongside videos',
+  'video.captionFile': 'External subtitles',
+  'video.captionReadWarning': 'Could not read CC subtitles for item {index} ({reason}).',
   'video.captionEnable': 'Embed CC subtitles when saving videos',
   'video.captionWarning': 'Kept video {index} without added CC subtitles ({reason}).',
   'diagnostics.title': 'Processing diagnostics',

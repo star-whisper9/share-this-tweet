@@ -446,3 +446,46 @@ it('propagates force to dynamic rendering and never substitutes a fallback on th
   expect(vi.mocked(renderVideoInBackground).mock.calls.at(-1)![1].force).toBe(true);
   expect(callbacks.onFile).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  'exports same-name WebVTT independently of embedding (sidecars=%s)',
+  async (enabled) => {
+    const job = gifRequest();
+    const media = job.record.media[0]!;
+    media.type = 'video';
+    media.variants = [
+      { mime: 'video/mp4', url: 'https://video.twimg.com/clip.mp4' },
+      { mime: 'application/x-mpegURL', url: 'https://video.twimg.com/main.m3u8' },
+    ];
+    job.settings = { ...job.settings, saveExternalCaptions: enabled, experimentalCaptions: false };
+    const text = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhello';
+    const fetch = vi.fn(async (url: string | URL) => {
+      const path = new URL(url).pathname;
+      if (path === '/clip.mp4') return new Response('video');
+      if (path === '/main.m3u8')
+        return new Response(
+          '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,LANGUAGE="en",URI="a.vtt"\n#EXT-X-MEDIA:TYPE=SUBTITLES,LANGUAGE="fr",URI="b.vtt"',
+        );
+      return new Response(text);
+    });
+    vi.stubGlobal('fetch', fetch);
+    const onFile = vi.fn();
+    const onWarning = vi.fn();
+    await renderExportJob(job, {
+      signal: new AbortController().signal,
+      onFile,
+      onWarning,
+      onProgress: vi.fn(),
+      onDiagnostics: vi.fn(),
+    });
+    const files = onFile.mock.calls.map(([file]) => file);
+    const stem = files[0].filename.replace(/\.mp4$/, '');
+    expect(files.map((f) => f.filename)).toEqual(
+      enabled ? [`${stem}.mp4`, `${stem}.vtt`, `${stem}.2.vtt`] : [`${stem}.mp4`],
+    );
+    expect(await files[0].blob.text()).toBe('video');
+    if (enabled) expect(await files[1].blob.text()).toBe(text);
+    expect(fetch).toHaveBeenCalledTimes(enabled ? 4 : 1);
+    expect(onWarning).not.toHaveBeenCalled();
+  },
+);

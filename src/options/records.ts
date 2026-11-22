@@ -86,6 +86,7 @@ export function mountRecordBrowser() {
       'tweet-card': t('options.records.output.tweetCard'),
       'row-tweet-card': t('options.records.output.rowTweetCard'),
       'stitched-video': t('dynamic.stitchedVideo'),
+      'video-caption': t('video.captionFile'),
       'framed-video': t('dynamic.framedVideo'),
       'stitched-image': t('options.records.output.stitchedImage'),
       'shared-text': t('options.records.output.sharedText'),

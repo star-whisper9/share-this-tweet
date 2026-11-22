@@ -5,6 +5,7 @@ import { renderVideoInBackground } from '../background/video-render.js';
 import { renderTweetCard } from './card.js';
 import {
   buildCardFilename,
+  buildCaptionFilename,
   buildFrameFilename,
   buildMediaFilename,
   buildSourcedMediaFilename,
@@ -384,18 +385,29 @@ export async function renderExportJob(
           );
           filename = buildMediaFilename(record, media, settings.filenameTemplate);
         }
-        if (settings.experimentalCaptions && media.type === 'video') {
+        let tracks: Awaited<ReturnType<typeof readCaptionTracks>> = [];
+        if (
+          (settings.experimentalCaptions || settings.saveExternalCaptions) &&
+          media.type === 'video'
+        ) {
           try {
-            const tracks = await readCaptionTracks(media, callbacks.signal);
-            if (tracks.length) {
-              if (!request.force)
-                assertVideoLimits(
-                  settings.videoLimits,
-                  { inputBytes: blob.size, durationSeconds: (media.durationMs ?? 0) / 1000 },
-                  locale,
-                );
-              blob = await muxCaptions(blob, tracks, callbacks.signal);
-            }
+            tracks = await readCaptionTracks(media, callbacks.signal);
+          } catch (error) {
+            callbacks.signal.throwIfAborted();
+            callbacks.onWarning(
+              t('video.captionReadWarning', { index: media.index, reason: String(error) }, locale),
+            );
+          }
+        }
+        if (settings.experimentalCaptions && tracks.length) {
+          try {
+            if (!request.force)
+              assertVideoLimits(
+                settings.videoLimits,
+                { inputBytes: blob.size, durationSeconds: (media.durationMs ?? 0) / 1000 },
+                locale,
+              );
+            blob = await muxCaptions(blob, tracks, callbacks.signal);
           } catch (error) {
             callbacks.signal.throwIfAborted();
             callbacks.onWarning(
@@ -423,6 +435,22 @@ export async function renderExportJob(
             mediaIndex: media.index,
           },
         });
+        if (settings.saveExternalCaptions) {
+          for (const [i, track] of tracks.entries()) {
+            const captionFilename = buildCaptionFilename(filename, i);
+            await emit(callbacks, {
+              id: `${request.id}:cc:${media.index}:${i}`,
+              filename: captionFilename,
+              blob: new Blob([track.text], { type: 'text/vtt;charset=utf-8' }),
+              output: {
+                tweetId: record.tweetId,
+                outputType: 'video-caption',
+                mediaIndex: media.index,
+                filename: captionFilename,
+              },
+            });
+          }
+        }
         if (fallbackWarning) callbacks.onWarning(fallbackWarning, !request.force);
       } catch (error) {
         if (callbacks.signal.aborted) throw error;
