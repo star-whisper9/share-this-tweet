@@ -358,6 +358,10 @@ h2 {
   background: var(--surface-soft);
   cursor: pointer;
 }
+.preset-grid + .experiment-toggle,
+.experiment-toggle + .experiment-toggle {
+  margin-block-start: 12px;
+}
 .experiment-toggle input {
   position: absolute;
   opacity: 0;

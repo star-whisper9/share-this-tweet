@@ -28,8 +28,6 @@ export const zhCN = {
   'experiment.tab': '实验功能',
   'experiment.title': '本地媒体处理（实验性）',
   'experiment.enable': '动态拼图与视频画框',
-  'experiment.enableDescription':
-    '允许拼接动态画廊，为视频媒体添加画框，处理使用本机 CPU，可在导出任务页查看进度或取消。',
   'experiment.disabled': '动态拼图实验功能尚未启用。',
   'experiment.invalidLimits': '请填写有效的非负整数限制值。',
   'experiment.limitInput': '输入媒体总大小超过 {limit} MiB 的限制。',
@@ -86,8 +84,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'experiment.tab': 'Experimental',
   'experiment.title': 'Local media processing (experimental)',
   'experiment.enable': 'Animated collages and video frames',
-  'experiment.enableDescription':
-    'Create animated galleries and add source frames to videos. Processing uses your local CPU; track progress or cancel on the export tasks page.',
   'experiment.disabled': 'The animated-collage experiment is not enabled.',
   'experiment.invalidLimits': 'Enter valid non-negative integer limits.',
   'experiment.limitInput': 'Total input media exceeds the {limit} MiB limit.',
