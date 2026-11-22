@@ -78,6 +78,16 @@ export function exportLimitWarnings(
     for (const selection of request.media ?? []) {
       const media = record.media.find((item) => item.index === selection.index);
       if (!media) continue;
+      if (
+        media.type === 'video' &&
+        settings.experimentalCaptions &&
+        media.variants?.some((v) => /mpegurl/i.test(v.mime) || /\.m3u8(?:\?|$)/i.test(v.url)) &&
+        settings.videoLimits.maxDurationSeconds &&
+        (media.durationMs ?? 0) / 1000 > settings.videoLimits.maxDurationSeconds
+      )
+        warnings.add(
+          t('experiment.limitDuration', { limit: settings.videoLimits.maxDurationSeconds }, locale),
+        );
       if (media.type === 'animated_gif' && settings.experimentalGif !== false)
         dynamic([media], false, true);
       else if (selection.mode === 'framed') {

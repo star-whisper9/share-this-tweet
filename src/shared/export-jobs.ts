@@ -148,6 +148,7 @@ export function isExportJobRequest(value: unknown): value is ExportJobRequest {
   if (
     !isLanguagePreference(s.language) ||
     typeof s.experimentalVideo !== 'boolean' ||
+    (s.experimentalCaptions !== undefined && typeof s.experimentalCaptions !== 'boolean') ||
     (s.experimentalGif !== undefined && typeof s.experimentalGif !== 'boolean') ||
     (s.gifLimits !== undefined && !isGifLimits(s.gifLimits)) ||
     !isVideoLimits(s.videoLimits) ||

@@ -1,3 +1,5 @@
+import { assertVideoLimits, VideoLimitError } from '../shared/video-experiment.js';
+import { readCaptionTracks, muxCaptions } from './video-captions.js';
 import { ProcessingLimitError, ExportItemsError } from '../shared/processing-limit.js';
 import { renderVideoInBackground } from '../background/video-render.js';
 import { renderTweetCard } from './card.js';
@@ -380,18 +382,36 @@ export async function renderExportJob(
             locale,
             !request.force && mode === 'sourced' && media.type !== 'photo' ? 512 * 1024 * 1024 : 0,
           );
-          if (mode === 'sourced' && media.type !== 'photo') {
-            blob = await embedMp4SourceInWorker(
-              blob,
-              createMediaSourceMetadata(record, media, browser.runtime.getManifest().version),
-              { signal: callbacks.signal, locale, force: request.force },
+          filename = buildMediaFilename(record, media, settings.filenameTemplate);
+        }
+        if (settings.experimentalCaptions && media.type === 'video') {
+          try {
+            const tracks = await readCaptionTracks(media, callbacks.signal);
+            if (tracks.length) {
+              if (!request.force)
+                assertVideoLimits(
+                  settings.videoLimits,
+                  { inputBytes: blob.size, durationSeconds: (media.durationMs ?? 0) / 1000 },
+                  locale,
+                );
+              blob = await muxCaptions(blob, tracks, callbacks.signal);
+            }
+          } catch (error) {
+            callbacks.signal.throwIfAborted();
+            callbacks.onWarning(
+              t('video.captionWarning', { index: media.index, reason: String(error) }, locale),
+              !request.force && error instanceof VideoLimitError,
             );
-            filename = buildSourcedMediaFilename(record, media, settings.filenameTemplate);
-          } else {
-            mode = 'original';
-            filename = buildMediaFilename(record, media, settings.filenameTemplate);
           }
         }
+        if (mode === 'sourced' && blob.type === 'video/mp4') {
+          blob = await embedMp4SourceInWorker(
+            blob,
+            createMediaSourceMetadata(record, media, browser.runtime.getManifest().version),
+            { signal: callbacks.signal, locale, force: request.force },
+          );
+          filename = buildSourcedMediaFilename(record, media, settings.filenameTemplate);
+        } else if (mode === 'sourced' && media.type === 'photo') mode = 'original';
         await emit(callbacks, {
           id: `${request.id}:media:${media.index}`,
           filename,

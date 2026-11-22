@@ -12,7 +12,7 @@ const videoLimitKeys = [
 const gifLimitKeys = ['maxInputMiB', 'maxDurationSeconds', 'maxSourcePixels'] as const;
 type ExperimentSettings = Pick<
   ExtensionSettings,
-  'experimentalGif' | 'gifLimits' | 'experimentalVideo' | 'videoLimits'
+  'experimentalCaptions' | 'experimentalGif' | 'gifLimits' | 'experimentalVideo' | 'videoLimits'
 >;
 
 export function mountExperimentControls({
@@ -24,6 +24,7 @@ export function mountExperimentControls({
   changed: () => void;
   baseline: () => ExperimentSettings;
 }) {
+  const captions = document.querySelector<HTMLInputElement>('[data-experimental-captions]');
   const experimentalVideoInput = document.querySelector<HTMLInputElement>(
     '[data-experimental-video]',
   );
@@ -91,7 +92,7 @@ export function mountExperimentControls({
     if (gifLimitsError) gifLimitsError.textContent = gifValid ? '' : t('gif.invalidLimits');
     for (const key of gifLimitKeys)
       gifLimitInputs[key]?.setAttribute('aria-invalid', String(!gifValid));
-    if (!settings.experimentalVideo) {
+    if (!settings.experimentalVideo && !settings.experimentalCaptions) {
       if (experimentLimitsError) experimentLimitsError.textContent = '';
       for (const key of videoLimitKeys)
         videoLimitInputs[key]?.setAttribute('aria-invalid', 'false');
@@ -106,7 +107,7 @@ export function mountExperimentControls({
   }
   function setExperimentEnabled(enabled: boolean): void {
     if (experimentalVideoInput) experimentalVideoInput.checked = enabled;
-    if (experimentSettings) experimentSettings.hidden = !enabled;
+    if (experimentSettings) experimentSettings.hidden = !enabled && !captions?.checked;
   }
   function writeVideoLimits(limits: VideoLimits): void {
     for (const key of videoLimitKeys) {
@@ -154,6 +155,17 @@ export function mountExperimentControls({
     }
     updateVideoPresetSelection(readVideoLimits());
   }
+  captions?.addEventListener('change', () => {
+    if (!editable()) return;
+    if (
+      !captions.checked &&
+      !experimentalVideoInput?.checked &&
+      !validVideoLimits(readVideoLimits())
+    )
+      writeVideoLimits(baseline().videoLimits);
+    setExperimentEnabled(!!experimentalVideoInput?.checked);
+    changed();
+  });
   experimentalVideoInput?.addEventListener('change', () => {
     if (!editable()) return;
     if (!experimentalVideoInput.checked && !validVideoLimits(readVideoLimits()))
@@ -175,6 +187,7 @@ export function mountExperimentControls({
   return {
     read(): ExperimentSettings {
       return {
+        experimentalCaptions: !!captions?.checked,
         experimentalGif: experimentalGifInput?.checked ?? DEFAULT_SETTINGS.experimentalGif,
         gifLimits: readGifLimits(),
         experimentalVideo: experimentalVideoInput?.checked ?? DEFAULT_SETTINGS.experimentalVideo,
@@ -182,6 +195,7 @@ export function mountExperimentControls({
       };
     },
     write(settings: ExperimentSettings): void {
+      if (captions) captions.checked = !!settings.experimentalCaptions;
       setGifEnabled(settings.experimentalGif);
       writeGifLimits(settings.gifLimits);
       setExperimentEnabled(settings.experimentalVideo);
@@ -190,6 +204,7 @@ export function mountExperimentControls({
     validate: validateExperimentSettings,
     differs(settings: ExperimentSettings, baseline: ExperimentSettings): boolean {
       return (
+        !!settings.experimentalCaptions !== !!baseline.experimentalCaptions ||
         settings.experimentalGif !== baseline.experimentalGif ||
         gifLimitKeys.some((key) => settings.gifLimits[key] !== baseline.gifLimits[key]) ||
         settings.experimentalVideo !== baseline.experimentalVideo ||

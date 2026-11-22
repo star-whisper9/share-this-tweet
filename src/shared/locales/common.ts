@@ -1,4 +1,6 @@
 export const zhCN = {
+  'video.captionEnable': '保存视频时嵌入 CC 字幕',
+  'video.captionWarning': '第 {index} 项视频已保留，未能嵌入 CC 字幕（{reason}）。',
   'diagnostics.title': '处理诊断',
   'diagnostics.download': '下载诊断 JSON',
   'diagnostics.phase': '当前阶段',
@@ -64,6 +66,8 @@ export const zhCN = {
   'popup.loadError': '无法读取设置：{error}',
 } as const;
 export const en: Record<keyof typeof zhCN, string> = {
+  'video.captionEnable': 'Embed CC subtitles when saving videos',
+  'video.captionWarning': 'Kept video {index} without added CC subtitles ({reason}).',
   'diagnostics.title': 'Processing diagnostics',
   'diagnostics.download': 'Download diagnostics JSON',
   'diagnostics.phase': 'Current phase',

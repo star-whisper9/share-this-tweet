@@ -1,3 +1,4 @@
+import type { CaptionTrack } from '../core/video-captions.js';
 import type { FFmpegCoreModule, FFmpegCoreModuleFactory, Log } from '@ffmpeg/types';
 import { executeVideoJob, type VideoCoreAdapter } from '../core/video-engine.js';
 import {
@@ -327,8 +328,62 @@ async function start(request: VideoRenderRequest): Promise<void> {
   }
 }
 
-scope.onmessage = (event: MessageEvent<VideoRenderInboundMessage>) => {
+interface CaptionRequest {
+  type: 'mux-captions';
+  video: Blob;
+  tracks: CaptionTrack[];
+}
+
+async function remux({ video, tracks }: CaptionRequest) {
+  const core = await getCore();
+  core.FS.writeFile('video.mp4', new Uint8Array(await video.arrayBuffer()));
+  const inputs: string[] = [];
+  const maps: string[] = [];
+  const metadata: string[] = [];
+  tracks.forEach((track, i) => {
+    const path = 'sub-' + i + '.vtt';
+    core.FS.writeFile(path, new TextEncoder().encode(track.text));
+    inputs.push('-f', 'webvtt', '-i', path);
+    maps.push('-map', String(i + 1) + ':s:0');
+    metadata.push('-metadata:s:s:' + i, 'handler_name=' + track.name);
+    if (/^[a-z]{3}$/.test(track.language))
+      metadata.push('-metadata:s:s:' + i, 'language=' + track.language);
+  });
+  if (
+    core.exec(
+      '-f',
+      'mov',
+      '-i',
+      'video.mp4',
+      ...inputs,
+      '-map',
+      '0:v',
+      '-map',
+      '0:a?',
+      ...maps,
+      '-c',
+      'copy',
+      '-c:s',
+      'mov_text',
+      ...metadata,
+      'out.mp4',
+    ) !== 0
+  )
+    throw new Error(recentLogs.slice(-3).join(' '));
+  const bytes = core.FS.readFile('out.mp4', { encoding: 'binary' });
+  if (!(bytes instanceof Uint8Array)) throw new Error('Invalid MP4 output');
+  return new Blob([new Uint8Array(bytes)], { type: 'video/mp4' });
+}
+
+scope.onmessage = (event: MessageEvent<VideoRenderInboundMessage | CaptionRequest>) => {
   const message = event.data;
+  if (message?.type === 'mux-captions') {
+    void remux(message).then(
+      (blob) => self.postMessage({ blob }),
+      (error) => self.postMessage({ error: String(error) }),
+    );
+    return;
+  }
   if (message?.type === 'frame') {
     if (!active || active.id !== message.id) return;
     active.resolveFrame(message);

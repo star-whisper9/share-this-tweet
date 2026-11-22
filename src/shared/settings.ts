@@ -31,6 +31,7 @@ let latestLanguage: LanguagePreference | undefined;
 
 export interface ExtensionSettings {
   language: LanguagePreference;
+  experimentalCaptions?: boolean;
   experimentalGif: boolean;
   gifLimits: GifLimits;
   experimentalVideo: boolean;
@@ -44,6 +45,7 @@ export interface ExtensionSettings {
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   language: 'auto',
+  experimentalCaptions: false,
   experimentalGif: true,
   gifLimits: { ...DEFAULT_GIF_LIMITS },
   experimentalVideo: false,
@@ -75,6 +77,7 @@ export function normalizeSettings(values: Record<string, unknown>): ExtensionSet
   if (stored?.experimentalGif !== undefined && typeof stored.experimentalGif !== 'boolean')
     throw new Error(t('gif.invalidPreference'));
   return {
+    experimentalCaptions: stored?.experimentalCaptions === true,
     experimentalGif: stored?.experimentalGif ?? DEFAULT_SETTINGS.experimentalGif,
     gifLimits: normalizeGifLimits(stored?.gifLimits),
     experimentalVideo: stored?.experimentalVideo === true,
